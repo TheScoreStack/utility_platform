@@ -2363,6 +2363,34 @@ interface SettlementsTabProps {
   onPrefillConsumed?: () => void;
 }
 
+interface StlPayChipProps {
+  method: string;
+  value: string;
+}
+
+const StlPayChip = ({ method, value }: StlPayChipProps) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`stl-row__pay-method ${copied ? "stl-row__pay-method--copied" : ""}`}
+      title={`Copy ${value}`}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        } catch {
+          // clipboard write blocked — non-fatal
+        }
+      }}
+    >
+      <span className="stl-row__pay-key">{method}</span>
+      <span>{copied ? "✓ copied" : value}</span>
+    </button>
+  );
+};
+
 const SettlementsTab = ({
   currency,
   members,
@@ -2420,56 +2448,142 @@ const SettlementsTab = ({
           <span className="muted">{settlements.length} recorded</span>
         </div>
         {settlements.length === 0 ? (
-          <p className="muted">No settlements recorded yet.</p>
+          <p className="muted" style={{ fontStyle: "italic" }}>
+            No settlements recorded yet.
+          </p>
         ) : (
           <div className="list">
             {settlements.map((settlement) => {
-              const from = membersById[settlement.fromMemberId] ?? settlement.fromMemberId;
-              const to = membersById[settlement.toMemberId] ?? settlement.toMemberId;
+              const fromName = membersById[settlement.fromMemberId] ?? settlement.fromMemberId;
+              const toName = membersById[settlement.toMemberId] ?? settlement.toMemberId;
+              const isFromUser = currentUserId === settlement.fromMemberId;
+              const isToUser = currentUserId === settlement.toMemberId;
+              const confirmed = Boolean(settlement.confirmedAt);
+              const rowModifier = !confirmed && isFromUser
+                ? "stl-row--owe-self"
+                : !confirmed && isToUser
+                  ? "stl-row--owed-self"
+                  : "";
+              const recipientMethods = paymentMethodsByMember[settlement.toMemberId];
+              const payableMethods = recipientMethods
+                ? (Object.entries(recipientMethods).filter(([, v]) => Boolean(v)) as Array<[string, string]>)
+                : [];
+              const showPayPanel =
+                !confirmed && isFromUser && payableMethods.length > 0;
+
+              const confirmLabel = isFromUser
+                ? "I paid this"
+                : isToUser
+                  ? "Confirm received"
+                  : "Mark confirmed";
+              const confirmModifier = isFromUser
+                ? "stl-confirm--sender"
+                : isToUser
+                  ? "stl-confirm--receiver"
+                  : "stl-confirm--third";
+
               return (
-                <div key={settlement.settlementId} className="card" style={{ padding: "1rem 1.25rem" }}>
-                  <p style={{ margin: "0 0 0.25rem" }}>
-                    <strong>{from}</strong> paid <strong>{to}</strong>
-                  </p>
-                  <p className="muted" style={{ margin: 0 }}>
-                    {settlementAmountFormatter.format(settlement.amount)}
-                  </p>
+                <div key={settlement.settlementId} className={`stl-row ${rowModifier}`}>
+                  <div className="stl-row__head">
+                    <div className="stl-row__person">
+                      <OvAvatar
+                        name={fromName}
+                        memberId={settlement.fromMemberId}
+                        size="sm"
+                        isSelf={isFromUser}
+                      />
+                      <div className="stl-row__person-body">
+                        <span className="stl-row__role">{confirmed ? "Paid" : "Owes"}</span>
+                        <span className="stl-row__name">
+                          {isFromUser ? <em style={{ fontStyle: "italic", color: "#f8fafc" }}>You</em> : fromName}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="stl-row__center">
+                      <span
+                        className={`stl-row__amount ${confirmed ? "stl-row__amount--confirmed" : ""}`}
+                      >
+                        {settlementAmountFormatter.format(settlement.amount)}
+                      </span>
+                      <div className="stl-row__arc">
+                        <OvFlowArc tone={confirmed ? "owed" : isFromUser ? "owe" : isToUser ? "owed" : "neutral"} />
+                      </div>
+                    </div>
+
+                    <div className="stl-row__person stl-row__person--to">
+                      <div className="stl-row__person-body">
+                        <span className="stl-row__role">{confirmed ? "Received" : "To"}</span>
+                        <span className="stl-row__name">
+                          {isToUser ? <em style={{ fontStyle: "italic", color: "#f8fafc" }}>You</em> : toName}
+                        </span>
+                      </div>
+                      <OvAvatar
+                        name={toName}
+                        memberId={settlement.toMemberId}
+                        size="sm"
+                        isSelf={isToUser}
+                      />
+                    </div>
+                  </div>
+
                   {settlement.note && (
-                    <p className="muted" style={{ margin: "0.4rem 0 0" }}>
-                      {settlement.note}
-                    </p>
+                    <p className="stl-row__note">“{settlement.note}”</p>
                   )}
-                  <div style={{ marginTop: "0.75rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                    <span className="pill">
-                      Status: {settlement.confirmedAt ? "confirmed" : "pending"}
+
+                  <div className="stl-row__meta">
+                    <span className={`stl-row__status stl-row__status--${confirmed ? "confirmed" : "pending"}`}>
+                      <span className="stl-row__status-dot" />
+                      {confirmed ? "Confirmed" : "Pending"}
                     </span>
-                    {!settlement.confirmedAt && (
+                    <span>Recorded {formatDate(settlement.createdAt)}</span>
+                    {confirmed && settlement.confirmedAt && (
+                      <span>· Confirmed {formatDate(settlement.confirmedAt)}</span>
+                    )}
+                  </div>
+
+                  {showPayPanel && (
+                    <div className="stl-row__pay-panel">
+                      <span className="stl-row__pay-label">Pay {toName} via</span>
+                      <div className="stl-row__pay-methods">
+                        {payableMethods.map(([method, value]) => (
+                          <StlPayChip key={method} method={method} value={value} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="stl-row__actions">
+                    {!confirmed && (
                       <button
-                        className="secondary"
+                        type="button"
+                        className={`stl-confirm ${confirmModifier}`}
                         disabled={confirmPending}
                         onClick={() => onConfirm(settlement.settlementId, true)}
                       >
-                        Mark as paid
+                        {confirmLabel}
+                      </button>
+                    )}
+                    {confirmed && (
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={confirmPending}
+                        onClick={() => onConfirm(settlement.settlementId, false)}
+                      >
+                        Mark pending
                       </button>
                     )}
                     <button
+                      type="button"
                       className="secondary"
-                      disabled={
-                        deletePending &&
-                        deletingSettlementId === settlement.settlementId
-                      }
+                      disabled={deletePending && deletingSettlementId === settlement.settlementId}
                       onClick={() => {
-                        if (
-                          !window.confirm(
-                            `Delete settlement from ${from} to ${to}?`
-                          )
-                        ) {
-                          return;
-                        }
+                        if (!window.confirm(`Delete the settlement from ${fromName} to ${toName}?`)) return;
                         onDelete(settlement.settlementId).catch(() => {});
                       }}
                     >
-                      Delete settlement
+                      Delete
                     </button>
                   </div>
                 </div>
@@ -2478,8 +2592,8 @@ const SettlementsTab = ({
           </div>
         )}
         {pendingSettlements.length > 0 && (
-          <p className="muted" style={{ marginTop: "1rem" }}>
-            Pending settlements will reduce balances once confirmed.
+          <p className="muted" style={{ marginTop: "1rem", fontSize: "0.85rem" }}>
+            Pending settlements reduce balances once confirmed.
           </p>
         )}
       </section>

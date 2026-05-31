@@ -1452,3 +1452,277 @@ button.ghost {
   padding: 1rem 0;
   font-size: 0.88rem;
 }
+
+/* ============================================================
+   Settlements tab — directional rows + inline payment methods
+   ============================================================ */
+.stl-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.1rem 1.25rem;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.13);
+}
+
+.stl-row--owe-self {
+  border-left: 3px solid var(--owe);
+  background: linear-gradient(90deg, rgba(251, 146, 60, 0.07) 0%, rgba(15, 23, 42, 0.65) 35%);
+}
+
+.stl-row--owed-self {
+  border-left: 3px solid var(--owed);
+  background: linear-gradient(90deg, rgba(52, 211, 153, 0.07) 0%, rgba(15, 23, 42, 0.65) 35%);
+}
+
+.stl-row__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.stl-row__person {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.stl-row__person--to {
+  justify-content: flex-end;
+  text-align: right;
+}
+
+.stl-row__person-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.stl-row__role {
+  font-size: 0.64rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 700;
+}
+
+.stl-row__name {
+  font-weight: 600;
+  font-size: 0.94rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.stl-row__center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.stl-row__amount {
+  font-family: var(--serif);
+  font-size: 1.75rem;
+  line-height: 1;
+  color: #f8fafc;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+}
+
+.stl-row__amount--confirmed {
+  text-decoration-line: underline;
+  text-decoration-style: solid;
+  text-decoration-color: rgba(52, 211, 153, 0.45);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+
+.stl-row__arc {
+  width: 100%;
+  height: 16px;
+  min-width: 70px;
+}
+
+.stl-row__note {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  color: #cbd5f5;
+  font-size: 0.95rem;
+  padding-left: 0.7rem;
+  border-left: 2px solid rgba(148, 163, 184, 0.22);
+}
+
+.stl-row__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: #94a3b8;
+}
+
+.stl-row__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.stl-row__status--pending {
+  background: rgba(251, 146, 60, 0.16);
+  color: var(--owe);
+}
+
+.stl-row__status--confirmed {
+  background: rgba(52, 211, 153, 0.16);
+  color: var(--owed);
+}
+
+.stl-row__status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.stl-row__status--pending .stl-row__status-dot {
+  background: var(--owe);
+  animation: stlPulse 1.6s ease-in-out infinite;
+}
+
+.stl-row__status--confirmed .stl-row__status-dot {
+  background: var(--owed);
+}
+
+@keyframes stlPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.75); }
+}
+
+.stl-row__pay-panel {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.7rem 0.95rem;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px dashed rgba(148, 163, 184, 0.22);
+  border-radius: 13px;
+  flex-wrap: wrap;
+}
+
+.stl-row__pay-label {
+  font-family: var(--serif);
+  font-style: italic;
+  color: #cbd5f5;
+  font-size: 0.95rem;
+}
+
+.stl-row__pay-methods {
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.stl-row__pay-method {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.75rem;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: #bae6fd;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, transform 100ms ease;
+  font-family: inherit;
+}
+
+.stl-row__pay-method:hover {
+  background: rgba(56, 189, 248, 0.22);
+  color: #e0f2fe;
+}
+
+.stl-row__pay-method:active {
+  transform: scale(0.97);
+}
+
+.stl-row__pay-method--copied {
+  background: rgba(52, 211, 153, 0.2);
+  border-color: rgba(52, 211, 153, 0.4);
+  color: #d1fae5;
+}
+
+.stl-row__pay-key {
+  text-transform: capitalize;
+  font-weight: 700;
+}
+
+.stl-row__actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.stl-confirm {
+  padding: 0.55rem 1rem;
+  border-radius: 999px;
+  border: none;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: transform 140ms ease;
+}
+
+.stl-confirm--sender {
+  background: linear-gradient(135deg, var(--owe) 0%, var(--owe-deep) 100%);
+  color: #1a0f04;
+  box-shadow: 0 8px 18px -8px rgba(251, 146, 60, 0.5);
+}
+
+.stl-confirm--receiver {
+  background: linear-gradient(135deg, var(--owed) 0%, var(--owed-deep) 100%);
+  color: #04241a;
+  box-shadow: 0 8px 18px -8px rgba(16, 185, 129, 0.5);
+}
+
+.stl-confirm--third {
+  background: rgba(148, 163, 184, 0.2);
+  color: #f8fafc;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.stl-confirm:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.stl-confirm:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .stl-row__head {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+  .stl-row__person--to {
+    justify-content: flex-start;
+    text-align: left;
+  }
+  .stl-row__center {
+    align-items: flex-start;
+  }
+}
