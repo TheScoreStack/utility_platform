@@ -150,9 +150,22 @@ const TripListPage = () => {
           </p>
         )}
         {isLoading ? (
-          <p className="muted">Loading groups…</p>
+          <div className="list">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="card" style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+                <span className="skel skel--title" style={{ width: `${140 + (i * 23) % 100}px` }}>&nbsp;</span>
+                <span className="skel skel--text" style={{ width: "180px" }}>&nbsp;</span>
+                <span className="skel skel--text" style={{ width: "240px" }}>&nbsp;</span>
+              </div>
+            ))}
+          </div>
         ) : trips.length === 0 ? (
-          <p className="muted">No groups yet. Create one to get started.</p>
+          <div className="empty-state">
+            <p className="empty-state__title">No groups yet.</p>
+            <p className="empty-state__hint">
+              Start one above — name it after a trip, a dinner, or any shared bill — and invite people from the People tab.
+            </p>
+          </div>
         ) : (
           <div className="list">
             {trips.map((trip) => (

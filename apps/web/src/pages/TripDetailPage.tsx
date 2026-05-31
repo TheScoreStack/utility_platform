@@ -167,6 +167,100 @@ const formatDayLabel = (isoString: string): { primary: string; secondary?: strin
   return { primary: dateLabel, secondary };
 };
 
+const TripDetailSkeleton = () => (
+  <div className="trip-detail">
+    <section className="card" style={{ marginBottom: "1rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+          <span className="skel skel--title" style={{ width: "220px" }}>&nbsp;</span>
+          <span className="skel skel--text" style={{ width: "150px" }}>&nbsp;</span>
+        </div>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <span className="skel skel--pill" style={{ width: "120px" }}>&nbsp;</span>
+        </div>
+      </div>
+      <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+        {["overview", "expenses", "settlements", "people"].map((id) => (
+          <span key={id} className="skel skel--pill" style={{ width: `${80 + (id.length % 3) * 14}px` }}>&nbsp;</span>
+        ))}
+      </div>
+    </section>
+
+    <div className="ov-grid">
+      <section
+        className="ov-hero"
+        style={{ gridColumn: "1 / -1", background: "rgba(15,23,42,0.7)" }}
+      >
+        <div className="skel-hero">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "1.5rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem", flex: 1, minWidth: 0 }}>
+              <span className="skel skel--text" style={{ width: "120px", height: "0.7rem" }}>&nbsp;</span>
+              <span className="skel skel-hero__amount">&nbsp;</span>
+              <span className="skel skel--text" style={{ width: "150px" }}>&nbsp;</span>
+            </div>
+            <span className="skel skel--pill" style={{ width: "160px", height: "2.6rem" }}>&nbsp;</span>
+          </div>
+          <div className="skel-stamps">
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="skel-stamp">
+                <span className="skel skel--text" style={{ width: "80px", height: "0.7rem" }}>&nbsp;</span>
+                <span className="skel skel--title" style={{ width: "100px" }}>&nbsp;</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <div className="ov-section-head">
+          <span className="skel skel--title" style={{ width: "110px" }}>&nbsp;</span>
+        </div>
+        <div className="ov-suggestion-list">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="ov-suggestion">
+              <div className="skel-row">
+                <span className="skel skel--circle" style={{ width: "38px", height: "38px" }}>&nbsp;</span>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  <span className="skel skel--text" style={{ width: "50px", height: "0.6rem" }}>&nbsp;</span>
+                  <span className="skel skel--text" style={{ width: "90px" }}>&nbsp;</span>
+                </div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "0.35rem" }}>
+                <span className="skel skel--title" style={{ width: "80px" }}>&nbsp;</span>
+                <span className="skel skel--text" style={{ width: "120px", height: "0.5rem" }}>&nbsp;</span>
+              </div>
+              <span className="skel skel--pill" style={{ width: "90px" }}>&nbsp;</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <div className="ov-section-head">
+          <span className="skel skel--title" style={{ width: "100px" }}>&nbsp;</span>
+        </div>
+        <div className="ov-balance-list">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="ov-balance-row" style={{ cursor: "default" }}>
+              <span className="skel skel--circle" style={{ width: "32px", height: "32px" }}>&nbsp;</span>
+              <div className="ov-balance-row__body">
+                <span className="skel skel--text" style={{ width: `${110 + (i * 17) % 60}px` }}>&nbsp;</span>
+                <div className="ov-balance-row__bar">
+                  <span
+                    className="skel ov-balance-row__bar-fill"
+                    style={{ width: `${30 + (i * 18) % 55}%`, animation: "skelShimmer 1.6s ease-in-out infinite" }}
+                  />
+                </div>
+              </div>
+              <span className="skel skel--text" style={{ width: "60px" }}>&nbsp;</span>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  </div>
+);
+
 const TripDetailPage = () => {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
@@ -534,15 +628,29 @@ const TripDetailPage = () => {
   };
 
   if (!tripId) {
-    return <p className="muted">No group selected.</p>;
+    return (
+      <div className="empty-state">
+        <p className="empty-state__title">No group selected.</p>
+        <p className="empty-state__hint">Pick one from your trip list to see balances and expenses.</p>
+      </div>
+    );
   }
 
   if (isLoading) {
-    return <p className="muted">Loading group details…</p>;
+    return <TripDetailSkeleton />;
   }
 
   if (error || !data) {
-    return <p className="muted">Unable to load group. Please try again.</p>;
+    return (
+      <div className="empty-state" style={{ borderColor: "rgba(248,113,113,0.35)" }}>
+        <p className="empty-state__title" style={{ color: "#fda4af" }}>
+          We couldn’t load this group.
+        </p>
+        <p className="empty-state__hint">
+          Check your connection and try again — your data is safe.
+        </p>
+      </div>
+    );
   }
 
   const { trip, members, expenses, receipts, balances, settlements, pendingSettlements } = data;
@@ -1870,23 +1978,37 @@ const ExpensesTab = ({
                   <label>To</label>
                   <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
                 </div>
-                <div style={{ display: "flex", alignItems: "flex-end" }}>
-                  <button
-                    type="button"
-                    className="secondary"
-                    style={{ opacity: 0.6 }}
-                    onClick={resetFilters}
-                  >
-                    Reset
-                  </button>
-                </div>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span className="muted" style={{ fontSize: "0.9rem" }}>
-                  Showing {filteredExpenses.length} of {expenses.length} expenses
-                </span>
-                <strong>{formatCurrency.format(filteredTotal)}</strong>
-              </div>
+              {(() => {
+                const activeCount =
+                  (memberFilter !== "all" ? 1 : 0) +
+                  (categoryFilter !== "all" ? 1 : 0) +
+                  (dateFrom ? 1 : 0) +
+                  (dateTo ? 1 : 0);
+                return (
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                      <span className="muted" style={{ fontSize: "0.9rem" }}>
+                        Showing {filteredExpenses.length} of {expenses.length} expenses
+                      </span>
+                      {activeCount > 0 && (
+                        <button
+                          type="button"
+                          className="filter-clear"
+                          onClick={resetFilters}
+                          title="Clear all active filters"
+                        >
+                          <span className="filter-clear__x" aria-hidden="true">×</span>
+                          Clear <span className="filter-clear__count">{activeCount}</span> {activeCount === 1 ? "filter" : "filters"}
+                        </button>
+                      )}
+                    </div>
+                    <strong style={{ fontFamily: "var(--serif)", fontSize: "1.1rem" }}>
+                      {formatCurrency.format(filteredTotal)}
+                    </strong>
+                  </div>
+                );
+              })()}
             </div>
             {viewReceiptError && (
               <p style={{ color: "#f87171" }}>{viewReceiptError}</p>
@@ -1902,7 +2024,12 @@ const ExpensesTab = ({
             >
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 {filteredExpenses.length === 0 ? (
-                  <p className="muted">No expenses match the current filters.</p>
+                  <div className="empty-state">
+                    <p className="empty-state__title">No matches.</p>
+                    <p className="empty-state__hint">
+                      Try widening the date range, picking a different person, or clear the active filters above.
+                    </p>
+                  </div>
                 ) : (
                   expensesByDay.map((day) => {
                     const dayLabel = formatDayLabel(day.representativeIso);
@@ -2250,7 +2377,7 @@ const ExpensesTab = ({
                   <h3 style={{ margin: 0 }}>Receipts</h3>
                   <p className="muted" style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}>
                     {receipts.length === 0
-                      ? "No receipts uploaded yet."
+                      ? "Upload a receipt with the next expense and it'll appear here."
                       : "Track uploaded receipts and their status."}
                   </p>
                   {receipts.length > 0 && (

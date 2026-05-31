@@ -1726,3 +1726,150 @@ button.ghost {
     align-items: flex-start;
   }
 }
+
+/* ============================================================
+   Skeleton loader (initial trip load)
+   ============================================================ */
+@keyframes skelShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skel {
+  display: inline-block;
+  background:
+    linear-gradient(90deg,
+      rgba(148, 163, 184, 0.08) 0%,
+      rgba(148, 163, 184, 0.18) 50%,
+      rgba(148, 163, 184, 0.08) 100%);
+  background-size: 200% 100%;
+  animation: skelShimmer 1.6s ease-in-out infinite;
+  border-radius: 8px;
+  color: transparent;
+}
+
+.skel--text {
+  height: 0.95rem;
+  border-radius: 999px;
+}
+
+.skel--title {
+  height: 1.55rem;
+  border-radius: 999px;
+}
+
+.skel--pill {
+  height: 1.65rem;
+  border-radius: 999px;
+}
+
+.skel--circle {
+  border-radius: 50%;
+}
+
+.skel-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.skel-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 1.2rem;
+}
+
+.skel-hero__amount {
+  height: 4.5rem;
+  width: 11rem;
+  max-width: 60%;
+  border-radius: 14px;
+}
+
+.skel-stamps {
+  display: flex;
+  gap: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px dashed rgba(148, 163, 184, 0.18);
+  flex-wrap: wrap;
+}
+
+.skel-stamp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+/* ============================================================
+   Filter row — clear-filters chip
+   ============================================================ */
+.filter-clear {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.9rem 0.4rem 0.75rem;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 146, 60, 0.4);
+  background: rgba(251, 146, 60, 0.12);
+  color: #fed7aa;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background 140ms ease, transform 100ms ease, border-color 140ms ease;
+}
+
+.filter-clear:hover {
+  background: rgba(251, 146, 60, 0.2);
+  border-color: rgba(251, 146, 60, 0.6);
+}
+
+.filter-clear:active {
+  transform: scale(0.97);
+}
+
+.filter-clear__x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: rgba(251, 146, 60, 0.3);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.filter-clear__count {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+/* ============================================================
+   Empty state — characterful generic
+   ============================================================ */
+.empty-state {
+  padding: 1.5rem 1.25rem;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px dashed rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  color: #cbd5f5;
+}
+
+.empty-state__title {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.15rem;
+  margin: 0;
+  color: #f8fafc;
+}
+
+.empty-state__hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  color: #94a3b8;
+}
