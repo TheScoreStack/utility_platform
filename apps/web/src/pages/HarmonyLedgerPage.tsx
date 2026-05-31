@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
 import HarmonySubNav from "../components/HarmonySubNav";
 import UserSelect from "../components/UserSelect";
+import { seedAvatar } from "../lib/avatarPalette";
 import {
   HarmonyLedgerAccessRecord,
   HarmonyLedgerAccessResponse,
@@ -412,32 +413,38 @@ const HarmonyLedgerPage = () => {
 
   if (accessLoading) {
     return (
-      <section className="card">
-        <h2>Harmony Collective</h2>
-        <p className="muted">Checking your access…</p>
-      </section>
+      <div className="hl-page">
+        <HarmonySubNav />
+        <section className="hl-hero">
+          <span className="hl-hero__eyebrow">Harmony Collective</span>
+          <h1 className="hl-hero__title">
+            Checking <em>your access…</em>
+          </h1>
+        </section>
+      </div>
     );
   }
 
   if (!accessData?.allowed) {
     return (
-      <section className="card">
-        <div className="section-title">
-          <div>
-            <h2>Harmony Collective</h2>
-            <p className="muted">Private workspace</p>
-          </div>
-        </div>
-        <p>
-          This module is invite-only. If you believe you should have access, ask Hunter to add you to the Harmony
-          Collective ledger.
-        </p>
-      </section>
+      <div className="hl-page">
+        <HarmonySubNav />
+        <section className="hl-hero">
+          <span className="hl-hero__eyebrow">Harmony Collective · private</span>
+          <h1 className="hl-hero__title">
+            Invite-only <em>workspace.</em>
+          </h1>
+          <p className="hl-hero__net">
+            If you should have access, ask Hunter to add you on the Ledger page.
+          </p>
+          <div className="hl-hero__rule" aria-hidden="true" />
+        </section>
+      </div>
     );
   }
 
   return (
-    <div className="list" style={{ gap: "1.5rem" }}>
+    <div className="hl-page">
       <HarmonySubNav />
       <div className="grid-two">
         <section className="card">
@@ -678,30 +685,60 @@ const HarmonyLedgerPage = () => {
       </section>
 
       {groupMetrics.length > 0 && (
-        <section className="card">
-          <div className="section-title">
-            <div>
-              <h2>Group Allocations</h2>
-              <p className="muted">Net balance per Harmony Collective group.</p>
-            </div>
+        <section className="hl-section">
+          <div className="hl-section-head">
+            <h2 className="hl-section-head__title">Group allocations</h2>
+            <span className="hl-section-head__count">
+              {groupMetrics.length} {groupMetrics.length === 1 ? "group" : "groups"}
+            </span>
           </div>
-          <div className="group-summary-grid">
-            {groupMetrics.map((group) => (
-              <div key={group.groupId} className="group-summary-card">
-                <p className="muted" style={{ margin: 0 }}>{group.name}</p>
-                <h3 style={{ margin: "0.4rem 0" }}>
-                  {formatCurrencyValue(group.net, metricsCurrency)}
-                </h3>
-                <div className="group-summary-details">
-                  <span>
-                    ↑ {formatCurrencyValue(group.donations + group.income + group.reimbursements + group.transfersIn, metricsCurrency)}
-                  </span>
-                  <span>
-                    ↓ {formatCurrencyValue(group.expenses + group.transfersOut, metricsCurrency)}
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="hl-group-list">
+            {groupMetrics.map((group, idx) => {
+              const palette = seedAvatar(group.groupId);
+              const inflow =
+                group.donations + group.income + group.reimbursements + group.transfersIn;
+              const outflow = group.expenses + group.transfersOut;
+              const positive = group.net > 0.01;
+              const negative = group.net < -0.01;
+              const tintClass = positive
+                ? "hl-group--owed"
+                : negative
+                  ? "hl-group--owe"
+                  : "hl-group--neutral";
+              return (
+                <article
+                  key={group.groupId}
+                  className={`hl-group ${tintClass}`}
+                  style={{ animationDelay: `${0.06 * idx}s` }}
+                >
+                  <div className="hl-group__head">
+                    <span
+                      className="hl-group__seal"
+                      style={{ background: palette.bg, color: palette.fg }}
+                      aria-hidden="true"
+                    >
+                      {(group.name || "?").slice(0, 1).toUpperCase()}
+                    </span>
+                    <div className="hl-group__id">
+                      <h3 className="hl-group__name">{group.name}</h3>
+                      <p className="hl-group__flows">
+                        <span className="hl-group__flow hl-group__flow--in">
+                          ↑ {formatCurrencyValue(inflow, metricsCurrency)}
+                        </span>
+                        <span className="hl-group__flow hl-group__flow--out">
+                          ↓ {formatCurrencyValue(outflow, metricsCurrency)}
+                        </span>
+                      </p>
+                    </div>
+                    <span
+                      className={`hl-group__net hl-group__net--${positive ? "owed" : negative ? "owe" : "neutral"}`}
+                    >
+                      {formatCurrencyValue(group.net, metricsCurrency)}
+                    </span>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       )}
