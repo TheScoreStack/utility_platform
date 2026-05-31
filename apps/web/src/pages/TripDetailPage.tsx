@@ -4,6 +4,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import AddExpenseForm, { type CreateExpenseInput } from "../components/AddExpenseForm";
 import SettlementForm, { type SettlementPrefill } from "../components/SettlementForm";
+import { CategoryBadge } from "../components/CategoryBadge";
+import { normalizeCategoryKey, resolveExpenseCategory } from "../lib/expenseCategories";
 import { api, ApiError, searchUsers as searchUsersRequest } from "../lib/api";
 import type {
   TripSummary,
@@ -1163,18 +1165,9 @@ const OverviewTab = ({
                         {membersById[expense.paidByMemberId] ?? expense.paidByMemberId}
                       </span>
                       {expense.category && (
-                        <span
-                          className="pill"
-                          style={{
-                            background: "rgba(236,72,153,0.14)",
-                            color: "#f9a8d4",
-                            width: "fit-content",
-                            marginTop: "0.25rem",
-                            fontSize: "0.72rem"
-                          }}
-                        >
-                          {expense.category}
-                        </span>
+                        <div style={{ marginTop: "0.25rem" }}>
+                          <CategoryBadge category={expense.category} />
+                        </div>
                       )}
                     </div>
                     <div className="ov-detail__item-right">
@@ -1263,13 +1256,18 @@ const ExpensesTab = ({
   );
 
   const categories = useMemo(() => {
-    const unique = new Set<string>();
+    const seen = new Map<string, { key: string; label: string; icon: string }>();
     expenses.forEach((expense) => {
-      if (expense.category) {
-        unique.add(expense.category);
-      }
+      const key = normalizeCategoryKey(expense.category);
+      if (!key || seen.has(key)) return;
+      const resolved = resolveExpenseCategory(expense.category);
+      seen.set(key, {
+        key,
+        label: resolved?.label ?? (expense.category ?? "").trim(),
+        icon: resolved?.icon ?? "✦"
+      });
     });
-    return Array.from(unique).sort((a, b) => a.localeCompare(b));
+    return Array.from(seen.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [expenses]);
 
   const filteredExpenses = useMemo(() => {
@@ -1285,7 +1283,7 @@ const ExpensesTab = ({
         if (!involvesMember) return false;
       }
 
-      if (categoryFilter !== "all" && (expense.category ?? "") !== categoryFilter) {
+      if (categoryFilter !== "all" && normalizeCategoryKey(expense.category) !== categoryFilter) {
         return false;
       }
 
@@ -1600,9 +1598,9 @@ const ExpensesTab = ({
                   <label>Category</label>
                   <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
                     <option value="all">All</option>
-                    {categories.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
+                    {categories.map((cat) => (
+                      <option key={cat.key} value={cat.key}>
+                        {cat.icon} {cat.label}
                       </option>
                     ))}
                   </select>
@@ -1716,11 +1714,7 @@ const ExpensesTab = ({
                                 Vendor • {expense.vendor}
                               </span>
                             )}
-                            {expense.category && (
-                              <span className="pill" style={{ background: "rgba(236,72,153,0.14)", color: "#f9a8d4" }}>
-                                Category • {expense.category}
-                              </span>
-                            )}
+                            {expense.category && <CategoryBadge category={expense.category} />}
                             {badges.map((badge) => (
                               <span key={badge} className="pill" style={{ background: "rgba(148,163,184,0.14)", color: "#e2e8f0" }}>
                                 {badge}

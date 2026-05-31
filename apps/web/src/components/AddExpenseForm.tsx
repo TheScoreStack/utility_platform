@@ -1,5 +1,6 @@
-import { ChangeEvent, FormEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, ChangeEvent, FormEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
+import { EXPENSE_CATEGORIES, resolveExpenseCategory } from "../lib/expenseCategories";
 import type { TripMember, Receipt, TextractExtraction } from "../types";
 
 const roundToCents = (value: number): number =>
@@ -183,9 +184,30 @@ const AddExpenseForm = ({
   const [description, setDescription] = useState("");
   const [vendor, setVendor] = useState("");
   const [category, setCategory] = useState("");
+  const [otherSelected, setOtherSelected] = useState(false);
   const [subtotalInput, setSubtotalInput] = useState("");
   const [taxInput, setTaxInput] = useState("");
   const [tipInput, setTipInput] = useState("");
+
+  const resolvedCategory = useMemo(() => resolveExpenseCategory(category), [category]);
+
+  // Auto-show the custom input whenever the current category value can't be
+  // matched to a catalog entry (e.g. legacy free-text data being re-rendered).
+  useEffect(() => {
+    if (category && !resolvedCategory) {
+      setOtherSelected(true);
+    }
+  }, [category, resolvedCategory]);
+
+  const handleSelectCategory = useCallback((chipId: string) => {
+    if (chipId === "other") {
+      setOtherSelected(true);
+      setCategory("");
+    } else {
+      setOtherSelected(false);
+      setCategory((current) => (current === chipId ? "" : chipId));
+    }
+  }, []);
 
   const preferredPayer = useMemo(() => {
     if (
@@ -418,15 +440,17 @@ const AddExpenseForm = ({
         if (firstItem?.description) {
           const normalized = firstItem.description.toLowerCase();
           if (normalized.includes("food") || normalized.includes("meal") || normalized.includes("restaurant")) {
-            setCategory("Meals");
+            setCategory("meals");
           } else if (normalized.includes("hotel") || normalized.includes("lodging")) {
-            setCategory("Lodging");
-          } else if (normalized.includes("ticket") || normalized.includes("ride")) {
-            setCategory("Transport");
+            setCategory("lodging");
+          } else if (normalized.includes("ticket") || normalized.includes("ride") || normalized.includes("taxi") || normalized.includes("uber")) {
+            setCategory("transport");
           } else if (normalized.includes("fuel") || normalized.includes("gas")) {
-            setCategory("Fuel");
-          } else {
-            setCategory(firstItem.description);
+            setCategory("fuel");
+          } else if (normalized.includes("coffee") || normalized.includes("bar") || normalized.includes("beer") || normalized.includes("wine")) {
+            setCategory("drinks");
+          } else if (normalized.includes("grocer") || normalized.includes("market")) {
+            setCategory("groceries");
           }
         }
       }
@@ -839,12 +863,38 @@ const AddExpenseForm = ({
 
       <div className="input-group">
         <label htmlFor="expense-category">Category (optional)</label>
-        <input
-          id="expense-category"
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
-          placeholder="Meals"
-        />
+        <div className="cat-chip-grid" id="expense-category" role="group" aria-label="Expense category">
+          {EXPENSE_CATEGORIES.map((chip) => {
+            const isActive =
+              chip.id === "other" ? otherSelected : category === chip.id;
+            return (
+              <button
+                key={chip.id}
+                type="button"
+                className={`cat-chip ${isActive ? "cat-chip--active" : ""}`}
+                onClick={() => handleSelectCategory(chip.id)}
+                style={isActive ? ({ "--cat-color": chip.color } as CSSProperties) : undefined}
+                aria-pressed={isActive}
+              >
+                <span className="cat-chip__icon" aria-hidden="true">{chip.icon}</span>
+                <span className="cat-chip__label">{chip.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        {otherSelected && (
+          <div className="cat-custom">
+            <input
+              type="text"
+              value={category}
+              onChange={(event) => setCategory(event.target.value)}
+              placeholder="Name it"
+              autoFocus
+              maxLength={32}
+            />
+            <p className="cat-custom__hint">A short label — “souvenirs”, “gas station snacks”…</p>
+          </div>
+        )}
       </div>
 
       <div className="input-group">

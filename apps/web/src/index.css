@@ -1162,3 +1162,123 @@ button.ghost {
 .ov-rise-1 { animation-delay: 0.05s; }
 .ov-rise-2 { animation-delay: 0.18s; }
 .ov-rise-3 { animation-delay: 0.3s; }
+
+/* ============================================================
+   Expense categories — shared chip picker + display badge
+   ============================================================ */
+
+/* --- Badge (read-only display in lists) --- */
+.cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  width: fit-content;
+  white-space: nowrap;
+}
+
+.cat-badge__icon {
+  font-size: 0.9rem;
+  line-height: 1;
+  filter: saturate(1.05);
+}
+
+.cat-badge__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  line-height: 1;
+}
+
+.cat-badge__prefix {
+  opacity: 0.6;
+  font-weight: 500;
+  font-size: 0.95em;
+}
+
+/* --- Chip picker (in AddExpenseForm) --- */
+.cat-chip-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.cat-chip {
+  --cat-color: #94a3b8;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: 13px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.5);
+  color: #cbd5f5;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 500;
+  font-size: 0.88rem;
+  text-align: left;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+
+.cat-chip:hover:not(.cat-chip--active) {
+  border-color: rgba(148, 163, 184, 0.32);
+  background: rgba(15, 23, 42, 0.72);
+  transform: translateY(-1px);
+}
+
+.cat-chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.5);
+}
+
+.cat-chip__icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.cat-chip__label {
+  line-height: 1;
+}
+
+.cat-chip--active {
+  border-color: var(--cat-color);
+  color: #f8fafc;
+  background:
+    radial-gradient(120% 100% at 0% 0%, color-mix(in srgb, var(--cat-color) 24%, transparent) 0%, transparent 65%),
+    rgba(15, 23, 42, 0.72);
+  box-shadow:
+    0 0 0 1px var(--cat-color),
+    0 12px 28px -16px color-mix(in srgb, var(--cat-color) 65%, transparent);
+}
+
+.cat-chip--active .cat-chip__label {
+  font-weight: 600;
+}
+
+.cat-custom {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  animation: ovRise 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.cat-custom input {
+  width: 100%;
+}
+
+.cat-custom__hint {
+  font-family: var(--serif);
+  font-style: italic;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  margin: 0;
+}
