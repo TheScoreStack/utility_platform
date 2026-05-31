@@ -678,6 +678,83 @@ const TripDetailPage = () => {
   );
 };
 
+// ---------- Overview helpers ----------
+
+const AVATAR_PALETTE: Array<{ bg: string; fg: string }> = [
+  { bg: "linear-gradient(135deg, #f472b6 0%, #ec4899 100%)", fg: "#fdf2f8" },
+  { bg: "linear-gradient(135deg, #60a5fa 0%, #2563eb 100%)", fg: "#dbeafe" },
+  { bg: "linear-gradient(135deg, #34d399 0%, #059669 100%)", fg: "#d1fae5" },
+  { bg: "linear-gradient(135deg, #fbbf24 0%, #d97706 100%)", fg: "#fef3c7" },
+  { bg: "linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%)", fg: "#ede9fe" },
+  { bg: "linear-gradient(135deg, #f87171 0%, #dc2626 100%)", fg: "#fee2e2" },
+  { bg: "linear-gradient(135deg, #22d3ee 0%, #0891b2 100%)", fg: "#cffafe" },
+  { bg: "linear-gradient(135deg, #fb923c 0%, #ea580c 100%)", fg: "#ffedd5" }
+];
+
+const hashString = (s: string): number => {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+};
+
+const seedAvatar = (memberId: string) =>
+  AVATAR_PALETTE[hashString(memberId) % AVATAR_PALETTE.length];
+
+const getInitials = (name: string): string => {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+};
+
+interface OvAvatarProps {
+  name: string;
+  memberId: string;
+  size?: "sm" | "md";
+  isSelf?: boolean;
+}
+
+const OvAvatar = ({ name, memberId, size = "md", isSelf }: OvAvatarProps) => {
+  const palette = seedAvatar(memberId);
+  return (
+    <div
+      className={`ov-avatar ${size === "sm" ? "ov-avatar--sm" : ""} ${isSelf ? "ov-avatar--self" : ""}`}
+      style={{ background: palette.bg, color: palette.fg }}
+      aria-hidden="true"
+    >
+      {getInitials(name)}
+    </div>
+  );
+};
+
+const OvFlowArc = ({ tone }: { tone: "owe" | "owed" | "neutral" }) => {
+  const color =
+    tone === "owe" ? "#fb923c" : tone === "owed" ? "#34d399" : "#94a3b8";
+  return (
+    <svg
+      viewBox="0 0 100 18"
+      preserveAspectRatio="none"
+      style={{ width: "100%", height: "100%", overflow: "visible" }}
+      aria-hidden="true"
+    >
+      <path
+        d="M 4 12 Q 50 -4 96 12"
+        fill="none"
+        stroke={color}
+        strokeWidth="1.4"
+        strokeDasharray="2 4"
+        strokeLinecap="round"
+        opacity="0.75"
+      />
+      <polygon points="98,12 92,8 92,16" fill={color} opacity="0.95" />
+      <circle cx="4" cy="12" r="1.6" fill={color} opacity="0.95" />
+    </svg>
+  );
+};
+
 interface OverviewTabProps {
   balances: BalanceRow[];
   membersById: Record<string, string>;
@@ -776,29 +853,54 @@ const OverviewTab = ({
     ).length;
   }, [pendingSettlements, currentUserId]);
 
+  const yourTotalShare = useMemo(() => {
+    if (!currentUserId) return 0;
+    let total = 0;
+    expenses.forEach((expense) => {
+      expense.allocations.forEach((allocation) => {
+        if (allocation.memberId === currentUserId) {
+          total += allocation.amount;
+        }
+      });
+    });
+    return total;
+  }, [expenses, currentUserId]);
+
+  const maxAbsBalance = useMemo(
+    () =>
+      balances.reduce((max, balance) => Math.max(max, Math.abs(balance.balance)), 0),
+    [balances]
+  );
+
   const primarySuggestionForUser = useMemo(() => {
     if (!currentUserId) return settlementSuggestions[0] ?? null;
-    const owes = settlementSuggestions.find((s) => s.from === currentUserId);
+    const owes = settlementSuggestions
+      .filter((s) => s.from === currentUserId)
+      .sort((a, b) => b.amount - a.amount)[0];
     if (owes) return owes;
-    const owed = settlementSuggestions.find((s) => s.to === currentUserId);
+    const owed = settlementSuggestions
+      .filter((s) => s.to === currentUserId)
+      .sort((a, b) => b.amount - a.amount)[0];
     if (owed) return owed;
     return settlementSuggestions[0] ?? null;
   }, [settlementSuggestions, currentUserId]);
 
-  const balanceColor =
+  const heroTone: "owe" | "owed" | "settled" =
     currentUserBalance === null || Math.abs(currentUserBalance) < 0.01
-      ? "#cbd5f5"
+      ? "settled"
       : currentUserBalance > 0
-        ? "#4ade80"
-        : "#fb923c";
-  const balanceLabel =
+        ? "owed"
+        : "owe";
+
+  const balanceStatus =
     currentUserBalance === null
-      ? "Not a member"
+      ? "you're not part of this trip"
       : Math.abs(currentUserBalance) < 0.01
-        ? "All settled"
+        ? "all square — nothing to settle"
         : currentUserBalance > 0
-          ? "You're owed"
-          : "You owe";
+          ? "you're owed"
+          : "you owe";
+
   const balanceDisplay =
     currentUserBalance === null
       ? "—"
@@ -813,7 +915,7 @@ const OverviewTab = ({
     }
   };
   const settleUpLabel = !primarySuggestionForUser
-    ? "All settled"
+    ? "All settled ✓"
     : primarySuggestionForUser.from === currentUserId
       ? `Settle ${currencyFormatter.format(primarySuggestionForUser.amount)} →`
       : primarySuggestionForUser.to === currentUserId
@@ -821,196 +923,282 @@ const OverviewTab = ({
         : "Settle group →";
 
   return (
-    <div className="grid-two">
-      <section
-        className="card"
-        style={{
-          gridColumn: "1 / -1",
-          padding: "1.1rem 1.25rem",
-          background:
-            "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(30,41,59,0.55) 100%)",
-          border: "1px solid rgba(148,163,184,0.18)"
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            gap: "1.5rem",
-            justifyContent: "space-between"
-          }}
-        >
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "1.75rem", alignItems: "flex-end" }}>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-              <span className="muted" style={{ fontSize: "0.78rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                {balanceLabel}
-              </span>
-              <strong style={{ fontSize: "1.85rem", lineHeight: 1, color: balanceColor }}>
-                {balanceDisplay}
-              </strong>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-              <span className="muted" style={{ fontSize: "0.78rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                Group spent
-              </span>
-              <strong style={{ fontSize: "1.2rem", lineHeight: 1 }}>
-                {currencyFormatter.format(groupTotalSpent)}
-              </strong>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
-              <span className="muted" style={{ fontSize: "0.78rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
-                Unsettled
-              </span>
-              <strong style={{ fontSize: "1.2rem", lineHeight: 1 }}>
-                {currentUserUnsettledCount}
-              </strong>
-            </div>
+    <div className="ov-grid">
+      {/* ── HERO ─────────────────────────────────────────────── */}
+      <section className={`ov-hero ov-hero--${heroTone} ov-rise ov-rise-1`}>
+        <div className="ov-hero__top">
+          <div className="ov-hero__lockup">
+            <span className="ov-hero__eyebrow">Where you stand</span>
+            <span className={`ov-hero__amount ov-hero__amount--${heroTone}`}>
+              {balanceDisplay}
+            </span>
+            <span className="ov-hero__status">{balanceStatus}</span>
           </div>
           <button
             type="button"
-            className="primary"
+            className={`ov-cta ov-cta--${heroTone}`}
             disabled={settleUpDisabled}
             onClick={handleSettleUpClick}
-            style={{ minWidth: "180px" }}
           >
             {settleUpLabel}
           </button>
         </div>
+
+        <div className="ov-stamps">
+          <div className="ov-stamp">
+            <span className="ov-stamp__label">Group spent</span>
+            <span className="ov-stamp__value">
+              {currencyFormatter.format(groupTotalSpent)}
+            </span>
+          </div>
+          {currentUserId && (
+            <div className="ov-stamp">
+              <span className="ov-stamp__label">Your share</span>
+              <span className="ov-stamp__value">
+                {currencyFormatter.format(yourTotalShare)}
+              </span>
+            </div>
+          )}
+          <div className="ov-stamp">
+            <span className="ov-stamp__label">Unsettled</span>
+            <span className="ov-stamp__value">{currentUserUnsettledCount}</span>
+          </div>
+        </div>
       </section>
 
-      <section className="card">
-        <div className="section-title">
-          <h2>Balances</h2>
-        </div>
-        <div className="list">
-          {balances.length === 0 ? (
-            <p className="muted">No balances yet.</p>
-          ) : (
-            balances.map((balance) => (
-              <button
-                key={balance.memberId}
-                type="button"
-                onClick={() =>
-                  setSelectedMemberId((current) => (current === balance.memberId ? null : balance.memberId))
-                }
-                className="card"
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  padding: "0.75rem 1rem",
-                  cursor: "pointer",
-                  textAlign: "left",
-                  border: selectedMemberId === balance.memberId ? "1px solid rgba(56,189,248,0.6)" : undefined,
-                  boxShadow:
-                    selectedMemberId === balance.memberId
-                      ? "0 12px 32px -18px rgba(56,189,248,0.45)"
-                      : undefined,
-                  background:
-                    selectedMemberId === balance.memberId ? "rgba(59,130,246,0.12)" : undefined
-                }}
-              >
-                <span>{membersById[balance.memberId] ?? balance.memberId}</span>
-                <strong
-                  style={{
-                    color: balance.balance >= 0 ? "#4ade80" : "#f97316"
-                  }}
-                >
-                  {currencyFormatter.format(balance.balance)}
-                </strong>
-              </button>
-            ))
+      {/* ── SUGGESTIONS (primary column) ─────────────────────── */}
+      <section className="ov-rise ov-rise-2">
+        <div className="ov-section-head">
+          <h2>{settlementSuggestions.length === 0 ? "All settled up" : "Settle up"}</h2>
+          {settlementSuggestions.length > 0 && (
+            <span className="ov-todo-pill">
+              {settlementSuggestions.length} {settlementSuggestions.length === 1 ? "payment" : "payments"}
+            </span>
           )}
         </div>
 
+        {settlementSuggestions.length === 0 ? (
+          <div className="ov-celebration">
+            <div className="ov-celebration__mark">✓</div>
+            <p className="ov-celebration__text">The ledger is clear.</p>
+          </div>
+        ) : (
+          <>
+            <div className="ov-suggestion-list">
+              {settlementSuggestions.map((suggestion, index) => {
+                const isFromUser = currentUserId === suggestion.from;
+                const isToUser = currentUserId === suggestion.to;
+                const tone: "owe" | "owed" | "neutral" = isFromUser
+                  ? "owe"
+                  : isToUser
+                    ? "owed"
+                    : "neutral";
+                const modifier = isFromUser
+                  ? "ov-suggestion--owe-self"
+                  : isToUser
+                    ? "ov-suggestion--owed-self"
+                    : "";
+                const fromName = membersById[suggestion.from] ?? suggestion.from;
+                const toName = membersById[suggestion.to] ?? suggestion.to;
+                const actionClass =
+                  tone === "owe"
+                    ? "ov-suggestion__action--owe"
+                    : tone === "owed"
+                      ? "ov-suggestion__action--owed"
+                      : "ov-suggestion__action--neutral";
+
+                return (
+                  <div
+                    key={`${suggestion.from}-${suggestion.to}-${index}`}
+                    className={`ov-suggestion ${modifier}`}
+                  >
+                    <div className="ov-suggestion__person">
+                      <OvAvatar
+                        name={fromName}
+                        memberId={suggestion.from}
+                        isSelf={isFromUser}
+                      />
+                      <div className="ov-suggestion__person-body">
+                        <span className="ov-suggestion__role">
+                          {isFromUser ? "You owe" : "Pays"}
+                        </span>
+                        <span className="ov-suggestion__name">
+                          {isFromUser ? <em style={{ fontStyle: "italic", color: "#f8fafc" }}>You</em> : fromName}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="ov-suggestion__flow">
+                      <span className="ov-suggestion__amount">
+                        {currencyFormatter.format(suggestion.amount)}
+                      </span>
+                      <div className="ov-suggestion__arc">
+                        <OvFlowArc tone={tone} />
+                      </div>
+                      <span className="ov-suggestion__to">
+                        to {isToUser ? <em>you</em> : toName}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => onUseSuggestion(suggestion)}
+                      className={`ov-suggestion__action ${actionClass}`}
+                    >
+                      Record →
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+            <p
+              className="muted"
+              style={{ marginTop: "0.85rem", fontSize: "0.82rem" }}
+            >
+              These payments would zero out the current balances.
+            </p>
+          </>
+        )}
+      </section>
+
+      {/* ── BALANCES (recessive column) ──────────────────────── */}
+      <section className="ov-rise ov-rise-3">
+        <div className="ov-section-head">
+          <h2>Balances</h2>
+          <span className="muted" style={{ fontSize: "0.82rem" }}>
+            {balances.length} {balances.length === 1 ? "person" : "people"}
+          </span>
+        </div>
+
+        {balances.length === 0 ? (
+          <p className="muted" style={{ fontStyle: "italic" }}>
+            Add expenses to see how the ledger shakes out.
+          </p>
+        ) : (
+          <div className="ov-balance-list">
+            {balances.map((balance) => {
+              const isSelf = balance.memberId === currentUserId;
+              const isSelected = selectedMemberId === balance.memberId;
+              const memberName = membersById[balance.memberId] ?? balance.memberId;
+              const isZero = Math.abs(balance.balance) < 0.01;
+              const positive = balance.balance > 0;
+              const barWidth =
+                maxAbsBalance > 0
+                  ? Math.min(100, (Math.abs(balance.balance) / maxAbsBalance) * 100)
+                  : 0;
+              const amountClass = isZero
+                ? "ov-balance-row__amount--zero"
+                : positive
+                  ? "ov-balance-row__amount--owed"
+                  : "ov-balance-row__amount--owe";
+
+              return (
+                <button
+                  key={balance.memberId}
+                  type="button"
+                  onClick={() =>
+                    setSelectedMemberId((current) =>
+                      current === balance.memberId ? null : balance.memberId
+                    )
+                  }
+                  className={`ov-balance-row ${isSelected ? "ov-balance-row--selected" : ""}`}
+                >
+                  <OvAvatar
+                    name={memberName}
+                    memberId={balance.memberId}
+                    size="sm"
+                    isSelf={isSelf}
+                  />
+                  <div className="ov-balance-row__body">
+                    <span className="ov-balance-row__name">
+                      {memberName}
+                      {isSelf && <span className="ov-balance-row__self">· you</span>}
+                    </span>
+                    <div className="ov-balance-row__bar">
+                      <div
+                        className="ov-balance-row__bar-fill"
+                        style={{
+                          width: `${barWidth}%`,
+                          left: 0,
+                          background: isZero
+                            ? "rgba(148,163,184,0.3)"
+                            : positive
+                              ? "linear-gradient(90deg, var(--owed) 0%, rgba(52,211,153,0.55) 100%)"
+                              : "linear-gradient(90deg, var(--owe) 0%, rgba(251,146,60,0.55) 100%)"
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <span className={`ov-balance-row__amount ${amountClass}`}>
+                    {isZero
+                      ? "0.00"
+                      : `${positive ? "+" : "−"}${currencyFormatter.format(Math.abs(balance.balance))}`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
         {selectedMemberId && (
-          <div
-            className="card"
-            style={{
-              marginTop: "0.85rem",
-              padding: "0.95rem 1.05rem",
-              background: "rgba(15,23,42,0.5)",
-              border: "1px solid rgba(148,163,184,0.14)",
-              borderRadius: "0.85rem"
-            }}
-            ref={detailRef}
-          >
-            <div className="section-title" style={{ marginBottom: "0.55rem" }}>
-              <h3 style={{ margin: 0 }}>
-                Expenses for {selectedMemberName}
-              </h3>
-              <span className="muted">
+          <div className="ov-detail" ref={detailRef}>
+            <div className="ov-detail__head">
+              <h3 className="ov-detail__name">{selectedMemberName}</h3>
+              <span className="muted" style={{ fontSize: "0.82rem" }}>
                 {selectedMemberExpenses.length} items · {currencyFormatter.format(selectedMemberTotal)}
               </span>
             </div>
             {selectedMemberExpenses.length === 0 ? (
-              <p className="muted" style={{ margin: 0 }}>
-                No expenses allocated to this person yet.
+              <p className="muted" style={{ margin: 0, fontStyle: "italic" }}>
+                Nothing allocated to this person yet.
               </p>
             ) : (
-              <div className="list" style={{ gap: "0.65rem" }}>
+              <div className="ov-detail__list">
                 {selectedMemberExpenses.map(({ expense, share, isPayer }) => (
-                  <div
-                    key={expense.expenseId}
-                    className="card"
-                    style={{
-                      padding: "0.75rem 0.85rem",
-                      background: "rgba(30,41,59,0.65)",
-                      borderRadius: "0.8rem",
-                      border: "1px solid rgba(148,163,184,0.12)",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "0.35rem"
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "flex-start",
-                        gap: "0.75rem",
-                        flexWrap: "wrap"
-                      }}
-                    >
-                      <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                        <strong>{expense.description}</strong>
-                        <span className="muted" style={{ fontSize: "0.9rem" }}>
-                          {formatDate(expense.createdAt)} · Paid by {membersById[expense.paidByMemberId] ?? expense.paidByMemberId}
+                  <div key={expense.expenseId} className="ov-detail__item">
+                    <div className="ov-detail__item-body">
+                      <span className="ov-detail__item-title">{expense.description}</span>
+                      <span className="ov-detail__item-meta">
+                        {formatDate(expense.createdAt)} · Paid by{" "}
+                        {membersById[expense.paidByMemberId] ?? expense.paidByMemberId}
+                      </span>
+                      {expense.category && (
+                        <span
+                          className="pill"
+                          style={{
+                            background: "rgba(236,72,153,0.14)",
+                            color: "#f9a8d4",
+                            width: "fit-content",
+                            marginTop: "0.25rem",
+                            fontSize: "0.72rem"
+                          }}
+                        >
+                          {expense.category}
                         </span>
-                        {expense.category && (
-                          <span
-                            className="pill"
-                            style={{ background: "rgba(236,72,153,0.14)", color: "#f9a8d4", width: "fit-content" }}
-                          >
-                            {expense.category}
-                          </span>
-                        )}
-                      </div>
-                      <div
-                        style={{
-                          display: "flex",
-                          flexDirection: "column",
-                          alignItems: "flex-end",
-                          minWidth: "140px",
-                          gap: "0.2rem"
-                        }}
+                      )}
+                    </div>
+                    <div className="ov-detail__item-right">
+                      <span
+                        className={`ov-detail__share ${share > 0 ? "" : "ov-detail__share--zero"}`}
                       >
-                        <span style={{ fontWeight: 700 }}>
-                          {share > 0 ? currencyFormatter.format(share) : "No allocation set"}
+                        {share > 0 ? currencyFormatter.format(share) : "no share"}
+                      </span>
+                      <span className="muted" style={{ fontSize: "0.76rem" }}>
+                        of {currencyFormatter.format(expense.total)}
+                      </span>
+                      {isPayer && (
+                        <span
+                          className="pill"
+                          style={{
+                            background: "rgba(56,189,248,0.16)",
+                            color: "#bae6fd",
+                            fontSize: "0.7rem",
+                            marginTop: "0.2rem"
+                          }}
+                        >
+                          Payer
                         </span>
-                        <span className="muted" style={{ fontSize: "0.85rem" }}>
-                          of {currencyFormatter.format(expense.total)}
-                        </span>
-                        {isPayer && (
-                          <span
-                            className="pill"
-                            style={{ background: "rgba(56,189,248,0.16)", color: "#bae6fd" }}
-                          >
-                            Paid by {membersById[expense.paidByMemberId] ?? expense.paidByMemberId}
-                          </span>
-                        )}
-                      </div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -1019,53 +1207,6 @@ const OverviewTab = ({
           </div>
         )}
       </section>
-
-      {settlementSuggestions.length > 0 && (
-        <section className="card">
-          <div className="section-title">
-            <h2>Suggested Settlements</h2>
-          </div>
-          <div className="list">
-            {settlementSuggestions.map((suggestion, index) => {
-              const involvesUser =
-                currentUserId === suggestion.from || currentUserId === suggestion.to;
-              return (
-                <div
-                  key={`${suggestion.from}-${suggestion.to}-${index}`}
-                  className="card"
-                  style={{
-                    padding: "0.75rem 1rem",
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: "0.75rem",
-                    flexWrap: "wrap",
-                    border: involvesUser ? "1px solid rgba(56,189,248,0.45)" : undefined,
-                    background: involvesUser ? "rgba(56,189,248,0.07)" : undefined
-                  }}
-                >
-                  <p style={{ margin: 0 }}>
-                    <strong>{membersById[suggestion.from] ?? suggestion.from}</strong> should pay{" "}
-                    <strong>{currencyFormatter.format(suggestion.amount)}</strong> to{" "}
-                    <strong>{membersById[suggestion.to] ?? suggestion.to}</strong>
-                  </p>
-                  <button
-                    type="button"
-                    className={involvesUser ? "primary" : "secondary"}
-                    onClick={() => onUseSuggestion(suggestion)}
-                    style={{ padding: "0.4rem 0.85rem" }}
-                  >
-                    Record this →
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          <p className="muted">
-            These suggestions settle the current balances assuming no additional expenses or settlements.
-          </p>
-        </section>
-      )}
     </div>
   );
 };
