@@ -4,6 +4,7 @@ import {
   DynamoDBDocumentClient,
   GetCommand,
   PutCommand,
+  QueryCommand,
   UpdateCommand
 } from "@aws-sdk/lib-dynamodb";
 
@@ -17,6 +18,33 @@ const emailSortKey = (email: string) => `EMAIL#${email.toLowerCase()}`;
 const namePartitionKey = "NAME";
 const nameSortKey = (name: string, userId: string) =>
   `NAME#${name.toLowerCase()}#${userId}`;
+
+const findExistingProfileByEmail = async (
+  email: string,
+  excludeUserId: string
+): Promise<{ userId: string } | null> => {
+  const { Items } = await client.send(
+    new QueryCommand({
+      TableName: TABLE_NAME,
+      IndexName: "GSI2",
+      KeyConditionExpression: "GSI2PK = :pk AND begins_with(GSI2SK, :sk)",
+      ExpressionAttributeValues: {
+        ":pk": emailPartitionKey,
+        ":sk": emailSortKey(email)
+      },
+      Limit: 5
+    })
+  );
+
+  const match = (Items ?? []).find(
+    (item) =>
+      typeof item.userId === "string" &&
+      item.userId !== excludeUserId &&
+      !item.aliasOf
+  );
+
+  return match ? { userId: match.userId as string } : null;
+};
 
 export const handler = async (event: PostConfirmationTriggerEvent) => {
   if (!TABLE_NAME) {
@@ -52,6 +80,33 @@ export const handler = async (event: PostConfirmationTriggerEvent) => {
   const existingItem = existing.Item as Record<string, unknown> | undefined;
 
   if (!existingItem) {
+    const canonical = email
+      ? await findExistingProfileByEmail(email, userId)
+      : null;
+
+    if (canonical) {
+      console.warn(
+        `postConfirmation: profile already exists for ${email} under userId ${canonical.userId}; writing alias from new sub ${userId}`
+      );
+      await client.send(
+        new PutCommand({
+          TableName: TABLE_NAME,
+          Item: {
+            entityType: "UserProfileAlias" as const,
+            PK: userPk(userId),
+            SK: userSk,
+            userId,
+            aliasOf: canonical.userId,
+            email,
+            createdAt: now,
+            updatedAt: now
+          },
+          ConditionExpression: "attribute_not_exists(PK)"
+        })
+      );
+      return event;
+    }
+
     const item = {
       entityType: "UserProfile" as const,
       PK: userPk(userId),
@@ -84,6 +139,10 @@ export const handler = async (event: PostConfirmationTriggerEvent) => {
       })
     );
 
+    return event;
+  }
+
+  if (existingItem.aliasOf) {
     return event;
   }
 

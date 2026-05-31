@@ -39,6 +39,11 @@ export class UserStore {
   }
 
   async ensureUserProfile(auth: AuthContext): Promise<UserProfile> {
+    const canonicalUserId = await this.resolveAliasedUserId(auth.userId);
+    if (canonicalUserId !== auth.userId) {
+      auth.userId = canonicalUserId;
+    }
+
     const userId = auth.userId;
     const existing = await this.getUser(userId);
     const preferredName =
@@ -51,6 +56,33 @@ export class UserStore {
       : undefined;
 
     if (!existing) {
+      if (auth.email) {
+        const canonical = await this.findCanonicalProfileByEmail(
+          auth.email,
+          userId
+        );
+        if (canonical) {
+          await this.docClient.send(
+            new PutCommand({
+              TableName: this.tableName,
+              Item: {
+                entityType: "UserProfileAlias" as const,
+                PK: userPk(userId),
+                SK: userSk,
+                userId,
+                aliasOf: canonical.userId,
+                email: auth.email,
+                createdAt: now,
+                updatedAt: now
+              },
+              ConditionExpression: "attribute_not_exists(PK)"
+            })
+          );
+          auth.userId = canonical.userId;
+          return canonical;
+        }
+      }
+
       const item = {
         entityType: "UserProfile" as const,
         PK: userPk(userId),
@@ -169,7 +201,51 @@ export class UserStore {
       return null;
     }
 
+    if (typeof Item.aliasOf === "string" && Item.aliasOf) {
+      return null;
+    }
+
     return mapToProfile(Item as Record<string, unknown>);
+  }
+
+  async resolveAliasedUserId(userId: string): Promise<string> {
+    const { Item } = await this.docClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: { PK: userPk(userId), SK: userSk }
+      })
+    );
+    if (Item && typeof Item.aliasOf === "string" && Item.aliasOf) {
+      return Item.aliasOf;
+    }
+    return userId;
+  }
+
+  private async findCanonicalProfileByEmail(
+    email: string,
+    excludeUserId: string
+  ): Promise<UserProfile | null> {
+    const { Items } = await this.docClient.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        IndexName: "GSI2",
+        KeyConditionExpression: "GSI2PK = :pk AND begins_with(GSI2SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": emailPartitionKey,
+          ":sk": emailSortKey(email)
+        },
+        Limit: 5
+      })
+    );
+
+    const match = (Items ?? []).find(
+      (item) =>
+        typeof item.userId === "string" &&
+        item.userId !== excludeUserId &&
+        !item.aliasOf
+    );
+
+    return match ? mapToProfile(match as Record<string, unknown>) : null;
   }
 
   async getUsersByIds(userIds: string[]): Promise<UserProfile[]> {
