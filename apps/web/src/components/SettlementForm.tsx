@@ -1,5 +1,13 @@
-import { FormEvent, WheelEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { PaymentMethods, TripMember } from "../types";
+
+export type SettlementPrefill = {
+  from: string;
+  to: string;
+  amount: number;
+  /** Bump this when re-applying the same from/to/amount triple */
+  nonce: number;
+};
 
 interface SettlementFormProps {
   members: TripMember[];
@@ -15,6 +23,8 @@ interface SettlementFormProps {
   paymentMethods?: Record<string, PaymentMethods>;
   memberBalances?: Record<string, number>;
   settlementSuggestions?: Array<{ from: string; to: string; amount: number }>;
+  prefill?: SettlementPrefill | null;
+  onPrefillConsumed?: () => void;
 }
 
 const SettlementForm = ({
@@ -25,8 +35,12 @@ const SettlementForm = ({
   currentUserId,
   paymentMethods,
   memberBalances,
-  settlementSuggestions
+  settlementSuggestions,
+  prefill,
+  onPrefillConsumed
 }: SettlementFormProps) => {
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const [flash, setFlash] = useState(false);
   const preferredFromMember = useMemo(() => {
     if (currentUserId && members.some((member) => member.memberId === currentUserId)) {
       return currentUserId;
@@ -86,6 +100,27 @@ const SettlementForm = ({
       setFromMemberId(preferredFromMember);
     }
   }, [preferredFromMember, fromManuallySelected]);
+
+  useEffect(() => {
+    if (!prefill) return;
+    const fromMember = members.find((m) => m.memberId === prefill.from);
+    const toMember = members.find((m) => m.memberId === prefill.to);
+    if (!fromMember || !toMember) {
+      onPrefillConsumed?.();
+      return;
+    }
+    setFromMemberId(prefill.from);
+    setFromManuallySelected(true);
+    setToMemberId(prefill.to);
+    setToManuallySelected(true);
+    setAmount(prefill.amount.toFixed(2));
+    setError(null);
+    setFlash(true);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const flashTimer = setTimeout(() => setFlash(false), 1400);
+    onPrefillConsumed?.();
+    return () => clearTimeout(flashTimer);
+  }, [prefill, members, onPrefillConsumed]);
 
   const handleNumberInputWheel = useCallback((event: WheelEvent<HTMLInputElement>) => {
     event.preventDefault();
@@ -174,7 +209,18 @@ const SettlementForm = ({
   );
 
   return (
-    <form onSubmit={handleSubmit} className="list">
+    <form
+      onSubmit={handleSubmit}
+      className="list"
+      ref={formRef}
+      style={{
+        transition: "box-shadow 0.4s ease, background 0.4s ease",
+        boxShadow: flash ? "0 0 0 2px rgba(56,189,248,0.55)" : undefined,
+        background: flash ? "rgba(56,189,248,0.07)" : undefined,
+        borderRadius: "0.85rem",
+        padding: flash ? "0.75rem" : undefined
+      }}
+    >
       <div className="input-group">
         <label>From</label>
         <select value={fromMemberId} onChange={(event) => handleFromChange(event.target.value)}>

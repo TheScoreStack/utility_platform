@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import AddExpenseForm, { type CreateExpenseInput } from "../components/AddExpenseForm";
-import SettlementForm from "../components/SettlementForm";
+import SettlementForm, { type SettlementPrefill } from "../components/SettlementForm";
 import { api, ApiError, searchUsers as searchUsersRequest } from "../lib/api";
 import type {
   TripSummary,
@@ -127,6 +127,7 @@ const TripDetailPage = () => {
     undefined;
 
   const [activeTab, setActiveTab] = useState<TripTab>("overview");
+  const [settlementPrefill, setSettlementPrefill] = useState<SettlementPrefill | null>(null);
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
   const [memberFeedback, setMemberFeedback] = useState<string | null>(null);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -167,6 +168,19 @@ const TripDetailPage = () => {
       }
     },
     [queryClient, queryKey, tripId]
+  );
+
+  const handleUseSuggestion = useCallback(
+    (suggestion: { from: string; to: string; amount: number }) => {
+      setSettlementPrefill({
+        from: suggestion.from,
+        to: suggestion.to,
+        amount: suggestion.amount,
+        nonce: Date.now()
+      });
+      setActiveTab("settlements");
+    },
+    []
   );
 
   const createExpenseMutation = useMutation({
@@ -580,6 +594,10 @@ const TripDetailPage = () => {
           settlementSuggestions={settlementSuggestions}
           currency={trip.currency}
           expenses={expenses}
+          currentUserId={effectiveCurrentUserId}
+          pendingSettlements={pendingSettlements}
+          onUseSuggestion={handleUseSuggestion}
+          onGoToSettlements={() => handleTabChange("settlements")}
         />
       )}
 
@@ -626,6 +644,8 @@ const TripDetailPage = () => {
           deletingSettlementId={deleteSettlementMutation.variables}
           currentUserId={effectiveCurrentUserId}
           paymentMethodsByMember={paymentMethodsByMember}
+          prefill={settlementPrefill}
+          onPrefillConsumed={() => setSettlementPrefill(null)}
         />
       )}
 
@@ -664,6 +684,10 @@ interface OverviewTabProps {
   settlementSuggestions: Array<{ from: string; to: string; amount: number }>;
   currency: string;
   expenses: TripSummary["expenses"];
+  currentUserId?: string;
+  pendingSettlements: TripSummary["settlements"];
+  onUseSuggestion: (suggestion: { from: string; to: string; amount: number }) => void;
+  onGoToSettlements: () => void;
 }
 
 const OverviewTab = ({
@@ -671,7 +695,11 @@ const OverviewTab = ({
   membersById,
   settlementSuggestions,
   currency,
-  expenses
+  expenses,
+  currentUserId,
+  pendingSettlements,
+  onUseSuggestion,
+  onGoToSettlements
 }: OverviewTabProps) => {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const detailRef = useRef<HTMLDivElement | null>(null);
@@ -730,8 +758,127 @@ const OverviewTab = ({
     }
   }, [selectedMemberId]);
 
+  const groupTotalSpent = useMemo(
+    () => expenses.reduce((sum, expense) => sum + (expense.total ?? 0), 0),
+    [expenses]
+  );
+
+  const currentUserBalance = useMemo(() => {
+    if (!currentUserId) return null;
+    const row = balances.find((balance) => balance.memberId === currentUserId);
+    return row ? row.balance : null;
+  }, [balances, currentUserId]);
+
+  const currentUserUnsettledCount = useMemo(() => {
+    if (!currentUserId) return pendingSettlements.length;
+    return pendingSettlements.filter(
+      (s) => s.fromMemberId === currentUserId || s.toMemberId === currentUserId
+    ).length;
+  }, [pendingSettlements, currentUserId]);
+
+  const primarySuggestionForUser = useMemo(() => {
+    if (!currentUserId) return settlementSuggestions[0] ?? null;
+    const owes = settlementSuggestions.find((s) => s.from === currentUserId);
+    if (owes) return owes;
+    const owed = settlementSuggestions.find((s) => s.to === currentUserId);
+    if (owed) return owed;
+    return settlementSuggestions[0] ?? null;
+  }, [settlementSuggestions, currentUserId]);
+
+  const balanceColor =
+    currentUserBalance === null || Math.abs(currentUserBalance) < 0.01
+      ? "#cbd5f5"
+      : currentUserBalance > 0
+        ? "#4ade80"
+        : "#fb923c";
+  const balanceLabel =
+    currentUserBalance === null
+      ? "Not a member"
+      : Math.abs(currentUserBalance) < 0.01
+        ? "All settled"
+        : currentUserBalance > 0
+          ? "You're owed"
+          : "You owe";
+  const balanceDisplay =
+    currentUserBalance === null
+      ? "—"
+      : currencyFormatter.format(Math.abs(currentUserBalance));
+
+  const settleUpDisabled = !primarySuggestionForUser;
+  const handleSettleUpClick = () => {
+    if (primarySuggestionForUser) {
+      onUseSuggestion(primarySuggestionForUser);
+    } else {
+      onGoToSettlements();
+    }
+  };
+  const settleUpLabel = !primarySuggestionForUser
+    ? "All settled"
+    : primarySuggestionForUser.from === currentUserId
+      ? `Settle ${currencyFormatter.format(primarySuggestionForUser.amount)} →`
+      : primarySuggestionForUser.to === currentUserId
+        ? "View settlements →"
+        : "Settle group →";
+
   return (
     <div className="grid-two">
+      <section
+        className="card"
+        style={{
+          gridColumn: "1 / -1",
+          padding: "1.1rem 1.25rem",
+          background:
+            "linear-gradient(135deg, rgba(15,23,42,0.65) 0%, rgba(30,41,59,0.55) 100%)",
+          border: "1px solid rgba(148,163,184,0.18)"
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: "1.5rem",
+            justifyContent: "space-between"
+          }}
+        >
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "1.75rem", alignItems: "flex-end" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+              <span className="muted" style={{ fontSize: "0.78rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                {balanceLabel}
+              </span>
+              <strong style={{ fontSize: "1.85rem", lineHeight: 1, color: balanceColor }}>
+                {balanceDisplay}
+              </strong>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+              <span className="muted" style={{ fontSize: "0.78rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                Group spent
+              </span>
+              <strong style={{ fontSize: "1.2rem", lineHeight: 1 }}>
+                {currencyFormatter.format(groupTotalSpent)}
+              </strong>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+              <span className="muted" style={{ fontSize: "0.78rem", letterSpacing: "0.04em", textTransform: "uppercase" }}>
+                Unsettled
+              </span>
+              <strong style={{ fontSize: "1.2rem", lineHeight: 1 }}>
+                {currentUserUnsettledCount}
+              </strong>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="primary"
+            disabled={settleUpDisabled}
+            onClick={handleSettleUpClick}
+            style={{ minWidth: "180px" }}
+          >
+            {settleUpLabel}
+          </button>
+        </div>
+      </section>
+
       <section className="card">
         <div className="section-title">
           <h2>Balances</h2>
@@ -879,15 +1026,40 @@ const OverviewTab = ({
             <h2>Suggested Settlements</h2>
           </div>
           <div className="list">
-            {settlementSuggestions.map((suggestion, index) => (
-              <div key={`${suggestion.from}-${suggestion.to}-${index}`} className="card" style={{ padding: "0.75rem 1rem" }}>
-                <p style={{ margin: 0 }}>
-                  <strong>{membersById[suggestion.from] ?? suggestion.from}</strong> should pay{" "}
-                  <strong>{currencyFormatter.format(suggestion.amount)}</strong> to{" "}
-                  <strong>{membersById[suggestion.to] ?? suggestion.to}</strong>
-                </p>
-              </div>
-            ))}
+            {settlementSuggestions.map((suggestion, index) => {
+              const involvesUser =
+                currentUserId === suggestion.from || currentUserId === suggestion.to;
+              return (
+                <div
+                  key={`${suggestion.from}-${suggestion.to}-${index}`}
+                  className="card"
+                  style={{
+                    padding: "0.75rem 1rem",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "0.75rem",
+                    flexWrap: "wrap",
+                    border: involvesUser ? "1px solid rgba(56,189,248,0.45)" : undefined,
+                    background: involvesUser ? "rgba(56,189,248,0.07)" : undefined
+                  }}
+                >
+                  <p style={{ margin: 0 }}>
+                    <strong>{membersById[suggestion.from] ?? suggestion.from}</strong> should pay{" "}
+                    <strong>{currencyFormatter.format(suggestion.amount)}</strong> to{" "}
+                    <strong>{membersById[suggestion.to] ?? suggestion.to}</strong>
+                  </p>
+                  <button
+                    type="button"
+                    className={involvesUser ? "primary" : "secondary"}
+                    onClick={() => onUseSuggestion(suggestion)}
+                    style={{ padding: "0.4rem 0.85rem" }}
+                  >
+                    Record this →
+                  </button>
+                </div>
+              );
+            })}
           </div>
           <p className="muted">
             These suggestions settle the current balances assuming no additional expenses or settlements.
@@ -1819,6 +1991,8 @@ interface SettlementsTabProps {
   deletingSettlementId?: string;
   currentUserId?: string;
   paymentMethodsByMember: Record<string, PaymentMethods>;
+  prefill?: SettlementPrefill | null;
+  onPrefillConsumed?: () => void;
 }
 
 const SettlementsTab = ({
@@ -1837,7 +2011,9 @@ const SettlementsTab = ({
   deletePending,
   deletingSettlementId,
   currentUserId,
-  paymentMethodsByMember
+  paymentMethodsByMember,
+  prefill,
+  onPrefillConsumed
 }: SettlementsTabProps) => {
   const settlementAmountFormatter = useMemo(
     () =>
@@ -1865,6 +2041,8 @@ const SettlementsTab = ({
           paymentMethods={paymentMethodsByMember}
           memberBalances={Object.fromEntries(balances.map((balance) => [balance.memberId, balance.balance]))}
           settlementSuggestions={settlementSuggestions}
+          prefill={prefill}
+          onPrefillConsumed={onPrefillConsumed}
         />
       </section>
 
