@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { Link } from "react-router-dom";
-import { ApiError, getProfile, updateProfile } from "../lib/api";
+import { api, ApiError, getProfile, updateProfile } from "../lib/api";
 import type { PaymentMethods, UserProfile } from "../types";
 
 const emptyMethods: PaymentMethods = {
@@ -57,6 +57,14 @@ const ProfilePage = () => {
     };
     saveMutation.mutate(payload);
   };
+
+  const digestMutation = useMutation({
+    mutationFn: (optIn: boolean) =>
+      api.post<{ profile: UserProfile }>("/profile/digest", { optIn }),
+    onSuccess: (response) => {
+      queryClient.setQueryData(["profile"], response.profile);
+    }
+  });
 
   const userAttributes =
     user && "attributes" in user
@@ -183,6 +191,46 @@ const ProfilePage = () => {
             </span>
           </div>
         </form>
+      </section>
+
+      <section className="card" style={{ gridColumn: "1 / -1" }}>
+        <div className="section-title">
+          <div>
+            <h2>Weekly digest</h2>
+            <p className="muted">
+              A short email every Sunday with your balances across all trips.
+            </p>
+          </div>
+        </div>
+        <label className="digest-toggle">
+          <input
+            type="checkbox"
+            className="digest-toggle__input"
+            checked={Boolean(profile?.emailDigestOptIn)}
+            disabled={digestMutation.isPending || !profile?.email}
+            onChange={(event) => digestMutation.mutate(event.target.checked)}
+          />
+          <span className="digest-toggle__track" aria-hidden="true">
+            <span className="digest-toggle__thumb" />
+          </span>
+          <span className="digest-toggle__copy">
+            <strong className="digest-toggle__title">
+              {profile?.emailDigestOptIn ? "You're subscribed" : "Send me the weekly digest"}
+            </strong>
+            <span className="digest-toggle__sub">
+              {profile?.email
+                ? <>To <em>{profile.email}</em> · every Sunday morning</>
+                : "Add an email to your account to enable this"}
+            </span>
+          </span>
+        </label>
+        {digestMutation.isError && (
+          <p style={{ color: "#fda4af", margin: "0.6rem 0 0" }}>
+            {digestMutation.error instanceof ApiError
+              ? digestMutation.error.message
+              : "Couldn't update — try again."}
+          </p>
+        )}
       </section>
     </div>
   );

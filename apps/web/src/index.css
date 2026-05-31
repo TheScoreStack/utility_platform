@@ -4435,6 +4435,122 @@ button.ghost {
   text-underline-offset: 3px;
 }
 
+.qa-currency-picker {
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  color: #cbd5f5;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.qa-currency-picker:focus-visible {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.ov-stamp__fx {
+  color: var(--owe);
+  font-style: italic;
+  font-family: var(--serif);
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  font-size: 0.78rem;
+}
+
+/* ============================================================
+   Profile — digest opt-in toggle
+   ============================================================ */
+.digest-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  cursor: pointer;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(148, 163, 184, 0.15);
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.digest-toggle:hover {
+  background: rgba(15, 23, 42, 0.7);
+  border-color: rgba(148, 163, 184, 0.28);
+}
+
+.digest-toggle__input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.digest-toggle__track {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+  flex-shrink: 0;
+  transition: background 200ms ease;
+}
+
+.digest-toggle__thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f8fafc;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.5);
+  transition: left 200ms cubic-bezier(0.16, 1, 0.3, 1), background 200ms ease;
+}
+
+.digest-toggle__input:checked + .digest-toggle__track {
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+}
+
+.digest-toggle__input:checked + .digest-toggle__track .digest-toggle__thumb {
+  left: 23px;
+}
+
+.digest-toggle__input:disabled + .digest-toggle__track {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.digest-toggle__copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.digest-toggle__title {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #f8fafc;
+}
+
+.digest-toggle__sub {
+  font-family: var(--serif);
+  font-style: italic;
+  color: #94a3b8;
+  font-size: 0.88rem;
+}
+
+.digest-toggle__sub em {
+  font-style: normal;
+  color: #cbd5f5;
+}
+
 /* ============================================================
    Expense search field
    ============================================================ */
@@ -4743,4 +4859,377 @@ button.ghost {
 
 .join-card__decline:hover {
   color: #f8fafc;
+}
+
+/* ============================================================
+   Expense comments thread
+   ============================================================ */
+.cmt-thread {
+  margin-top: 0.65rem;
+  padding: 0.85rem 0.95rem;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px dashed rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  animation: ovRise 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.cmt-thread__empty {
+  margin: 0;
+  font-family: var(--serif);
+  font-style: italic;
+  color: #94a3b8;
+  font-size: 0.88rem;
+  text-align: center;
+  padding: 0.4rem 0;
+}
+
+.cmt-thread__error {
+  margin: 0;
+  color: #fda4af;
+  font-size: 0.82rem;
+}
+
+.cmt-thread__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.cmt-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  align-items: flex-start;
+}
+
+.cmt-item__avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 0.66rem;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.cmt-item__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.cmt-item__head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.cmt-item__name {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #f8fafc;
+}
+
+.cmt-item__time {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
+}
+
+.cmt-item__delete {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: #64748b;
+  font-family: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.3rem;
+  border-radius: 4px;
+  transition: color 140ms ease;
+}
+
+.cmt-item__delete:hover { color: #fda4af; }
+.cmt-item__delete:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.cmt-item__text {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.cmt-compose {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.2rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed rgba(148, 163, 184, 0.16);
+}
+
+.cmt-compose__input {
+  flex: 1;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 0.5rem 0.85rem;
+  background: rgba(15, 23, 42, 0.6);
+  color: #f8fafc;
+  font-family: inherit;
+  font-size: 0.88rem;
+  min-width: 0;
+}
+
+.cmt-compose__input:focus-visible {
+  outline: none;
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.18);
+}
+
+.cmt-compose__send {
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #38bdf8, #6366f1);
+  color: #fff;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.cmt-compose__send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ============================================================
+   Trip summary print view
+   ============================================================ */
+.print-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 880px;
+  margin: 0 auto;
+}
+
+.print-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+  backdrop-filter: blur(8px);
+}
+
+.print-toolbar__back {
+  color: #94a3b8;
+  text-decoration: none;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 0.95rem;
+}
+
+.print-toolbar__back:hover { color: #f8fafc; }
+
+.print-sheet {
+  background: #f8f5ee;
+  color: #1f2937;
+  padding: 3rem 3.5rem;
+  border-radius: 14px;
+  box-shadow: 0 28px 56px -20px rgba(15, 23, 42, 0.55);
+  font-family: 'Inter', sans-serif;
+  line-height: 1.5;
+}
+
+.print-loading {
+  padding: 3rem 0;
+  text-align: center;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.print-header {
+  border-bottom: 1px solid rgba(31, 41, 55, 0.18);
+  padding-bottom: 1.2rem;
+  margin-bottom: 1.6rem;
+}
+
+.print-eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.print-title {
+  font-family: var(--serif);
+  font-size: 3rem;
+  line-height: 1.05;
+  margin: 0.35rem 0 0.45rem;
+  color: #111827;
+  font-weight: 400;
+  letter-spacing: -0.02em;
+}
+
+.print-sub {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.1rem;
+  color: #4b5563;
+  margin: 0;
+}
+
+.print-printed {
+  font-size: 0.75rem;
+  color: #9ca3af;
+  margin: 0.45rem 0 0;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.print-section {
+  margin-bottom: 1.85rem;
+}
+
+.print-section:last-of-type {
+  margin-bottom: 0;
+}
+
+.print-h2 {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.45rem;
+  color: #111827;
+  margin: 0 0 0.7rem;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  border-bottom: 1px dashed rgba(31, 41, 55, 0.2);
+  padding-bottom: 0.35rem;
+}
+
+.print-members {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.25rem;
+}
+
+.print-members li {
+  font-size: 0.95rem;
+}
+
+.print-tag {
+  font-size: 0.62rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(251, 146, 60, 0.18);
+  color: #92400e;
+  margin-left: 0.45rem;
+  font-weight: 700;
+}
+
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.print-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6b7280;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.18);
+}
+
+.print-table td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid rgba(31, 41, 55, 0.08);
+  color: #1f2937;
+  vertical-align: top;
+}
+
+.print-table .print-right {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.print-table .print-total-row td {
+  border-top: 2px solid rgba(31, 41, 55, 0.25);
+  border-bottom: none;
+  padding-top: 0.7rem;
+  font-size: 0.95rem;
+}
+
+.print-empty {
+  font-family: var(--serif);
+  color: #6b7280;
+  margin: 0;
+}
+
+.print-footer {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px dashed rgba(31, 41, 55, 0.2);
+  text-align: center;
+  font-family: var(--serif);
+  font-style: italic;
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
+
+.print-footer p { margin: 0; }
+
+@media print {
+  body {
+    background: white !important;
+  }
+  .app-container, .app-container > * {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: none !important;
+  }
+  .shell-header,
+  .print-toolbar {
+    display: none !important;
+  }
+  .print-page {
+    max-width: none;
+    gap: 0;
+  }
+  .print-sheet {
+    background: white;
+    box-shadow: none;
+    border-radius: 0;
+    padding: 0;
+    color: #000;
+  }
+  .print-title { color: #000; }
+  .print-h2 { color: #000; }
+  .print-table td, .print-table th { color: #000; }
 }

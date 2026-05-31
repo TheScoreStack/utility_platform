@@ -34,6 +34,16 @@ export interface TripInvite {
   createdAt: string;
 }
 
+export interface ExpenseComment {
+  tripId: string;
+  expenseId: string;
+  commentId: string;
+  authorId: string;
+  authorName?: string;
+  body: string;
+  createdAt: string;
+}
+
 export interface ExpenseAllocation {
   memberId: string;
   amount: number;
@@ -110,6 +120,7 @@ export interface UserProfile {
   paymentMethods?: PaymentMethods;
   createdAt: string;
   updatedAt: string;
+  emailDigestOptIn?: boolean;
 }
 
 export type HarmonyLedgerEntryType =

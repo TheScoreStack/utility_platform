@@ -55,6 +55,8 @@ import { NodejsFunction, OutputFormat } from "aws-cdk-lib/aws-lambda-nodejs";
 import { Runtime } from "aws-cdk-lib/aws-lambda";
 import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import { PolicyStatement } from "aws-cdk-lib/aws-iam";
+import { Rule, Schedule } from "aws-cdk-lib/aws-events";
+import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
 
 export class GroupExpensesStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -234,6 +236,41 @@ export class GroupExpensesStack extends Stack {
     receiptBucket.grantPut(httpLambda);
     receiptBucket.grantRead(httpLambda);
     receiptBucket.grantRead(textractLambda);
+
+    const weeklyDigestLambda = new NodejsFunction(this, "WeeklyDigestHandler", {
+      ...sharedFunctionProps,
+      timeout: Duration.minutes(2),
+      memorySize: 512,
+      entry: path.join(
+        stackDir,
+        "../../../services/api/src/handlers/weeklyDigest.ts"
+      ),
+      logRetention: RetentionDays.ONE_WEEK,
+      environment: {
+        TABLE_NAME: table.tableName,
+        DIGEST_FROM_EMAIL: process.env.DIGEST_FROM_EMAIL ?? "",
+        APP_URL: process.env.APP_URL ?? "https://thestackcore.com",
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+      }
+    });
+
+    table.grantReadData(weeklyDigestLambda);
+    weeklyDigestLambda.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["ses:SendEmail", "ses:SendRawEmail"],
+        resources: ["*"]
+      })
+    );
+
+    new Rule(this, "WeeklyDigestSchedule", {
+      schedule: Schedule.cron({
+        minute: "0",
+        hour: "14",
+        weekDay: "SUN"
+      }),
+      targets: [new LambdaFunction(weeklyDigestLambda)],
+      description: "Fires the weekly group-expenses digest every Sunday 14:00 UTC"
+    });
 
     textractLambda.addToRolePolicy(
       new PolicyStatement({

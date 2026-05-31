@@ -78,4 +78,21 @@ export class UserService {
     }
     return updated;
   }
+
+  async setEmailDigestPreference(
+    body: unknown,
+    auth: AuthContext
+  ): Promise<UserProfile> {
+    const parsed = z.object({ optIn: z.boolean() }).safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+    await userStore.ensureUserProfile(auth);
+    await userStore.setEmailDigestPreference(auth.userId, parsed.data.optIn);
+    const updated = await userStore.getUser(auth.userId);
+    if (!updated) {
+      throw new ValidationError("Profile not found");
+    }
+    return updated;
+  }
 }

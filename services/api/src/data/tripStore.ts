@@ -9,7 +9,7 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { getDocumentClient } from "./dynamo.js";
 import { loadConfig } from "../config.js";
-import { Trip, TripMember, Expense, Receipt, Settlement, PaymentMethods, TripInvite } from "../types.js";
+import { Trip, TripMember, Expense, Receipt, Settlement, PaymentMethods, TripInvite, ExpenseComment } from "../types.js";
 import { NotFoundError } from "../lib/errors.js";
 
 const keys = {
@@ -21,7 +21,10 @@ const keys = {
   receiptSk: (receiptId: string) => `RECEIPT#${receiptId}`,
   settlementSk: (settlementId: string) => `SETTLEMENT#${settlementId}`,
   invitePk: (inviteId: string) => `INVITE#${inviteId}`,
-  inviteSk: "METADATA"
+  inviteSk: "METADATA",
+  commentSk: (expenseId: string, commentId: string) =>
+    `COMMENT#${expenseId}#${commentId}`,
+  commentSkPrefix: (expenseId: string) => `COMMENT#${expenseId}#`
 };
 
 type TripEntity = Trip & {
@@ -939,6 +942,92 @@ export class TripStore {
             }
           }
         ]
+      })
+    );
+  }
+
+  // ---------- Expense comments ----------
+
+  async listExpenseComments(
+    tripId: string,
+    expenseId: string
+  ): Promise<ExpenseComment[]> {
+    const { Items } = await this.docClient.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+        ExpressionAttributeValues: {
+          ":pk": keys.tripPk(tripId),
+          ":sk": keys.commentSkPrefix(expenseId)
+        }
+      })
+    );
+    if (!Items?.length) return [];
+    return Items
+      .map((item) => ({
+        tripId,
+        expenseId: item.expenseId as string,
+        commentId: item.commentId as string,
+        authorId: item.authorId as string,
+        authorName: (item.authorName as string) || undefined,
+        body: item.body as string,
+        createdAt: item.createdAt as string
+      }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async createComment(comment: ExpenseComment): Promise<void> {
+    await this.docClient.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          entityType: "ExpenseComment",
+          PK: keys.tripPk(comment.tripId),
+          SK: keys.commentSk(comment.expenseId, comment.commentId),
+          ...comment
+        }
+      })
+    );
+  }
+
+  async getComment(
+    tripId: string,
+    expenseId: string,
+    commentId: string
+  ): Promise<ExpenseComment | null> {
+    const { Item } = await this.docClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.commentSk(expenseId, commentId)
+        }
+      })
+    );
+    if (!Item) return null;
+    return {
+      tripId,
+      expenseId: Item.expenseId as string,
+      commentId: Item.commentId as string,
+      authorId: Item.authorId as string,
+      authorName: (Item.authorName as string) || undefined,
+      body: Item.body as string,
+      createdAt: Item.createdAt as string
+    };
+  }
+
+  async deleteComment(
+    tripId: string,
+    expenseId: string,
+    commentId: string
+  ): Promise<void> {
+    await this.docClient.send(
+      new DeleteCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.commentSk(expenseId, commentId)
+        }
       })
     );
   }

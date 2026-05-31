@@ -2,6 +2,7 @@ import { CSSProperties, ChangeEvent, FormEvent, WheelEvent, useCallback, useEffe
 import { api } from "../lib/api";
 import { EXPENSE_CATEGORIES, resolveExpenseCategory } from "../lib/expenseCategories";
 import { getInitials, seedAvatar } from "../lib/avatarPalette";
+import { CURRENCY_OPTIONS } from "../lib/fx";
 import type { TripMember, Receipt, TextractExtraction } from "../types";
 
 const roundToCents = (value: number): number =>
@@ -350,15 +351,22 @@ const AddExpenseForm = ({
     });
   }, [sharedWith, paidBy]);
 
+  const [expenseCurrency, setExpenseCurrency] = useState(currency);
+
+  // If the trip's display currency changes, follow it (until user picks a different one)
+  useEffect(() => {
+    setExpenseCurrency(currency);
+  }, [currency]);
+
   const currencyFormatter = useMemo(
     () =>
       new Intl.NumberFormat(undefined, {
         style: "currency",
-        currency,
+        currency: expenseCurrency,
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
       }),
-    [currency]
+    [expenseCurrency]
   );
 
   const formatAmount = useCallback(
@@ -794,7 +802,7 @@ const AddExpenseForm = ({
       await onSubmit({
         description: trimmedDescription,
         total,
-        currency,
+        currency: expenseCurrency,
         paidByMemberId: paidBy,
         sharedWithMemberIds: sharedWith,
         splitEvenly: true,
@@ -880,7 +888,7 @@ const AddExpenseForm = ({
       vendor: vendor.trim() || undefined,
       category: category.trim() || undefined,
       total: grossTotal,
-      currency,
+      currency: expenseCurrency,
       tax: taxValue > 0 ? taxValue : undefined,
       tip: tipValue > 0 ? tipValue : undefined,
       paidByMemberId: paidBy,
@@ -1004,7 +1012,7 @@ const AddExpenseForm = ({
         >
           <div className="qa-amount-row">
             <span className="qa-amount-currency" aria-hidden="true">
-              $
+              {CURRENCY_OPTIONS.find((c) => c.code === expenseCurrency)?.symbol ?? "$"}
             </span>
             <input
               className="qa-amount-input"
@@ -1018,6 +1026,19 @@ const AddExpenseForm = ({
               aria-label="Amount"
               autoFocus
             />
+            <select
+              className="qa-currency-picker"
+              value={expenseCurrency}
+              onChange={(event) => setExpenseCurrency(event.target.value)}
+              aria-label="Currency"
+              title="Change currency"
+            >
+              {CURRENCY_OPTIONS.map((opt) => (
+                <option key={opt.code} value={opt.code}>
+                  {opt.code}
+                </option>
+              ))}
+            </select>
           </div>
 
           <div className="input-group">
@@ -1194,6 +1215,28 @@ const AddExpenseForm = ({
             <p className="cat-custom__hint">A short label — “souvenirs”, “gas station snacks”…</p>
           </div>
         )}
+      </div>
+
+      <div className="input-group">
+        <label htmlFor="expense-currency">
+          Currency{" "}
+          {expenseCurrency !== currency && (
+            <span className="muted" style={{ fontSize: "0.78rem", fontWeight: 400 }}>
+              · differs from trip default ({currency})
+            </span>
+          )}
+        </label>
+        <select
+          id="expense-currency"
+          value={expenseCurrency}
+          onChange={(event) => setExpenseCurrency(event.target.value)}
+        >
+          {CURRENCY_OPTIONS.map((opt) => (
+            <option key={opt.code} value={opt.code}>
+              {opt.symbol} · {opt.code} — {opt.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       <div className="input-group">

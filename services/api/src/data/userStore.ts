@@ -3,6 +3,7 @@ import {
   GetCommand,
   PutCommand,
   QueryCommand,
+  ScanCommand,
   UpdateCommand
 } from "@aws-sdk/lib-dynamodb";
 import type { UpdateCommandInput } from "@aws-sdk/lib-dynamodb";
@@ -26,7 +27,11 @@ const mapToProfile = (item: Record<string, unknown>): UserProfile => ({
   displayNameLower: (item.displayNameLower as string) || undefined,
   paymentMethods: item.paymentMethods as UserProfile["paymentMethods"],
   createdAt: item.createdAt as string,
-  updatedAt: item.updatedAt as string
+  updatedAt: item.updatedAt as string,
+  emailDigestOptIn:
+    typeof item.emailDigestOptIn === "boolean"
+      ? (item.emailDigestOptIn as boolean)
+      : undefined
 });
 
 export class UserStore {
@@ -344,5 +349,52 @@ export class UserStore {
     }
 
     await this.docClient.send(new UpdateCommand(params));
+  }
+
+  async setEmailDigestPreference(
+    userId: string,
+    optIn: boolean
+  ): Promise<void> {
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: { PK: userPk(userId), SK: userSk },
+        ConditionExpression: "attribute_exists(PK)",
+        UpdateExpression: "SET emailDigestOptIn = :v, updatedAt = :u",
+        ExpressionAttributeValues: {
+          ":v": optIn,
+          ":u": new Date().toISOString()
+        }
+      })
+    );
+  }
+
+  /** Used by the weekly-digest Lambda. Scans for opted-in users with an email. */
+  async listEmailDigestSubscribers(): Promise<UserProfile[]> {
+    const results: UserProfile[] = [];
+    let exclusiveStartKey: Record<string, unknown> | undefined = undefined;
+    do {
+      const { Items, LastEvaluatedKey } = await this.docClient.send(
+        new ScanCommand({
+          TableName: this.tableName,
+          FilterExpression:
+            "entityType = :t AND emailDigestOptIn = :y AND attribute_exists(email)",
+          ExpressionAttributeValues: {
+            ":t": "UserProfile",
+            ":y": true
+          },
+          ExclusiveStartKey: exclusiveStartKey
+        })
+      );
+      if (Items?.length) {
+        for (const item of Items) {
+          results.push(mapToProfile(item as Record<string, unknown>));
+        }
+      }
+      exclusiveStartKey = LastEvaluatedKey as
+        | Record<string, unknown>
+        | undefined;
+    } while (exclusiveStartKey);
+    return results;
   }
 }

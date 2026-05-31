@@ -83,6 +83,12 @@ export const handler = async (
       return ok({ profile }, origin);
     }
 
+    if (path === "/profile/digest" && method === "POST") {
+      const body = parseBody(event);
+      const profile = await userService.setEmailDigestPreference(body, auth);
+      return ok({ profile }, origin);
+    }
+
     if (path === "/harmony-ledger/access" && method === "GET") {
       const response = await harmonyLedgerService.getAccessOverview(auth);
       return ok(response, origin);
@@ -354,6 +360,34 @@ export const handler = async (
       if (expensePurgeMatch && method === "DELETE") {
         const expenseId = decodeURIComponent(expensePurgeMatch[1]);
         await tripService.purgeExpense(tripId, expenseId, auth);
+        return noContent(origin);
+      }
+
+      const commentsListMatch = remainder.match(/^\/expenses\/([^/]+)\/comments$/);
+      if (commentsListMatch && method === "GET") {
+        const expenseId = decodeURIComponent(commentsListMatch[1]);
+        const comments = await tripService.listExpenseComments(tripId, expenseId, auth);
+        return ok({ comments }, origin);
+      }
+      if (commentsListMatch && method === "POST") {
+        const expenseId = decodeURIComponent(commentsListMatch[1]);
+        const body = parseBody(event);
+        const comment = await tripService.createExpenseComment(
+          tripId,
+          expenseId,
+          body,
+          auth
+        );
+        return created(comment, origin);
+      }
+
+      const commentItemMatch = remainder.match(
+        /^\/expenses\/([^/]+)\/comments\/([^/]+)$/
+      );
+      if (commentItemMatch && method === "DELETE") {
+        const expenseId = decodeURIComponent(commentItemMatch[1]);
+        const commentId = decodeURIComponent(commentItemMatch[2]);
+        await tripService.deleteExpenseComment(tripId, expenseId, commentId, auth);
         return noContent(origin);
       }
 

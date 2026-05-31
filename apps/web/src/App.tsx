@@ -20,6 +20,7 @@ import HarmonyOverviewPage from "./pages/HarmonyOverviewPage";
 import StackTimePage from "./pages/StackTimePage";
 import ProfilePage from "./pages/ProfilePage";
 import JoinTripPage from "./pages/JoinTripPage";
+import TripSummaryPrintPage from "./pages/TripSummaryPrintPage";
 import { useHarmonyLedgerAccess } from "./modules/useHarmonyLedgerAccess";
 import { useStackTimeAccess } from "./modules/useStackTimeAccess";
 import { getInitials, seedAvatar } from "./lib/avatarPalette";
@@ -170,6 +171,7 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
             <Route index element={<Navigate to="trips" replace />} />
             <Route path="trips" element={<TripListPage />} />
             <Route path="trips/:tripId" element={<TripDetailPage />} />
+            <Route path="trips/:tripId/summary" element={<TripSummaryPrintPage />} />
             <Route path="join/:inviteId" element={<JoinTripPage />} />
           </Route>
           <Route path="/harmony-ledger" element={<HarmonyModule />}>

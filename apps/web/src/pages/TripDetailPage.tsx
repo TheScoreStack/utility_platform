@@ -5,7 +5,9 @@ import { useAuthenticator } from "@aws-amplify/ui-react";
 import AddExpenseForm, { type CreateExpenseInput, type ExpensePrefill } from "../components/AddExpenseForm";
 import SettlementForm, { type SettlementPrefill } from "../components/SettlementForm";
 import { CategoryBadge } from "../components/CategoryBadge";
+import ExpenseCommentsThread from "../components/ExpenseCommentsThread";
 import { normalizeCategoryKey, resolveExpenseCategory } from "../lib/expenseCategories";
+import { convertCurrency } from "../lib/fx";
 import { api, ApiError, searchUsers as searchUsersRequest } from "../lib/api";
 import type {
   TripSummary,
@@ -821,6 +823,16 @@ const TripDetailPage = () => {
                 Edit details
               </button>
             )}
+            {!isEditingDetails && (
+              <button
+                type="button"
+                className="secondary"
+                title="Open a printable one-page summary"
+                onClick={() => navigate(`/group-expenses/trips/${trip.tripId}/summary`)}
+              >
+                Summary
+              </button>
+            )}
             {canManageMembers && !isEditingDetails && !trip.archivedAt && (
               <button
                 type="button"
@@ -976,6 +988,7 @@ const TripDetailPage = () => {
           onPurgeExpense={(expenseId) => purgeExpenseMutation.mutateAsync(expenseId)}
           restoringExpenseId={restoreExpenseMutation.variables}
           purgingExpenseId={purgeExpenseMutation.variables}
+          isTripOwner={canManageMembers}
         />
       )}
 
@@ -1363,8 +1376,27 @@ const OverviewTab = ({
   }, [selectedMemberId]);
 
   const groupTotalSpent = useMemo(
-    () => expenses.reduce((sum, expense) => sum + (expense.total ?? 0), 0),
-    [expenses]
+    () =>
+      expenses.reduce(
+        (sum, expense) =>
+          sum +
+          convertCurrency(
+            expense.total ?? 0,
+            expense.currency || currency,
+            currency
+          ),
+        0
+      ),
+    [expenses, currency]
+  );
+
+  const hasMixedCurrencies = useMemo(
+    () =>
+      expenses.some(
+        (expense) =>
+          expense.currency && expense.currency !== currency
+      ),
+    [expenses, currency]
   );
 
   const currentUserBalance = useMemo(() => {
@@ -1384,14 +1416,15 @@ const OverviewTab = ({
     if (!currentUserId) return 0;
     let total = 0;
     expenses.forEach((expense) => {
+      const expCurrency = expense.currency || currency;
       expense.allocations.forEach((allocation) => {
         if (allocation.memberId === currentUserId) {
-          total += allocation.amount;
+          total += convertCurrency(allocation.amount, expCurrency, currency);
         }
       });
     });
     return total;
-  }, [expenses, currentUserId]);
+  }, [expenses, currentUserId, currency]);
 
   const maxAbsBalance = useMemo(
     () =>
@@ -1473,7 +1506,17 @@ const OverviewTab = ({
 
         <div className="ov-stamps">
           <div className="ov-stamp">
-            <span className="ov-stamp__label">Group spent</span>
+            <span className="ov-stamp__label">
+              Group spent
+              {hasMixedCurrencies && (
+                <span
+                  className="ov-stamp__fx"
+                  title="Some expenses use other currencies — converted using approximate FX rates"
+                >
+                  {" "}· approx FX
+                </span>
+              )}
+            </span>
             <span className="ov-stamp__value">
               {currencyFormatter.format(groupTotalSpent)}
             </span>
@@ -1881,6 +1924,7 @@ interface ExpensesTabProps {
   onPurgeExpense: (expenseId: string) => Promise<void>;
   restoringExpenseId?: string;
   purgingExpenseId?: string;
+  isTripOwner: boolean;
 }
 
 const ExpensesTab = ({
@@ -1903,8 +1947,12 @@ const ExpensesTab = ({
   onRestoreExpense,
   onPurgeExpense,
   restoringExpenseId,
-  purgingExpenseId
+  purgingExpenseId,
+  isTripOwner
 }: ExpensesTabProps) => {
+  const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
+  const toggleComments = (expenseId: string) =>
+    setOpenComments((prev) => ({ ...prev, [expenseId]: !prev[expenseId] }));
   const [memberFilter, setMemberFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
@@ -2585,6 +2633,22 @@ const ExpensesTab = ({
                                 alignItems: "center",
                                 gap: "0.3rem"
                               }}
+                              title="Discuss this expense"
+                              onClick={() => toggleComments(expense.expenseId)}
+                              aria-expanded={Boolean(openComments[expense.expenseId])}
+                            >
+                              <span aria-hidden="true">💬</span> Comments
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{
+                                paddingInline: "0.7rem",
+                                fontSize: "0.85rem",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.3rem"
+                              }}
                               title="Clone this expense into the form"
                               onClick={() => onRepeatExpense(expense)}
                             >
@@ -2610,6 +2674,13 @@ const ExpensesTab = ({
                             </button>
                           </div>
                         </div>
+                        <ExpenseCommentsThread
+                          tripId={tripId}
+                          expenseId={expense.expenseId}
+                          currentUserId={currentUserId}
+                          canDeleteAny={isTripOwner}
+                          open={Boolean(openComments[expense.expenseId])}
+                        />
                         {(expense.receiptId && (previewData || isLoadingPreview)) && (
                           <div
                             style={{

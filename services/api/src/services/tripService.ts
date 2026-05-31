@@ -7,6 +7,7 @@ import {
   Trip,
   TripMember,
   TripInvite,
+  ExpenseComment,
   Expense,
   Receipt,
   Settlement,
@@ -15,6 +16,7 @@ import {
   PaymentMethods
 } from "../types.js";
 import { ValidationError, ForbiddenError, NotFoundError } from "../lib/errors.js";
+import { convertCurrency } from "../lib/fx.js";
 import type { AuthContext } from "../auth.js";
 import { generateReceiptUpload, generateReceiptDownloadUrl } from "./uploadService.js";
 import { analyzeReceiptBytes } from "./textractService.js";
@@ -203,7 +205,8 @@ const getDisplayName = (profile: UserProfile): string =>
 const computeBalances = (
   members: TripMember[],
   expenses: Expense[],
-  settlements: Settlement[]
+  settlements: Settlement[],
+  tripCurrency: string
 ): BalanceRow[] => {
   const balances = new Map<string, number>();
   for (const member of members) {
@@ -211,15 +214,18 @@ const computeBalances = (
   }
 
   for (const expense of expenses) {
+    const expCurrency = expense.currency || tripCurrency;
+    const paid = convertCurrency(expense.total, expCurrency, tripCurrency);
     balances.set(
       expense.paidByMemberId,
-      roundCents((balances.get(expense.paidByMemberId) || 0) + expense.total)
+      roundCents((balances.get(expense.paidByMemberId) || 0) + paid)
     );
 
     for (const allocation of expense.allocations) {
+      const owed = convertCurrency(allocation.amount, expCurrency, tripCurrency);
       balances.set(
         allocation.memberId,
-        roundCents((balances.get(allocation.memberId) || 0) - allocation.amount)
+        roundCents((balances.get(allocation.memberId) || 0) - owed)
       );
     }
   }
@@ -228,17 +234,15 @@ const computeBalances = (
     if (!settlement.confirmedAt) {
       continue;
     }
+    const stlCurrency = settlement.currency || tripCurrency;
+    const amount = convertCurrency(settlement.amount, stlCurrency, tripCurrency);
     balances.set(
       settlement.fromMemberId,
-      roundCents(
-        (balances.get(settlement.fromMemberId) || 0) + settlement.amount
-      )
+      roundCents((balances.get(settlement.fromMemberId) || 0) + amount)
     );
     balances.set(
       settlement.toMemberId,
-      roundCents(
-        (balances.get(settlement.toMemberId) || 0) - settlement.amount
-      )
+      roundCents((balances.get(settlement.toMemberId) || 0) - amount)
     );
   }
 
@@ -304,7 +308,8 @@ export class TripService {
         const balances = computeBalances(
           details.members,
           details.expenses,
-          details.settlements
+          details.settlements,
+          details.trip.currency
         );
         const userBalance =
           balances.find((row) => row.memberId === auth.userId)?.balance ?? 0;
@@ -578,7 +583,8 @@ export class TripService {
     const balances = computeBalances(
       details.members,
       details.expenses,
-      details.settlements
+      details.settlements,
+      details.trip.currency
     );
     const pendingSettlements = details.settlements.filter(
       (settlement) => !settlement.confirmedAt
@@ -1295,5 +1301,75 @@ export class TripService {
 
     const url = await generateReceiptDownloadUrl(receipt.storageKey);
     return { url };
+  }
+
+  async listExpenseComments(
+    tripId: string,
+    expenseId: string,
+    auth: AuthContext
+  ): Promise<ExpenseComment[]> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    if (!details.members.some((m) => m.memberId === auth.userId)) {
+      throw new ForbiddenError("You do not have access to this trip");
+    }
+    return getTripStore().listExpenseComments(tripId, expenseId);
+  }
+
+  async createExpenseComment(
+    tripId: string,
+    expenseId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<ExpenseComment> {
+    const profile = await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    if (!details.members.some((m) => m.memberId === auth.userId)) {
+      throw new ForbiddenError("You do not have access to this trip");
+    }
+    if (!details.expenses.some((e) => e.expenseId === expenseId)) {
+      throw new ValidationError("Expense not found");
+    }
+    const parsed = z
+      .object({ body: z.string().min(1).max(2000) })
+      .safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+    const comment: ExpenseComment = {
+      tripId,
+      expenseId,
+      commentId: `cmt_${nanoid(12)}`,
+      authorId: auth.userId,
+      authorName: getDisplayName(profile),
+      body: parsed.data.body.trim(),
+      createdAt: isoNow()
+    };
+    await getTripStore().createComment(comment);
+    return comment;
+  }
+
+  async deleteExpenseComment(
+    tripId: string,
+    expenseId: string,
+    commentId: string,
+    auth: AuthContext
+  ): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    if (!details.members.some((m) => m.memberId === auth.userId)) {
+      throw new ForbiddenError("You do not have access to this trip");
+    }
+    const comment = await getTripStore().getComment(tripId, expenseId, commentId);
+    if (!comment) {
+      throw new NotFoundError("Comment not found");
+    }
+    const canDelete =
+      comment.authorId === auth.userId ||
+      details.trip.ownerId === auth.userId;
+    if (!canDelete) {
+      throw new ForbiddenError("Not authorized to delete this comment");
+    }
+    await getTripStore().deleteComment(tripId, expenseId, commentId);
   }
 }

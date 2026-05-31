@@ -131,6 +131,7 @@ export interface UserProfile {
   paymentMethods?: PaymentMethods;
   createdAt?: string;
   updatedAt?: string;
+  emailDigestOptIn?: boolean;
 }
 
 export interface PaymentMethods {
@@ -151,6 +152,16 @@ export interface InvitePreview {
   tripName: string;
   memberCount: number;
   alreadyMember: boolean;
+}
+
+export interface ExpenseComment {
+  tripId: string;
+  expenseId: string;
+  commentId: string;
+  authorId: string;
+  authorName?: string;
+  body: string;
+  createdAt: string;
 }
 
 export type HarmonyLedgerEntryType =
