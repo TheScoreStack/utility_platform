@@ -1,6 +1,7 @@
 import { CSSProperties, ChangeEvent, FormEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api";
 import { EXPENSE_CATEGORIES, resolveExpenseCategory } from "../lib/expenseCategories";
+import { getInitials, seedAvatar } from "../lib/avatarPalette";
 import type { TripMember, Receipt, TextractExtraction } from "../types";
 
 const roundToCents = (value: number): number =>
@@ -203,6 +204,25 @@ const AddExpenseForm = ({
 }: AddExpenseFormProps) => {
   const formRef = useRef<HTMLFormElement | null>(null);
   const [prefillFlash, setPrefillFlash] = useState(false);
+  const [mode, setMode] = useState<"quick" | "detailed">(() => {
+    if (typeof window === "undefined") return "quick";
+    return (
+      (localStorage.getItem("addExpenseMode") as "quick" | "detailed") ||
+      "quick"
+    );
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("addExpenseMode", mode);
+    }
+  }, [mode]);
+
+  // Prefill always includes detailed fields (custom splits, tax/tip),
+  // so when one arrives switch to detailed mode so the user can see them.
+  useEffect(() => {
+    if (prefill) setMode("detailed");
+  }, [prefill]);
   const [description, setDescription] = useState("");
   const [vendor, setVendor] = useState("");
   const [category, setCategory] = useState("");
@@ -741,6 +761,60 @@ const AddExpenseForm = ({
     resetReceiptPreview();
   };
 
+  const handleQuickSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+
+    const trimmedDescription = description.trim();
+    if (!trimmedDescription) {
+      setError("Add a short description.");
+      return;
+    }
+    if (!paidBy) {
+      setError("Pick who paid.");
+      return;
+    }
+    if (sharedWith.length === 0) {
+      setError("Pick at least one person to share with.");
+      return;
+    }
+    const total = parseCurrencyInput(subtotalInput);
+    if (total <= 0) {
+      setError("Enter a positive amount.");
+      return;
+    }
+
+    const distribution = distributeEvenly(total, sharedWith);
+    const allocations = sharedWith.map((memberId) => ({
+      memberId,
+      amount: Math.abs(roundToCents(distribution[memberId] ?? 0))
+    }));
+
+    try {
+      await onSubmit({
+        description: trimmedDescription,
+        total,
+        currency,
+        paidByMemberId: paidBy,
+        sharedWithMemberIds: sharedWith,
+        splitEvenly: true,
+        allocations
+      });
+      // Reset just the per-expense fields, keep payer + people for the next one
+      setDescription("");
+      setSubtotalInput("");
+      setTaxInput("");
+      setTipInput("");
+      setCategory("");
+      setOtherSelected(false);
+      setVendor("");
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save expense";
+      setError(message);
+    }
+  };
+
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
     setError(null);
@@ -884,19 +958,188 @@ const AddExpenseForm = ({
     return "Receipt preview";
   }, [receiptPreviewUrl, activeReceiptId, activeReceipt]);
 
+  const modeToggle = (
+    <div className="qa-mode-toggle" role="tablist" aria-label="Expense entry mode">
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === "quick"}
+        className={`qa-mode-toggle__btn ${
+          mode === "quick" ? "qa-mode-toggle__btn--active" : ""
+        }`}
+        onClick={() => setMode("quick")}
+      >
+        Quick
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={mode === "detailed"}
+        className={`qa-mode-toggle__btn ${
+          mode === "detailed" ? "qa-mode-toggle__btn--active" : ""
+        }`}
+        onClick={() => setMode("detailed")}
+      >
+        Detailed
+      </button>
+    </div>
+  );
+
+  if (mode === "quick") {
+    return (
+      <div className="qa-wrap">
+        {modeToggle}
+        <form
+          className="qa-form"
+          onSubmit={handleQuickSubmit}
+          ref={formRef}
+          style={{
+            transition: "box-shadow 0.4s ease, background 0.4s ease",
+            boxShadow: prefillFlash
+              ? "0 0 0 2px rgba(56,189,248,0.55)"
+              : undefined,
+            background: prefillFlash ? "rgba(56,189,248,0.06)" : undefined,
+            borderRadius: "0.85rem"
+          }}
+        >
+          <div className="qa-amount-row">
+            <span className="qa-amount-currency" aria-hidden="true">
+              $
+            </span>
+            <input
+              className="qa-amount-input"
+              inputMode="decimal"
+              type="number"
+              min="0"
+              step="0.01"
+              value={subtotalInput}
+              onChange={(event) => setSubtotalInput(event.target.value)}
+              placeholder="0.00"
+              aria-label="Amount"
+              autoFocus
+            />
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="qa-desc">For</label>
+            <input
+              id="qa-desc"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Dinner at Bluebird"
+            />
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="qa-payer">Paid by</label>
+            <select
+              id="qa-payer"
+              value={paidBy}
+              onChange={(event) => handlePaidByChange(event.target.value)}
+            >
+              {members.map((member) => (
+                <option key={member.memberId} value={member.memberId}>
+                  {member.displayName ?? member.email ?? member.memberId}
+                  {currentUserId === member.memberId ? " (you)" : ""}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="input-group">
+            <label>
+              Split with{" "}
+              <span
+                className="muted"
+                style={{ fontSize: "0.78rem", fontWeight: 400 }}
+              >
+                · everyone selected by default
+              </span>
+            </label>
+            <div className="qa-people-grid">
+              {members.map((member) => {
+                const palette = seedAvatar(member.memberId);
+                const name =
+                  member.displayName ?? member.email ?? member.memberId;
+                const isActive = sharedWith.includes(member.memberId);
+                const isSelf = member.memberId === currentUserId;
+                return (
+                  <button
+                    key={member.memberId}
+                    type="button"
+                    className={`qa-person-chip ${
+                      isActive ? "qa-person-chip--active" : ""
+                    }`}
+                    onClick={() => toggleSharedMember(member.memberId)}
+                    aria-pressed={isActive}
+                  >
+                    <span
+                      className="qa-person-chip__avatar"
+                      style={{ background: palette.bg, color: palette.fg }}
+                      aria-hidden="true"
+                    >
+                      {getInitials(name)}
+                    </span>
+                    <span className="qa-person-chip__name">
+                      {isSelf ? "You" : name.split(/\s+/)[0]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {error && (
+            <p className="qa-error" style={{ color: "#fda4af", margin: 0 }}>
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            className="primary qa-submit"
+            disabled={isSubmitting}
+          >
+            {isSubmitting
+              ? "Saving…"
+              : sharedWith.length > 0 &&
+                  parseCurrencyInput(subtotalInput) > 0
+                ? `Add — ${(
+                    parseCurrencyInput(subtotalInput) / sharedWith.length
+                  ).toFixed(2)} each`
+                : "Add expense"}
+          </button>
+
+          <p className="qa-hint">
+            Even split, no tax/tip, no receipt. Need more?{" "}
+            <button
+              type="button"
+              className="qa-hint__link"
+              onClick={() => setMode("detailed")}
+            >
+              Switch to detailed →
+            </button>
+          </p>
+        </form>
+      </div>
+    );
+  }
+
   return (
-    <form
-      className="list"
-      onSubmit={handleSubmit}
-      ref={formRef}
-      style={{
-        transition: "box-shadow 0.4s ease, background 0.4s ease, padding 0.4s ease",
-        boxShadow: prefillFlash ? "0 0 0 2px rgba(56,189,248,0.55)" : undefined,
-        background: prefillFlash ? "rgba(56,189,248,0.06)" : undefined,
-        borderRadius: "0.85rem",
-        padding: prefillFlash ? "0.85rem" : undefined
-      }}
-    >
+    <div className="qa-wrap">
+      {modeToggle}
+      <form
+        className="list"
+        onSubmit={handleSubmit}
+        ref={formRef}
+        style={{
+          transition: "box-shadow 0.4s ease, background 0.4s ease, padding 0.4s ease",
+          boxShadow: prefillFlash ? "0 0 0 2px rgba(56,189,248,0.55)" : undefined,
+          background: prefillFlash ? "rgba(56,189,248,0.06)" : undefined,
+          borderRadius: "0.85rem",
+          padding: prefillFlash ? "0.85rem" : undefined
+        }}
+      >
       <div className="input-group">
         <label htmlFor="expense-description">Description</label>
         <input
@@ -1453,7 +1696,8 @@ const AddExpenseForm = ({
           </div>
         </div>
       )}
-    </form>
+      </form>
+    </div>
   );
 };
 
