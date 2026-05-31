@@ -294,17 +294,33 @@ const StackTimePage = () => {
   };
 
   if (accessLoading) {
-    return <p className="muted">Checking access...</p>;
+    return (
+      <div className="st-page">
+        <section className="st-hero">
+          <span className="st-hero__eyebrow">Stack Time</span>
+          <h1 className="st-hero__title">
+            Checking <em>your access…</em>
+          </h1>
+        </section>
+      </div>
+    );
   }
 
   if (!accessData?.allowed) {
     return (
-      <section className="card">
-        <h2>Stack Time</h2>
-        <p className="muted">
-          This module is for Stack Technologies team members only. Contact Hunter to get access.
-        </p>
-      </section>
+      <div className="st-page">
+        <section className="st-hero">
+          <span className="st-hero__eyebrow">Stack Time · private</span>
+          <h1 className="st-hero__title">
+            Hours, <em>for the team.</em>
+          </h1>
+          <p className="st-hero__sub">
+            This module is for Stack Technologies team members only. Ask Hunter
+            to add you.
+          </p>
+          <div className="st-hero__rule" aria-hidden="true" />
+        </section>
+      </div>
     );
   }
 
@@ -320,21 +336,24 @@ const StackTimePage = () => {
   const visibleTabs = tabs.filter((t) => !t.adminOnly || isUserAdmin);
 
   return (
-    <div>
-      <section className="card" style={{ marginBottom: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Stack Time</h2>
-        <p className="muted" style={{ margin: "0.5rem 0 0" }}>
-          Track hours worked on Stack Technologies projects.
+    <div className="st-page">
+      <section className="st-hero ov-rise ov-rise-1">
+        <span className="st-hero__eyebrow">Stack Time · time tracking</span>
+        <h1 className="st-hero__title">
+          Hours, <em>logged.</em>
+        </h1>
+        <p className="st-hero__sub">
+          Track time on Stack Technologies projects — yours and the team's.
         </p>
-        <div
-          className="list"
-          style={{ marginTop: "1rem", flexDirection: "row", gap: "0.5rem", flexWrap: "wrap" }}
-        >
+        <div className="st-hero__rule" aria-hidden="true" />
+        <div className="st-tabs" role="tablist" aria-label="Stack Time sections">
           {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               type="button"
-              className={activeTab === tab.id ? "primary" : "secondary"}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className={`st-tabs__btn ${activeTab === tab.id ? "st-tabs__btn--active" : ""}`}
               onClick={() => setActiveTab(tab.id)}
             >
               {tab.label}

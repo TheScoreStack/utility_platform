@@ -4952,6 +4952,192 @@ button.ghost {
 }
 
 /* ============================================================
+   Stack Time — editorial chrome
+   ============================================================ */
+.st-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  /* Used by inline bar visualizations on the Performance tab */
+  --accent: #38bdf8;
+  --border: rgba(148, 163, 184, 0.18);
+}
+
+/* --- Hero --- */
+.st-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 2.2rem 2rem 1.6rem;
+  border-radius: 22px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(167, 139, 250, 0.08) 0%, transparent 55%),
+    radial-gradient(80% 60% at 0% 100%, rgba(56, 189, 248, 0.06) 0%, transparent 50%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.92) 0%, rgba(30, 41, 59, 0.85) 100%);
+  box-shadow: 0 28px 56px -20px rgba(15, 23, 42, 0.55);
+  overflow: hidden;
+}
+
+.st-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 4px 4px;
+  mix-blend-mode: overlay;
+}
+
+.st-hero__eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+  position: relative;
+}
+
+.st-hero__title {
+  font-family: var(--serif);
+  font-size: clamp(2.4rem, 6.5vw, 3.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+  margin: 0.15rem 0 0.35rem;
+  font-weight: 400;
+  position: relative;
+}
+
+.st-hero__title em {
+  font-style: italic;
+  background: linear-gradient(135deg, #a78bfa 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.st-hero__sub {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.1rem;
+  color: #94a3b8;
+  margin: 0;
+  max-width: 32rem;
+  position: relative;
+}
+
+.st-hero__rule {
+  margin-top: 0.4rem;
+  width: 4rem;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(148, 163, 184, 0.5), transparent);
+  position: relative;
+}
+
+/* --- Tabs --- */
+.st-tabs {
+  position: relative;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 1.1rem;
+  padding: 0.3rem;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  align-self: flex-start;
+  max-width: 100%;
+}
+
+.st-tabs__btn {
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  padding: 0.42rem 1rem;
+  font-family: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: color 160ms ease, background 160ms ease;
+  white-space: nowrap;
+}
+
+.st-tabs__btn:hover:not(.st-tabs__btn--active) {
+  color: #e2e8f0;
+}
+
+.st-tabs__btn--active {
+  background: linear-gradient(135deg, #a78bfa, #7c3aed);
+  color: #fff;
+  box-shadow: 0 8px 20px -8px rgba(124, 58, 237, 0.55);
+}
+
+@media (max-width: 720px) {
+  .st-hero { padding: 1.85rem 1.4rem 1.4rem; }
+  .st-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    align-self: stretch;
+    max-width: none;
+    padding-right: 0.4rem;
+  }
+  .st-tabs::-webkit-scrollbar { display: none; }
+  .st-tabs__btn { flex-shrink: 0; }
+}
+
+/* --- Editorial typography descendant pass --- */
+.st-page .card h2 {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: #f8fafc;
+}
+
+.st-page .card h3 {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: #f8fafc;
+}
+
+.st-page .section-title {
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.18);
+  padding-bottom: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.st-page table th {
+  color: #64748b;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 0.55rem 0.5rem;
+}
+
+.st-page table td {
+  font-size: 0.92rem;
+  padding: 0.7rem 0.5rem;
+}
+
+/* Performance tab — replace inline number stats with editorial stamps */
+.st-page .pill {
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 400;
+  font-size: 0.95rem;
+  letter-spacing: -0.005em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
    Expense search field
    ============================================================ */
 .expense-search {
