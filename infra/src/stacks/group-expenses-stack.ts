@@ -248,7 +248,9 @@ export class GroupExpensesStack extends Stack {
       logRetention: RetentionDays.ONE_WEEK,
       environment: {
         TABLE_NAME: table.tableName,
-        DIGEST_FROM_EMAIL: process.env.DIGEST_FROM_EMAIL ?? "",
+        RECEIPT_BUCKET: receiptBucket.bucketName,
+        DIGEST_FROM_EMAIL:
+          process.env.DIGEST_FROM_EMAIL ?? "The Stack Core <digest@thestackcore.com>",
         APP_URL: process.env.APP_URL ?? "https://thestackcore.com",
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
       }
