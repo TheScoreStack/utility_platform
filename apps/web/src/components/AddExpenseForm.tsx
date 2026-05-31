@@ -162,6 +162,22 @@ interface PendingExpenseConfirmation {
   allocationSummary: AllocationSummaryItem[];
 }
 
+export type ExpensePrefill = {
+  /** Bump this when re-applying the same data so the effect re-fires */
+  nonce: number;
+  description: string;
+  vendor?: string;
+  category?: string;
+  subtotal: string;
+  tax?: string;
+  tip?: string;
+  paidByMemberId: string;
+  sharedWithMemberIds: string[];
+  splitEvenly: boolean;
+  allocations?: Record<string, string>;
+  remainderMemberId?: string;
+};
+
 interface AddExpenseFormProps {
   tripId: string;
   members: TripMember[];
@@ -170,6 +186,8 @@ interface AddExpenseFormProps {
   onSubmit: (payload: CreateExpenseInput) => Promise<unknown>;
   isSubmitting: boolean;
   currentUserId?: string;
+  prefill?: ExpensePrefill | null;
+  onPrefillConsumed?: () => void;
 }
 
 const AddExpenseForm = ({
@@ -179,8 +197,12 @@ const AddExpenseForm = ({
   receipts,
   onSubmit,
   isSubmitting,
-  currentUserId
+  currentUserId,
+  prefill,
+  onPrefillConsumed
 }: AddExpenseFormProps) => {
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const [prefillFlash, setPrefillFlash] = useState(false);
   const [description, setDescription] = useState("");
   const [vendor, setVendor] = useState("");
   const [category, setCategory] = useState("");
@@ -246,6 +268,29 @@ const AddExpenseForm = ({
   const previousRemainderRef = useRef(0);
   const lastAcknowledgedRemainderRef = useRef<number | null>(null);
   const [pendingExpense, setPendingExpense] = useState<PendingExpenseConfirmation | null>(null);
+
+  useEffect(() => {
+    if (!prefill) return;
+    setDescription(prefill.description);
+    setVendor(prefill.vendor ?? "");
+    setCategory(prefill.category ?? "");
+    setSubtotalInput(prefill.subtotal);
+    setTaxInput(prefill.tax ?? "");
+    setTipInput(prefill.tip ?? "");
+    setPaidBy(prefill.paidByMemberId);
+    setPayerManuallySelected(true);
+    setSharedWith(prefill.sharedWithMemberIds);
+    setSplitEvenly(prefill.splitEvenly);
+    setAllocations(prefill.allocations ?? {});
+    setRemainderMemberId(prefill.remainderMemberId ?? "");
+    setReceiptId("");
+    setError(null);
+    setPrefillFlash(true);
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const t = setTimeout(() => setPrefillFlash(false), 1400);
+    onPrefillConsumed?.();
+    return () => clearTimeout(t);
+  }, [prefill, onPrefillConsumed]);
 
   useEffect(() => {
     if (!payerManuallySelected) {
@@ -840,7 +885,18 @@ const AddExpenseForm = ({
   }, [receiptPreviewUrl, activeReceiptId, activeReceipt]);
 
   return (
-    <form className="list" onSubmit={handleSubmit}>
+    <form
+      className="list"
+      onSubmit={handleSubmit}
+      ref={formRef}
+      style={{
+        transition: "box-shadow 0.4s ease, background 0.4s ease, padding 0.4s ease",
+        boxShadow: prefillFlash ? "0 0 0 2px rgba(56,189,248,0.55)" : undefined,
+        background: prefillFlash ? "rgba(56,189,248,0.06)" : undefined,
+        borderRadius: "0.85rem",
+        padding: prefillFlash ? "0.85rem" : undefined
+      }}
+    >
       <div className="input-group">
         <label htmlFor="expense-description">Description</label>
         <input

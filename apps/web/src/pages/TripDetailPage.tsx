@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuthenticator } from "@aws-amplify/ui-react";
-import AddExpenseForm, { type CreateExpenseInput } from "../components/AddExpenseForm";
+import AddExpenseForm, { type CreateExpenseInput, type ExpensePrefill } from "../components/AddExpenseForm";
 import SettlementForm, { type SettlementPrefill } from "../components/SettlementForm";
 import { CategoryBadge } from "../components/CategoryBadge";
 import { normalizeCategoryKey, resolveExpenseCategory } from "../lib/expenseCategories";
@@ -184,6 +184,7 @@ const TripDetailPage = () => {
 
   const [activeTab, setActiveTab] = useState<TripTab>("overview");
   const [settlementPrefill, setSettlementPrefill] = useState<SettlementPrefill | null>(null);
+  const [expensePrefill, setExpensePrefill] = useState<ExpensePrefill | null>(null);
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
   const [memberFeedback, setMemberFeedback] = useState<string | null>(null);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -238,6 +239,35 @@ const TripDetailPage = () => {
     },
     []
   );
+
+  const handleRepeatExpense = useCallback((expense: Expense) => {
+    const taxAmount = expense.tax ?? 0;
+    const tipAmount = expense.tip ?? 0;
+    const subtotal = Math.max(0, expense.total - taxAmount - tipAmount);
+    const shareCount = expense.sharedWithMemberIds.length;
+    const evenShare = shareCount > 0 ? expense.total / shareCount : 0;
+    const isEven =
+      shareCount > 0 &&
+      expense.allocations.length === shareCount &&
+      expense.allocations.every((a) => Math.abs(a.amount - evenShare) <= 0.02);
+
+    setExpensePrefill({
+      nonce: Date.now(),
+      description: expense.description,
+      vendor: expense.vendor,
+      category: expense.category,
+      subtotal: subtotal.toFixed(2),
+      tax: taxAmount > 0 ? taxAmount.toFixed(2) : "",
+      tip: tipAmount > 0 ? tipAmount.toFixed(2) : "",
+      paidByMemberId: expense.paidByMemberId,
+      sharedWithMemberIds: expense.sharedWithMemberIds,
+      splitEvenly: isEven,
+      allocations: isEven
+        ? undefined
+        : Object.fromEntries(expense.allocations.map((a) => [a.memberId, a.amount.toFixed(2)]))
+    });
+    setActiveTab("expenses");
+  }, []);
 
   const createExpenseMutation = useMutation({
     mutationFn: (payload: CreateExpenseInput) =>
@@ -675,6 +705,9 @@ const TripDetailPage = () => {
           deletePending={deleteExpenseMutation.isPending}
           deletingExpenseId={deleteExpenseMutation.variables}
           currentUserId={effectiveCurrentUserId}
+          expensePrefill={expensePrefill}
+          onExpensePrefillConsumed={() => setExpensePrefill(null)}
+          onRepeatExpense={handleRepeatExpense}
         />
       )}
 
@@ -1408,6 +1441,9 @@ interface ExpensesTabProps {
   deletePending: boolean;
   deletingExpenseId?: string;
   currentUserId?: string;
+  expensePrefill?: ExpensePrefill | null;
+  onExpensePrefillConsumed?: () => void;
+  onRepeatExpense: (expense: Expense) => void;
 }
 
 const ExpensesTab = ({
@@ -1422,7 +1458,10 @@ const ExpensesTab = ({
   onDeleteExpense,
   deletePending,
   deletingExpenseId,
-  currentUserId
+  currentUserId,
+  expensePrefill,
+  onExpensePrefillConsumed,
+  onRepeatExpense
 }: ExpensesTabProps) => {
   const [memberFilter, setMemberFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -1767,6 +1806,8 @@ const ExpensesTab = ({
           isSubmitting={isCreating}
           onSubmit={onCreateExpense}
           currentUserId={currentUserId}
+          prefill={expensePrefill}
+          onPrefillConsumed={onExpensePrefillConsumed}
         />
       </section>
 
@@ -2021,6 +2062,21 @@ const ExpensesTab = ({
                                   : "Load preview"}
                               </button>
                             )}
+                            <button
+                              type="button"
+                              className="secondary"
+                              style={{
+                                paddingInline: "0.7rem",
+                                fontSize: "0.85rem",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "0.3rem"
+                              }}
+                              title="Clone this expense into the form"
+                              onClick={() => onRepeatExpense(expense)}
+                            >
+                              <span aria-hidden="true">↻</span> Repeat
+                            </button>
                             <button
                               className="secondary"
                               style={{
