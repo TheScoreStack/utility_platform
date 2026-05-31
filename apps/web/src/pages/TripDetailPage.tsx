@@ -1,4 +1,4 @@
-import { FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CSSProperties, FormEvent, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuthenticator } from "@aws-amplify/ui-react";
@@ -292,6 +292,12 @@ const TripDetailPage = () => {
   const [activeTab, setActiveTab] = useState<TripTab>("overview");
   const [settlementPrefill, setSettlementPrefill] = useState<SettlementPrefill | null>(null);
   const [expensePrefill, setExpensePrefill] = useState<ExpensePrefill | null>(null);
+  const [undoToast, setUndoToast] = useState<{
+    nonce: number;
+    title: string;
+    kind: "expense" | "settlement";
+    id: string;
+  } | null>(null);
   const [memberSearchTerm, setMemberSearchTerm] = useState("");
   const [memberFeedback, setMemberFeedback] = useState<string | null>(null);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -413,15 +419,21 @@ const TripDetailPage = () => {
     }
   });
 
-  const deleteExpenseMutation = useMutation<void, unknown, string>({
-    mutationFn: (expenseId: string) => {
+  const deleteExpenseMutation = useMutation<void, unknown, { expenseId: string; description: string }>({
+    mutationFn: ({ expenseId }) => {
       if (!tripId) {
         throw new Error("Trip not found");
       }
       return api.delete<void>(`/trips/${tripId}/expenses/${expenseId}`);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey });
+      setUndoToast({
+        nonce: Date.now(),
+        kind: "expense",
+        id: variables.expenseId,
+        title: `Deleted "${variables.description}"`
+      });
     }
   });
 
@@ -437,8 +449,40 @@ const TripDetailPage = () => {
     }
   });
 
-  const deleteSettlementMutation = useMutation<void, unknown, string>({
+  const restoreExpenseMutation = useMutation<void, unknown, string>({
+    mutationFn: (expenseId: string) => {
+      if (!tripId) throw new Error("Trip not found");
+      return api.post<void>(`/trips/${tripId}/expenses/${expenseId}/restore`, {});
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey })
+  });
+
+  const purgeExpenseMutation = useMutation<void, unknown, string>({
+    mutationFn: (expenseId: string) => {
+      if (!tripId) throw new Error("Trip not found");
+      return api.delete<void>(`/trips/${tripId}/expenses/${expenseId}/purge`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey })
+  });
+
+  const restoreSettlementMutation = useMutation<void, unknown, string>({
     mutationFn: (settlementId: string) => {
+      if (!tripId) throw new Error("Trip not found");
+      return api.post<void>(`/trips/${tripId}/settlements/${settlementId}/restore`, {});
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey })
+  });
+
+  const purgeSettlementMutation = useMutation<void, unknown, string>({
+    mutationFn: (settlementId: string) => {
+      if (!tripId) throw new Error("Trip not found");
+      return api.delete<void>(`/trips/${tripId}/settlements/${settlementId}/purge`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey })
+  });
+
+  const deleteSettlementMutation = useMutation<void, unknown, { settlementId: string; label: string }>({
+    mutationFn: ({ settlementId }) => {
       if (!tripId) {
         throw new Error("Trip not found");
       }
@@ -446,7 +490,13 @@ const TripDetailPage = () => {
         `/trips/${tripId}/settlements/${settlementId}`
       );
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      setUndoToast({
+        nonce: Date.now(),
+        kind: "settlement",
+        id: variables.settlementId,
+        title: `Deleted settlement (${variables.label})`
+      });
       queryClient.invalidateQueries({ queryKey });
     }
   });
@@ -821,15 +871,20 @@ const TripDetailPage = () => {
           }
           isCreating={createExpenseMutation.isPending}
           membersById={membersById}
-          onDeleteExpense={(expenseId) =>
-            deleteExpenseMutation.mutateAsync(expenseId)
+          onDeleteExpense={(expenseId, description) =>
+            deleteExpenseMutation.mutateAsync({ expenseId, description })
           }
           deletePending={deleteExpenseMutation.isPending}
-          deletingExpenseId={deleteExpenseMutation.variables}
+          deletingExpenseId={deleteExpenseMutation.variables?.expenseId}
           currentUserId={effectiveCurrentUserId}
           expensePrefill={expensePrefill}
           onExpensePrefillConsumed={() => setExpensePrefill(null)}
           onRepeatExpense={handleRepeatExpense}
+          deletedExpenses={data.deletedExpenses ?? []}
+          onRestoreExpense={(expenseId) => restoreExpenseMutation.mutateAsync(expenseId)}
+          onPurgeExpense={(expenseId) => purgeExpenseMutation.mutateAsync(expenseId)}
+          restoringExpenseId={restoreExpenseMutation.variables}
+          purgingExpenseId={purgeExpenseMutation.variables}
         />
       )}
 
@@ -848,15 +903,20 @@ const TripDetailPage = () => {
           }
           confirmPending={confirmSettlementMutation.isPending}
           membersById={membersById}
-          onDelete={(settlementId) =>
-            deleteSettlementMutation.mutateAsync(settlementId)
+          onDelete={(settlementId, label) =>
+            deleteSettlementMutation.mutateAsync({ settlementId, label })
           }
           deletePending={deleteSettlementMutation.isPending}
-          deletingSettlementId={deleteSettlementMutation.variables}
+          deletingSettlementId={deleteSettlementMutation.variables?.settlementId}
           currentUserId={effectiveCurrentUserId}
           paymentMethodsByMember={paymentMethodsByMember}
           prefill={settlementPrefill}
           onPrefillConsumed={() => setSettlementPrefill(null)}
+          deletedSettlements={data.deletedSettlements ?? []}
+          onRestoreSettlement={(settlementId) => restoreSettlementMutation.mutateAsync(settlementId)}
+          onPurgeSettlement={(settlementId) => purgeSettlementMutation.mutateAsync(settlementId)}
+          restoringSettlementId={restoreSettlementMutation.variables}
+          purgingSettlementId={purgeSettlementMutation.variables}
         />
       )}
 
@@ -894,6 +954,23 @@ const TripDetailPage = () => {
           onSavePaymentMethods={handleSavePaymentMethods}
           paymentMethodsMessage={paymentMethodsMessage}
           savingPaymentMethods={savePaymentMethodsMutation.isPending}
+        />
+      )}
+
+      {undoToast && (
+        <UndoToast
+          nonce={undoToast.nonce}
+          title={undoToast.title}
+          onUndo={() => {
+            const t = undoToast;
+            setUndoToast(null);
+            if (t.kind === "expense") {
+              void restoreExpenseMutation.mutateAsync(t.id);
+            } else {
+              void restoreSettlementMutation.mutateAsync(t.id);
+            }
+          }}
+          onDismiss={() => setUndoToast(null)}
         />
       )}
     </div>
@@ -1561,6 +1638,131 @@ const OverviewTab = ({
   );
 };
 
+// ---------- Soft delete UI ----------
+
+interface UndoToastProps {
+  nonce: number;
+  title: string;
+  onUndo: () => void;
+  onDismiss: () => void;
+  durationMs?: number;
+}
+
+const UndoToast = ({ nonce, title, onUndo, onDismiss, durationMs = 6000 }: UndoToastProps) => {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, durationMs);
+    return () => clearTimeout(t);
+  }, [nonce, durationMs, onDismiss]);
+
+  return (
+    <div
+      key={nonce}
+      className="undo-toast"
+      role="status"
+      aria-live="polite"
+      style={{ "--toast-duration": `${durationMs}ms` } as CSSProperties}
+    >
+      <span className="undo-toast__icon" aria-hidden="true">🗑</span>
+      <div className="undo-toast__body">
+        <span className="undo-toast__title">{title}</span>
+        <span className="undo-toast__hint">Removed — undoable</span>
+      </div>
+      <button type="button" className="undo-toast__action" onClick={onUndo}>
+        Undo
+      </button>
+      <button
+        type="button"
+        className="undo-toast__close"
+        aria-label="Dismiss"
+        onClick={onDismiss}
+      >
+        ×
+      </button>
+    </div>
+  );
+};
+
+interface RecentlyDeletedListProps {
+  label: string;
+  emptyHint: string;
+  items: Array<{
+    id: string;
+    title: ReactNode;
+    meta: string;
+  }>;
+  onRestore: (id: string) => Promise<void>;
+  onPurge: (id: string) => Promise<void>;
+  restoringId?: string;
+  purgingId?: string;
+}
+
+const RecentlyDeletedList = ({
+  label,
+  emptyHint,
+  items,
+  onRestore,
+  onPurge,
+  restoringId,
+  purgingId
+}: RecentlyDeletedListProps) => {
+  const [open, setOpen] = useState(false);
+  if (items.length === 0) return null;
+
+  return (
+    <div className="trash">
+      <button
+        type="button"
+        className="trash__header"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span className="trash__title">
+          <span className={`trash__chevron ${open ? "trash__chevron--open" : ""}`}>▸</span>
+          Recently deleted {label.toLowerCase()}
+          <span className="trash__count">{items.length}</span>
+        </span>
+        <span className="muted" style={{ fontSize: "0.78rem" }}>
+          {open ? "hide" : emptyHint}
+        </span>
+      </button>
+      {open && (
+        <div className="trash__list">
+          {items.map((item) => (
+            <div key={item.id} className="trash__row">
+              <div className="trash__row-body">
+                <span className="trash__row-title">{item.title}</span>
+                <span className="trash__row-meta">{item.meta}</span>
+              </div>
+              <div className="trash__row-actions">
+                <button
+                  type="button"
+                  className="trash__row-restore"
+                  disabled={restoringId === item.id}
+                  onClick={() => onRestore(item.id).catch(() => {})}
+                >
+                  {restoringId === item.id ? "Restoring…" : "Restore"}
+                </button>
+                <button
+                  type="button"
+                  className="trash__row-purge"
+                  disabled={purgingId === item.id}
+                  title="Permanently delete — cannot be undone"
+                  onClick={() => {
+                    if (!window.confirm("Permanently delete? This cannot be undone.")) return;
+                    onPurge(item.id).catch(() => {});
+                  }}
+                >
+                  {purgingId === item.id ? "…" : "Delete forever"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 interface ExpensesTabProps {
   receipts: TripSummary["receipts"];
   tripId: string;
@@ -1570,13 +1772,18 @@ interface ExpensesTabProps {
   onCreateExpense: (payload: CreateExpenseInput) => Promise<unknown>;
   isCreating: boolean;
   membersById: Record<string, string>;
-  onDeleteExpense: (expenseId: string) => Promise<void>;
+  onDeleteExpense: (expenseId: string, description: string) => Promise<void>;
   deletePending: boolean;
   deletingExpenseId?: string;
   currentUserId?: string;
   expensePrefill?: ExpensePrefill | null;
   onExpensePrefillConsumed?: () => void;
   onRepeatExpense: (expense: Expense) => void;
+  deletedExpenses: Expense[];
+  onRestoreExpense: (expenseId: string) => Promise<void>;
+  onPurgeExpense: (expenseId: string) => Promise<void>;
+  restoringExpenseId?: string;
+  purgingExpenseId?: string;
 }
 
 const ExpensesTab = ({
@@ -1594,7 +1801,12 @@ const ExpensesTab = ({
   currentUserId,
   expensePrefill,
   onExpensePrefillConsumed,
-  onRepeatExpense
+  onRepeatExpense,
+  deletedExpenses,
+  onRestoreExpense,
+  onPurgeExpense,
+  restoringExpenseId,
+  purgingExpenseId
 }: ExpensesTabProps) => {
   const [memberFilter, setMemberFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -2230,27 +2442,22 @@ const ExpensesTab = ({
                               <span aria-hidden="true">↻</span> Repeat
                             </button>
                             <button
+                              type="button"
                               className="secondary"
                               style={{
-                                paddingInline: "0.65rem",
-                                opacity: 0.5,
+                                paddingInline: "0.7rem",
+                                opacity: 0.6,
                                 fontSize: "0.85rem"
                               }}
                               disabled={
                                 deletePending && deletingExpenseId === expense.expenseId
                               }
+                              title="Move to Recently deleted (undoable for now)"
                               onClick={() => {
-                                if (
-                                  !window.confirm(
-                                    `Delete expense "${expense.description}"? This cannot be undone.`
-                                  )
-                                ) {
-                                  return;
-                                }
-                                onDeleteExpense(expense.expenseId).catch(() => {});
+                                onDeleteExpense(expense.expenseId, expense.description).catch(() => {});
                               }}
                             >
-                              Remove permanently
+                              Delete
                             </button>
                           </div>
                         </div>
@@ -2320,6 +2527,25 @@ const ExpensesTab = ({
                     );
                   })
                 )}
+                <RecentlyDeletedList
+                  label="Expenses"
+                  emptyHint={`${deletedExpenses.length} item${deletedExpenses.length === 1 ? "" : "s"}`}
+                  items={deletedExpenses.map((expense) => ({
+                    id: expense.expenseId,
+                    title: (
+                      <>
+                        <strong>{formatCurrency.format(expense.total)}</strong> · {expense.description}
+                      </>
+                    ),
+                    meta: `Deleted ${expense.deletedAt ? formatDate(expense.deletedAt) : ""} · paid by ${
+                      membersById[expense.paidByMemberId] ?? expense.paidByMemberId
+                    }`
+                  }))}
+                  onRestore={onRestoreExpense}
+                  onPurge={onPurgeExpense}
+                  restoringId={restoringExpenseId}
+                  purgingId={purgingExpenseId}
+                />
               </div>
 
               <aside
@@ -2562,13 +2788,18 @@ interface SettlementsTabProps {
   onConfirm: (settlementId: string, confirmed: boolean) => void;
   confirmPending: boolean;
   membersById: Record<string, string>;
-  onDelete: (settlementId: string) => Promise<void>;
+  onDelete: (settlementId: string, label: string) => Promise<void>;
   deletePending: boolean;
   deletingSettlementId?: string;
   currentUserId?: string;
   paymentMethodsByMember: Record<string, PaymentMethods>;
   prefill?: SettlementPrefill | null;
   onPrefillConsumed?: () => void;
+  deletedSettlements: Settlement[];
+  onRestoreSettlement: (settlementId: string) => Promise<void>;
+  onPurgeSettlement: (settlementId: string) => Promise<void>;
+  restoringSettlementId?: string;
+  purgingSettlementId?: string;
 }
 
 interface StlPayChipProps {
@@ -2617,7 +2848,12 @@ const SettlementsTab = ({
   currentUserId,
   paymentMethodsByMember,
   prefill,
-  onPrefillConsumed
+  onPrefillConsumed,
+  deletedSettlements,
+  onRestoreSettlement,
+  onPurgeSettlement,
+  restoringSettlementId,
+  purgingSettlementId
 }: SettlementsTabProps) => {
   const settlementAmountFormatter = useMemo(
     () =>
@@ -2786,9 +3022,9 @@ const SettlementsTab = ({
                       type="button"
                       className="secondary"
                       disabled={deletePending && deletingSettlementId === settlement.settlementId}
+                      title="Move to Recently deleted (undoable for now)"
                       onClick={() => {
-                        if (!window.confirm(`Delete the settlement from ${fromName} to ${toName}?`)) return;
-                        onDelete(settlement.settlementId).catch(() => {});
+                        onDelete(settlement.settlementId, `${fromName} → ${toName}`).catch(() => {});
                       }}
                     >
                       Delete
@@ -2804,6 +3040,27 @@ const SettlementsTab = ({
             Pending settlements reduce balances once confirmed.
           </p>
         )}
+        <RecentlyDeletedList
+          label="Settlements"
+          emptyHint={`${deletedSettlements.length} item${deletedSettlements.length === 1 ? "" : "s"}`}
+          items={deletedSettlements.map((settlement) => {
+            const from = membersById[settlement.fromMemberId] ?? settlement.fromMemberId;
+            const to = membersById[settlement.toMemberId] ?? settlement.toMemberId;
+            return {
+              id: settlement.settlementId,
+              title: (
+                <>
+                  <strong>{settlementAmountFormatter.format(settlement.amount)}</strong> · {from} → {to}
+                </>
+              ),
+              meta: `Deleted ${settlement.deletedAt ? formatDate(settlement.deletedAt) : ""}`
+            };
+          })}
+          onRestore={onRestoreSettlement}
+          onPurge={onPurgeSettlement}
+          restoringId={restoringSettlementId}
+          purgingId={purgingSettlementId}
+        />
       </section>
     </div>
   );

@@ -319,6 +319,19 @@ export const handler = async (
         return created(expense, origin);
       }
 
+      const expenseRestoreMatch = remainder.match(/^\/expenses\/([^/]+)\/restore$/);
+      if (expenseRestoreMatch && method === "POST") {
+        const expenseId = decodeURIComponent(expenseRestoreMatch[1]);
+        await tripService.restoreExpense(tripId, expenseId, auth);
+        return noContent(origin);
+      }
+      const expensePurgeMatch = remainder.match(/^\/expenses\/([^/]+)\/purge$/);
+      if (expensePurgeMatch && method === "DELETE") {
+        const expenseId = decodeURIComponent(expensePurgeMatch[1]);
+        await tripService.purgeExpense(tripId, expenseId, auth);
+        return noContent(origin);
+      }
+
       const expenseMatch = remainder.match(/^\/expenses\/([^/]+)$/);
       if (expenseMatch && method === "PATCH") {
         const expenseId = decodeURIComponent(expenseMatch[1]);
@@ -355,6 +368,19 @@ export const handler = async (
         const body = parseBody(event);
         const settlement = await tripService.recordSettlement(tripId, body, auth);
         return created(settlement, origin);
+      }
+
+      const settlementRestoreMatch = remainder.match(/^\/settlements\/([^/]+)\/restore$/);
+      if (settlementRestoreMatch && method === "POST") {
+        const settlementId = decodeURIComponent(settlementRestoreMatch[1]);
+        await tripService.restoreSettlement(tripId, settlementId, auth);
+        return noContent(origin);
+      }
+      const settlementPurgeMatch = remainder.match(/^\/settlements\/([^/]+)\/purge$/);
+      if (settlementPurgeMatch && method === "DELETE") {
+        const settlementId = decodeURIComponent(settlementPurgeMatch[1]);
+        await tripService.purgeSettlement(tripId, settlementId, auth);
+        return noContent(origin);
       }
 
       const settlementMatch = remainder.match(/^\/settlements\/([^/]+)$/);

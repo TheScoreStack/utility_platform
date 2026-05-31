@@ -176,8 +176,10 @@ export interface TripSummary {
   trip: Trip;
   members: TripMember[];
   expenses: Expense[];
+  deletedExpenses: Expense[];
   receipts: Receipt[];
   settlements: Settlement[];
+  deletedSettlements: Settlement[];
   balances: BalanceRow[];
   pendingSettlements: Settlement[];
   currentUserId: string;
@@ -869,7 +871,59 @@ export class TripService {
       throw new ForbiddenError("Not authorized to delete this expense");
     }
 
-    await getTripStore().deleteExpense(tripId, expenseId);
+    await getTripStore().softDeleteExpense(tripId, expenseId, auth.userId);
+  }
+
+  async restoreExpense(
+    tripId: string,
+    expenseId: string,
+    auth: AuthContext
+  ): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const isMember = details.members.some(
+      (member) => member.memberId === auth.userId
+    );
+    if (!isMember) {
+      throw new ForbiddenError("Not authorized");
+    }
+    const expense = details.deletedExpenses.find(
+      (item) => item.expenseId === expenseId
+    );
+    if (!expense) {
+      throw new ValidationError("Deleted expense not found");
+    }
+    const canRestore =
+      expense.paidByMemberId === auth.userId ||
+      expense.deletedBy === auth.userId ||
+      details.trip.ownerId === auth.userId;
+    if (!canRestore) {
+      throw new ForbiddenError("Not authorized to restore this expense");
+    }
+    await getTripStore().restoreExpense(tripId, expenseId);
+  }
+
+  async purgeExpense(
+    tripId: string,
+    expenseId: string,
+    auth: AuthContext
+  ): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const expense = details.deletedExpenses.find(
+      (item) => item.expenseId === expenseId
+    );
+    if (!expense) {
+      throw new ValidationError("Deleted expense not found");
+    }
+    const canPurge =
+      expense.paidByMemberId === auth.userId ||
+      expense.deletedBy === auth.userId ||
+      details.trip.ownerId === auth.userId;
+    if (!canPurge) {
+      throw new ForbiddenError("Not authorized to permanently delete this expense");
+    }
+    await getTripStore().purgeExpense(tripId, expenseId);
   }
 
   async createReceipt(
@@ -1016,7 +1070,55 @@ export class TripService {
       throw new ForbiddenError("Not authorized to delete this settlement");
     }
 
-    await getTripStore().deleteSettlement(tripId, settlementId);
+    await getTripStore().softDeleteSettlement(tripId, settlementId, auth.userId);
+  }
+
+  async restoreSettlement(
+    tripId: string,
+    settlementId: string,
+    auth: AuthContext
+  ): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const settlement = details.deletedSettlements.find(
+      (item) => item.settlementId === settlementId
+    );
+    if (!settlement) {
+      throw new ValidationError("Deleted settlement not found");
+    }
+    const canRestore =
+      settlement.fromMemberId === auth.userId ||
+      settlement.toMemberId === auth.userId ||
+      settlement.deletedBy === auth.userId ||
+      details.trip.ownerId === auth.userId;
+    if (!canRestore) {
+      throw new ForbiddenError("Not authorized to restore this settlement");
+    }
+    await getTripStore().restoreSettlement(tripId, settlementId);
+  }
+
+  async purgeSettlement(
+    tripId: string,
+    settlementId: string,
+    auth: AuthContext
+  ): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const settlement = details.deletedSettlements.find(
+      (item) => item.settlementId === settlementId
+    );
+    if (!settlement) {
+      throw new ValidationError("Deleted settlement not found");
+    }
+    const canPurge =
+      settlement.fromMemberId === auth.userId ||
+      settlement.toMemberId === auth.userId ||
+      settlement.deletedBy === auth.userId ||
+      details.trip.ownerId === auth.userId;
+    if (!canPurge) {
+      throw new ForbiddenError("Not authorized to permanently delete this settlement");
+    }
+    await getTripStore().purgeSettlement(tripId, settlementId);
   }
 
   async analyzeReceiptLive(

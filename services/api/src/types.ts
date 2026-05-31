@@ -47,6 +47,8 @@ export interface Expense {
   allocations: ExpenseAllocation[];
   receiptId?: string;
   receiptPreviewUrl?: string;
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export interface Receipt {
@@ -87,6 +89,8 @@ export interface Settlement {
   createdAt: string;
   confirmedAt?: string;
   createdBy: string;
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export interface UserProfile {

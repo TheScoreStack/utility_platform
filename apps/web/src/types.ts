@@ -2,8 +2,10 @@ export interface TripSummary {
   trip: Trip;
   members: TripMember[];
   expenses: Expense[];
+  deletedExpenses: Expense[];
   receipts: Receipt[];
   settlements: Settlement[];
+  deletedSettlements: Settlement[];
   balances: BalanceRow[];
   pendingSettlements: Settlement[];
   currentUserId: string;
@@ -52,6 +54,8 @@ export interface Expense {
   allocations: ExpenseAllocation[];
   receiptId?: string;
   receiptPreviewUrl?: string;
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export interface Receipt {
@@ -92,6 +96,8 @@ export interface Settlement {
   createdAt: string;
   confirmedAt?: string;
   createdBy: string;
+  deletedAt?: string;
+  deletedBy?: string;
 }
 
 export interface BalanceRow {

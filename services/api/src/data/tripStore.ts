@@ -75,8 +75,10 @@ export interface TripDetails {
   trip: Trip;
   members: TripMember[];
   expenses: Expense[];
+  deletedExpenses: Expense[];
   receipts: Receipt[];
   settlements: Settlement[];
+  deletedSettlements: Settlement[];
 }
 
 export class TripStore {
@@ -215,7 +217,7 @@ export class TripStore {
           : undefined)
     }));
 
-    const expenses: Expense[] = Items.filter(
+    const allExpenses: Expense[] = Items.filter(
       (item) => item.entityType === "Expense"
     ).map((item) => ({
       tripId,
@@ -233,8 +235,14 @@ export class TripStore {
       sharedWithMemberIds: item.sharedWithMemberIds,
       allocations: item.allocations,
       receiptId: item.receiptId,
-      receiptPreviewUrl: item.receiptPreviewUrl
+      receiptPreviewUrl: item.receiptPreviewUrl,
+      deletedAt: item.deletedAt,
+      deletedBy: item.deletedBy
     }));
+    const expenses = allExpenses.filter((e) => !e.deletedAt);
+    const deletedExpenses = allExpenses
+      .filter((e) => Boolean(e.deletedAt))
+      .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
 
     const receipts: Receipt[] = Items.filter(
       (item) => item.entityType === "Receipt"
@@ -250,7 +258,7 @@ export class TripStore {
       updatedAt: item.updatedAt
     }));
 
-    const settlements: Settlement[] = Items.filter(
+    const allSettlements: Settlement[] = Items.filter(
       (item) => item.entityType === "Settlement"
     ).map((item) => ({
       tripId,
@@ -262,15 +270,23 @@ export class TripStore {
       note: item.note,
       createdAt: item.createdAt,
       createdBy: item.createdBy,
-      confirmedAt: item.confirmedAt
+      confirmedAt: item.confirmedAt,
+      deletedAt: item.deletedAt,
+      deletedBy: item.deletedBy
     }));
+    const settlements = allSettlements.filter((s) => !s.deletedAt);
+    const deletedSettlements = allSettlements
+      .filter((s) => Boolean(s.deletedAt))
+      .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
 
     return {
       trip,
       members,
       expenses,
+      deletedExpenses,
       receipts,
-      settlements
+      settlements,
+      deletedSettlements
     };
   }
 
@@ -536,7 +552,43 @@ export class TripStore {
     );
   }
 
-  async deleteExpense(tripId: string, expenseId: string): Promise<void> {
+  async softDeleteExpense(
+    tripId: string,
+    expenseId: string,
+    deletedBy: string
+  ): Promise<void> {
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.expenseSk(expenseId)
+        },
+        UpdateExpression: "SET deletedAt = :now, deletedBy = :who",
+        ExpressionAttributeValues: {
+          ":now": new Date().toISOString(),
+          ":who": deletedBy
+        },
+        ConditionExpression: "attribute_exists(PK)"
+      })
+    );
+  }
+
+  async restoreExpense(tripId: string, expenseId: string): Promise<void> {
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.expenseSk(expenseId)
+        },
+        UpdateExpression: "REMOVE deletedAt, deletedBy",
+        ConditionExpression: "attribute_exists(PK)"
+      })
+    );
+  }
+
+  async purgeExpense(tripId: string, expenseId: string): Promise<void> {
     await this.docClient.send(
       new DeleteCommand({
         TableName: this.tableName,
@@ -614,7 +666,43 @@ export class TripStore {
     );
   }
 
-  async deleteSettlement(tripId: string, settlementId: string): Promise<void> {
+  async softDeleteSettlement(
+    tripId: string,
+    settlementId: string,
+    deletedBy: string
+  ): Promise<void> {
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.settlementSk(settlementId)
+        },
+        UpdateExpression: "SET deletedAt = :now, deletedBy = :who",
+        ExpressionAttributeValues: {
+          ":now": new Date().toISOString(),
+          ":who": deletedBy
+        },
+        ConditionExpression: "attribute_exists(PK)"
+      })
+    );
+  }
+
+  async restoreSettlement(tripId: string, settlementId: string): Promise<void> {
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.settlementSk(settlementId)
+        },
+        UpdateExpression: "REMOVE deletedAt, deletedBy",
+        ConditionExpression: "attribute_exists(PK)"
+      })
+    );
+  }
+
+  async purgeSettlement(tripId: string, settlementId: string): Promise<void> {
     await this.docClient.send(
       new DeleteCommand({
         TableName: this.tableName,
