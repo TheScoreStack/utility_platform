@@ -1873,6 +1873,7 @@ const ExpensesTab = ({
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [dateFrom, setDateFrom] = useState<string>("");
   const [dateTo, setDateTo] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
   const [viewingReceiptId, setViewingReceiptId] = useState<string | null>(null);
   const [viewReceiptError, setViewReceiptError] = useState<string | null>(null);
   const [expandedReceiptId, setExpandedReceiptId] = useState<string | null>(null);
@@ -1909,6 +1910,9 @@ const ExpensesTab = ({
   const filteredExpenses = useMemo(() => {
     const fromDate = dateFrom ? new Date(dateFrom) : null;
     const toDate = dateTo ? new Date(`${dateTo}T23:59:59.999`) : null;
+    const search = searchTerm.trim().toLowerCase();
+    const searchAsNumber = search ? Number.parseFloat(search) : NaN;
+    const hasNumericSearch = !Number.isNaN(searchAsNumber);
 
     return expenses.filter((expense) => {
       if (memberFilter !== "all") {
@@ -1929,9 +1933,28 @@ const ExpensesTab = ({
         if (toDate && expenseDate > toDate) return false;
       }
 
+      if (search) {
+        const resolved = resolveExpenseCategory(expense.category);
+        const haystack = [
+          expense.description,
+          expense.vendor,
+          expense.category,
+          resolved?.label,
+          membersById[expense.paidByMemberId]
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        const textHit = haystack.includes(search);
+        const numericHit =
+          hasNumericSearch &&
+          Math.abs(expense.total - searchAsNumber) < 0.01;
+        if (!textHit && !numericHit) return false;
+      }
+
       return true;
     });
-  }, [expenses, memberFilter, categoryFilter, dateFrom, dateTo]);
+  }, [expenses, memberFilter, categoryFilter, dateFrom, dateTo, searchTerm, membersById]);
 
   const expensesByDay = useMemo(() => {
     const groups = new Map<
@@ -2122,6 +2145,7 @@ const ExpensesTab = ({
     setCategoryFilter("all");
     setDateFrom("");
     setDateTo("");
+    setSearchTerm("");
   };
 
   const sortedTotals = useMemo(
@@ -2239,6 +2263,33 @@ const ExpensesTab = ({
                 gap: "0.9rem"
               }}
             >
+              <div className="expense-search">
+                <span className="expense-search__icon" aria-hidden="true">
+                  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="7" cy="7" r="4.5" />
+                    <line x1="10.5" y1="10.5" x2="14" y2="14" />
+                  </svg>
+                </span>
+                <input
+                  className="expense-search__input"
+                  type="search"
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search description, vendor, category, or amount…"
+                  aria-label="Search expenses"
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    className="expense-search__clear"
+                    onClick={() => setSearchTerm("")}
+                    aria-label="Clear search"
+                    title="Clear search"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
               <div
                 style={{
                   display: "flex",
@@ -2282,7 +2333,8 @@ const ExpensesTab = ({
                   (memberFilter !== "all" ? 1 : 0) +
                   (categoryFilter !== "all" ? 1 : 0) +
                   (dateFrom ? 1 : 0) +
-                  (dateTo ? 1 : 0);
+                  (dateTo ? 1 : 0) +
+                  (searchTerm.trim() ? 1 : 0);
                 return (
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
