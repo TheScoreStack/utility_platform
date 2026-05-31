@@ -343,6 +343,13 @@ export class GroupExpensesStack extends Stack {
     });
 
     httpApi.addRoutes({
+      path: "/profile/{proxy+}",
+      methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PATCH, HttpMethod.DELETE],
+      integration: httpIntegration,
+      authorizer
+    });
+
+    httpApi.addRoutes({
       path: "/invites/{proxy+}",
       methods: [HttpMethod.GET, HttpMethod.POST],
       integration: httpIntegration,
