@@ -150,7 +150,9 @@ export class GroupExpensesStack extends Stack {
 
     const defaultFrontendDomains = [
       "https://thestackcore.com",
-      "https://www.thestackcore.com"
+      "https://www.thestackcore.com",
+      "https://main.dpco69rqpvn1l.amplifyapp.com",
+      "https://dpco69rqpvn1l.amplifyapp.com"
     ];
     const configuredDomains =
       process.env.FRONTEND_DOMAINS?.split(",")
@@ -290,6 +292,13 @@ export class GroupExpensesStack extends Stack {
     httpApi.addRoutes({
       path: "/users",
       methods: [HttpMethod.GET],
+      integration: httpIntegration,
+      authorizer
+    });
+
+    httpApi.addRoutes({
+      path: "/profile",
+      methods: [HttpMethod.GET, HttpMethod.PATCH],
       integration: httpIntegration,
       authorizer
     });
