@@ -113,6 +113,60 @@ const formatDate = (isoString: string) => {
   }
 };
 
+const localDayKey = (isoString: string): string => {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const formatDayLabel = (isoString: string): { primary: string; secondary?: string } => {
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) return { primary: "Unknown date" };
+  const today = new Date();
+  const todayKey = localDayKey(today.toISOString());
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const yesterdayKey = localDayKey(yesterday.toISOString());
+  const dayKey = localDayKey(isoString);
+
+  const dateLabel = (() => {
+    if (dayKey === todayKey) return "Today";
+    if (dayKey === yesterdayKey) return "Yesterday";
+    try {
+      const includeYear = date.getFullYear() !== today.getFullYear();
+      return new Intl.DateTimeFormat(undefined, {
+        weekday: "long",
+        month: "long",
+        day: "numeric",
+        ...(includeYear ? { year: "numeric" } : {})
+      }).format(date);
+    } catch {
+      return date.toDateString();
+    }
+  })();
+
+  let secondary: string | undefined;
+  try {
+    secondary = new Intl.DateTimeFormat(undefined, {
+      month: "short",
+      day: "numeric"
+    }).format(date);
+    if (dayKey === todayKey || dayKey === yesterdayKey) {
+      // For Today/Yesterday, secondary already adds value (the actual date)
+    } else {
+      // For full date labels the secondary would be redundant
+      secondary = undefined;
+    }
+  } catch {
+    secondary = undefined;
+  }
+
+  return { primary: dateLabel, secondary };
+};
+
 const TripDetailPage = () => {
   const { tripId } = useParams<{ tripId: string }>();
   const navigate = useNavigate();
@@ -732,6 +786,137 @@ const OvAvatar = ({ name, memberId, size = "md", isSelf }: OvAvatarProps) => {
   );
 };
 
+interface OvCategoryChartProps {
+  expenses: TripSummary["expenses"];
+  totalSpent: number;
+  currencyFormatter: Intl.NumberFormat;
+}
+
+const OvCategoryChart = ({
+  expenses,
+  totalSpent,
+  currencyFormatter
+}: OvCategoryChartProps) => {
+  const segments = useMemo(() => {
+    const totals = new Map<
+      string,
+      { key: string; label: string; icon: string; color: string; amount: number }
+    >();
+    expenses.forEach((expense) => {
+      const resolved = resolveExpenseCategory(expense.category);
+      const key = resolved?.id ?? (normalizeCategoryKey(expense.category) || "unset");
+      const label = resolved?.label ?? (expense.category?.trim() || "Uncategorized");
+      const icon = resolved?.icon ?? "✦";
+      const color = resolved?.color ?? "#94a3b8";
+      const existing = totals.get(key);
+      if (existing) {
+        existing.amount += expense.total;
+      } else {
+        totals.set(key, { key, label, icon, color, amount: expense.total });
+      }
+    });
+    return Array.from(totals.values()).sort((a, b) => b.amount - a.amount);
+  }, [expenses]);
+
+  if (segments.length === 0 || totalSpent <= 0) {
+    return (
+      <div className="cat-chart">
+        <div className="cat-chart__empty">
+          Add expenses to see a category breakdown.
+        </div>
+      </div>
+    );
+  }
+
+  let cursor = 0;
+  const arcs = segments.map((seg) => {
+    const percent = (seg.amount / totalSpent) * 100;
+    const arc = { ...seg, percent, startPercent: cursor };
+    cursor += percent;
+    return arc;
+  });
+  const visibleArcs = arcs.slice(0, 5);
+  const hiddenCount = arcs.length - visibleArcs.length;
+  const hiddenAmount =
+    hiddenCount > 0
+      ? arcs.slice(5).reduce((sum, a) => sum + a.amount, 0)
+      : 0;
+
+  return (
+    <div className="cat-chart">
+      <div className="cat-chart__top">
+        <div className="cat-chart__donut">
+          <svg viewBox="0 0 100 100" style={{ width: "100%", height: "100%" }}>
+            <circle
+              cx="50"
+              cy="50"
+              r="42"
+              fill="none"
+              stroke="rgba(148, 163, 184, 0.10)"
+              strokeWidth="13"
+            />
+            <g transform="rotate(-90 50 50)">
+              {arcs.map((arc) => {
+                const dashLen = Math.max(0.5, arc.percent - 1.2);
+                return (
+                  <circle
+                    key={arc.key}
+                    cx="50"
+                    cy="50"
+                    r="42"
+                    pathLength={100}
+                    fill="none"
+                    stroke={arc.color}
+                    strokeWidth="13"
+                    strokeLinecap="butt"
+                    strokeDasharray={`${dashLen} ${100 - dashLen}`}
+                    strokeDashoffset={-arc.startPercent}
+                    opacity={0.9}
+                  />
+                );
+              })}
+            </g>
+          </svg>
+          <div className="cat-chart__center">
+            <span className="cat-chart__center-amount">
+              {currencyFormatter.format(totalSpent)}
+            </span>
+            <span className="cat-chart__center-label">spent</span>
+          </div>
+        </div>
+        <div className="cat-chart__legend">
+          {visibleArcs.map((arc) => (
+            <div key={arc.key} className="cat-chart__row">
+              <span className="cat-chart__swatch" style={{ background: arc.color }} />
+              <span className="cat-chart__name" title={arc.label}>
+                <span aria-hidden="true">{arc.icon}</span>
+                {arc.label}
+              </span>
+              <span className="cat-chart__amount">
+                {currencyFormatter.format(arc.amount)}
+              </span>
+            </div>
+          ))}
+          {hiddenCount > 0 && (
+            <div className="cat-chart__row" style={{ color: "#64748b" }}>
+              <span
+                className="cat-chart__swatch"
+                style={{ background: "rgba(148,163,184,0.4)" }}
+              />
+              <span className="cat-chart__name" style={{ fontStyle: "italic" }}>
+                + {hiddenCount} more
+              </span>
+              <span className="cat-chart__amount">
+                {currencyFormatter.format(hiddenAmount)}
+              </span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const OvFlowArc = ({ tone }: { tone: "owe" | "owed" | "neutral" }) => {
   const color =
     tone === "owe" ? "#fb923c" : tone === "owed" ? "#34d399" : "#94a3b8";
@@ -1199,6 +1384,12 @@ const OverviewTab = ({
             )}
           </div>
         )}
+
+        <OvCategoryChart
+          expenses={expenses}
+          totalSpent={groupTotalSpent}
+          currencyFormatter={currencyFormatter}
+        />
       </section>
     </div>
   );
@@ -1296,6 +1487,31 @@ const ExpensesTab = ({
       return true;
     });
   }, [expenses, memberFilter, categoryFilter, dateFrom, dateTo]);
+
+  const expensesByDay = useMemo(() => {
+    const groups = new Map<
+      string,
+      { dayKey: string; representativeIso: string; total: number; expenses: typeof filteredExpenses }
+    >();
+    filteredExpenses.forEach((expense) => {
+      const dayKey = localDayKey(expense.createdAt);
+      const existing = groups.get(dayKey);
+      if (existing) {
+        existing.total += expense.total;
+        existing.expenses.push(expense);
+      } else {
+        groups.set(dayKey, {
+          dayKey,
+          representativeIso: expense.createdAt,
+          total: expense.total,
+          expenses: [expense]
+        });
+      }
+    });
+    return Array.from(groups.values()).sort((a, b) =>
+      b.dayKey.localeCompare(a.dayKey)
+    );
+  }, [filteredExpenses]);
 
   const perMemberTotals = useMemo(() => {
     const totals = new Map<string, { paid: number; share: number }>();
@@ -1643,11 +1859,25 @@ const ExpensesTab = ({
                 alignItems: "start"
               }}
             >
-              <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 {filteredExpenses.length === 0 ? (
                   <p className="muted">No expenses match the current filters.</p>
                 ) : (
-                  filteredExpenses.map((expense) => {
+                  expensesByDay.map((day) => {
+                    const dayLabel = formatDayLabel(day.representativeIso);
+                    return (
+                      <div key={day.dayKey} className="day-group">
+                        <div className="day-header">
+                          <span className="day-header__date">
+                            {dayLabel.primary}
+                            {dayLabel.secondary && <small>{dayLabel.secondary}</small>}
+                          </span>
+                          <span className="day-header__right">
+                            <span>{day.expenses.length} {day.expenses.length === 1 ? "expense" : "expenses"}</span>
+                            <span className="day-header__total">{formatCurrency.format(day.total)}</span>
+                          </span>
+                        </div>
+                        {day.expenses.map((expense) => {
                     const badges: string[] = [];
                     if (typeof expense.tax === "number" && expense.tax > 0) {
                       badges.push(`Tax ${formatCurrency.format(expense.tax)}`);
@@ -1876,9 +2106,12 @@ const ExpensesTab = ({
                           </div>
                         )}
                       </div>
-                );
-              })
-            )}
+                          );
+                        })}
+                      </div>
+                    );
+                  })
+                )}
               </div>
 
               <aside

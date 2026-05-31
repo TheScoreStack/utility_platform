@@ -1307,9 +1307,34 @@ const AddExpenseForm = ({
 
       {error && <p style={{ color: "#fda4af" }}>{error}</p>}
 
-      <button type="submit" className="primary" disabled={isSubmitting}>
-        {isSubmitting ? "Saving…" : "Add expense"}
-      </button>
+      {(() => {
+        const allocationOff =
+          !splitEvenly && Math.abs(allocationDelta) > 0.01 && grossTotal > 0;
+        const buttonLabel = isSubmitting
+          ? "Saving…"
+          : allocationOff
+            ? `Allocations off by ${formatAmount(Math.abs(allocationDelta))}`
+            : "Add expense";
+        return (
+          <button
+            type="submit"
+            className="primary"
+            disabled={isSubmitting || allocationOff}
+            title={
+              allocationOff
+                ? "Adjust the per-person amounts so they match the total before saving."
+                : undefined
+            }
+            style={
+              allocationOff
+                ? { opacity: 0.55, cursor: "not-allowed", background: "rgba(148,163,184,0.25)", color: "#e2e8f0", boxShadow: "none" }
+                : undefined
+            }
+          >
+            {buttonLabel}
+          </button>
+        );
+      })()}
 
       {pendingExpense && (
         <div
