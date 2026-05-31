@@ -390,6 +390,36 @@ const TripDetailPage = () => {
     }
   });
 
+  const inviteQuery = useQuery({
+    queryKey: ["trip-invite", tripId],
+    queryFn: () =>
+      api.get<{ invite: import("../types").TripInvite | null }>(
+        `/trips/${tripId}/invite`
+      ),
+    enabled: Boolean(tripId)
+  });
+
+  const createInviteMutation = useMutation({
+    mutationFn: () => {
+      if (!tripId) throw new Error("Trip not found");
+      return api.post<{ invite: import("../types").TripInvite }>(
+        `/trips/${tripId}/invite`,
+        {}
+      );
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["trip-invite", tripId] })
+  });
+
+  const revokeInviteMutation = useMutation({
+    mutationFn: () => {
+      if (!tripId) throw new Error("Trip not found");
+      return api.delete<void>(`/trips/${tripId}/invite`);
+    },
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["trip-invite", tripId] })
+  });
+
   const archiveTripMutation = useMutation({
     mutationFn: () => {
       if (!tripId) throw new Error("Trip not found");
@@ -1015,6 +1045,12 @@ const TripDetailPage = () => {
           onSavePaymentMethods={handleSavePaymentMethods}
           paymentMethodsMessage={paymentMethodsMessage}
           savingPaymentMethods={savePaymentMethodsMutation.isPending}
+          invite={inviteQuery.data?.invite ?? null}
+          inviteLoading={inviteQuery.isLoading}
+          onCreateOrRotateInvite={() => createInviteMutation.mutateAsync()}
+          onRevokeInvite={() => revokeInviteMutation.mutateAsync()}
+          inviteSaving={createInviteMutation.isPending}
+          inviteRevoking={revokeInviteMutation.isPending}
         />
       )}
 
@@ -3452,6 +3488,93 @@ const ActivityTab = ({
   );
 };
 
+interface InviteLinkBoxProps {
+  inviteId: string;
+  canManage: boolean;
+  onRotate: () => Promise<unknown>;
+  onRevoke: () => Promise<unknown>;
+  rotating: boolean;
+  revoking: boolean;
+}
+
+const InviteLinkBox = ({
+  inviteId,
+  canManage,
+  onRotate,
+  onRevoke,
+  rotating,
+  revoking
+}: InviteLinkBoxProps) => {
+  const [copied, setCopied] = useState(false);
+  const url =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/group-expenses/join/${inviteId}`
+      : `/group-expenses/join/${inviteId}`;
+
+  return (
+    <div className="ppl-invite">
+      <div className="ppl-invite__url-row">
+        <code className="ppl-invite__url" title={url}>
+          {url}
+        </code>
+        <button
+          type="button"
+          className={`ppl-invite__copy ${copied ? "ppl-invite__copy--copied" : ""}`}
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(url);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1400);
+            } catch {
+              /* clipboard write blocked — non-fatal */
+            }
+          }}
+        >
+          {copied ? "✓ copied" : "Copy"}
+        </button>
+      </div>
+      {canManage && (
+        <div className="ppl-invite__actions">
+          <button
+            type="button"
+            className="ppl-invite__action ppl-invite__action--rotate"
+            disabled={rotating}
+            title="Generate a fresh link — the current one stops working."
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "Rotate the invite link? Anyone holding the old one won't be able to join."
+                )
+              )
+                return;
+              void onRotate();
+            }}
+          >
+            {rotating ? "Rotating…" : "Rotate ↻"}
+          </button>
+          <button
+            type="button"
+            className="ppl-invite__action ppl-invite__action--revoke"
+            disabled={revoking}
+            title="Disable the link entirely."
+            onClick={() => {
+              if (
+                !window.confirm(
+                  "Revoke the invite link? No one new can join until you create another one."
+                )
+              )
+                return;
+              void onRevoke();
+            }}
+          >
+            {revoking ? "Revoking…" : "Revoke"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Click-to-copy chip used in PeopleTab member rows
 const PplPayChip = ({ method, value }: { method: string; value: string }) => {
   const [copied, setCopied] = useState(false);
@@ -3496,6 +3619,12 @@ interface PeopleTabProps {
   onSavePaymentMethods: (methods: PaymentMethodsInput) => void;
   paymentMethodsMessage: string | null;
   savingPaymentMethods: boolean;
+  invite: import("../types").TripInvite | null;
+  inviteLoading: boolean;
+  onCreateOrRotateInvite: () => Promise<unknown>;
+  onRevokeInvite: () => Promise<unknown>;
+  inviteSaving: boolean;
+  inviteRevoking: boolean;
 }
 
 const PeopleTab = ({
@@ -3517,7 +3646,13 @@ const PeopleTab = ({
   paymentMethodsByMember,
   onSavePaymentMethods,
   paymentMethodsMessage,
-  savingPaymentMethods
+  savingPaymentMethods,
+  invite,
+  inviteLoading,
+  onCreateOrRotateInvite,
+  onRevokeInvite,
+  inviteSaving,
+  inviteRevoking
 }: PeopleTabProps) => {
   const editableMemberId = useMemo(
     () => members.find((member) => member.memberId === currentUserId)?.memberId,
@@ -3828,6 +3963,45 @@ const PeopleTab = ({
                   {savingPaymentMethods ? "Saving…" : "Save your methods"}
                 </button>
               </div>
+            )}
+          </section>
+
+          <section className="ppl-panel ov-rise ov-rise-3">
+            <h3 className="ppl-panel__title">
+              Or share <em>a link.</em>
+            </h3>
+            <p className="ppl-panel__sub">
+              Anyone with this link can join the trip — even if they don't have
+              an account yet.
+            </p>
+
+            {inviteLoading ? (
+              <span className="skel skel--pill" style={{ width: "100%", height: "2.4rem" }}>&nbsp;</span>
+            ) : invite ? (
+              <InviteLinkBox
+                inviteId={invite.inviteId}
+                canManage={canManageMembers}
+                onRotate={onCreateOrRotateInvite}
+                onRevoke={onRevokeInvite}
+                rotating={inviteSaving}
+                revoking={inviteRevoking}
+              />
+            ) : canManageMembers ? (
+              <button
+                type="button"
+                className="primary ppl-invite-create"
+                disabled={inviteSaving}
+                onClick={() => {
+                  void onCreateOrRotateInvite();
+                }}
+              >
+                {inviteSaving ? "Creating…" : "Create invite link"}
+              </button>
+            ) : (
+              <p className="ppl-invite-empty">
+                The trip owner hasn't created a shareable link yet — ask them
+                to add one.
+              </p>
             )}
           </section>
         </aside>

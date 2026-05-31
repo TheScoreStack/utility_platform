@@ -9,16 +9,19 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { getDocumentClient } from "./dynamo.js";
 import { loadConfig } from "../config.js";
-import { Trip, TripMember, Expense, Receipt, Settlement, PaymentMethods } from "../types.js";
+import { Trip, TripMember, Expense, Receipt, Settlement, PaymentMethods, TripInvite } from "../types.js";
 import { NotFoundError } from "../lib/errors.js";
 
 const keys = {
   tripPk: (tripId: string) => `TRIP#${tripId}`,
   tripSkMeta: "METADATA",
+  tripSkInvitePointer: "INVITE",
   memberSk: (memberId: string) => `MEMBER#${memberId}`,
   expenseSk: (expenseId: string) => `EXPENSE#${expenseId}`,
   receiptSk: (receiptId: string) => `RECEIPT#${receiptId}`,
-  settlementSk: (settlementId: string) => `SETTLEMENT#${settlementId}`
+  settlementSk: (settlementId: string) => `SETTLEMENT#${settlementId}`,
+  invitePk: (inviteId: string) => `INVITE#${inviteId}`,
+  inviteSk: "METADATA"
 };
 
 type TripEntity = Trip & {
@@ -838,6 +841,104 @@ export class TripStore {
         UpdateExpression: `SET ${updateExpressions.join(", ")}`,
         ExpressionAttributeNames: names,
         ExpressionAttributeValues: values
+      })
+    );
+  }
+
+  // ---------- Trip invites ----------
+
+  async getTripInvite(tripId: string): Promise<TripInvite | null> {
+    const { Item } = await this.docClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.tripSkInvitePointer
+        }
+      })
+    );
+    if (!Item) return null;
+    return {
+      tripId: Item.tripId as string,
+      inviteId: Item.inviteId as string,
+      createdBy: Item.createdBy as string,
+      createdAt: Item.createdAt as string
+    };
+  }
+
+  async getInviteById(inviteId: string): Promise<TripInvite | null> {
+    const { Item } = await this.docClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.invitePk(inviteId),
+          SK: keys.inviteSk
+        }
+      })
+    );
+    if (!Item) return null;
+    return {
+      tripId: Item.tripId as string,
+      inviteId: Item.inviteId as string,
+      createdBy: Item.createdBy as string,
+      createdAt: Item.createdAt as string
+    };
+  }
+
+  async createInvite(invite: TripInvite): Promise<void> {
+    await this.docClient.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Put: {
+              TableName: this.tableName,
+              Item: {
+                entityType: "TripInvitePointer",
+                PK: keys.tripPk(invite.tripId),
+                SK: keys.tripSkInvitePointer,
+                ...invite
+              }
+            }
+          },
+          {
+            Put: {
+              TableName: this.tableName,
+              Item: {
+                entityType: "TripInvite",
+                PK: keys.invitePk(invite.inviteId),
+                SK: keys.inviteSk,
+                ...invite
+              }
+            }
+          }
+        ]
+      })
+    );
+  }
+
+  async deleteInvite(tripId: string, inviteId: string): Promise<void> {
+    await this.docClient.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Delete: {
+              TableName: this.tableName,
+              Key: {
+                PK: keys.tripPk(tripId),
+                SK: keys.tripSkInvitePointer
+              }
+            }
+          },
+          {
+            Delete: {
+              TableName: this.tableName,
+              Key: {
+                PK: keys.invitePk(inviteId),
+                SK: keys.inviteSk
+              }
+            }
+          }
+        ]
       })
     );
   }

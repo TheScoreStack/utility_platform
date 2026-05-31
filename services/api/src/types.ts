@@ -27,6 +27,13 @@ export interface PaymentMethods {
   zelle?: string;
 }
 
+export interface TripInvite {
+  tripId: string;
+  inviteId: string;
+  createdBy: string;
+  createdAt: string;
+}
+
 export interface ExpenseAllocation {
   memberId: string;
   amount: number;

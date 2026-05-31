@@ -139,6 +139,20 @@ export interface PaymentMethods {
   zelle?: string;
 }
 
+export interface TripInvite {
+  tripId: string;
+  inviteId: string;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface InvitePreview {
+  tripId: string;
+  tripName: string;
+  memberCount: number;
+  alreadyMember: boolean;
+}
+
 export type HarmonyLedgerEntryType =
   | "DONATION"
   | "INCOME"

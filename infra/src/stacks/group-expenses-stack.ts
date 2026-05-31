@@ -304,6 +304,13 @@ export class GroupExpensesStack extends Stack {
     });
 
     httpApi.addRoutes({
+      path: "/invites/{proxy+}",
+      methods: [HttpMethod.GET, HttpMethod.POST],
+      integration: httpIntegration,
+      authorizer
+    });
+
+    httpApi.addRoutes({
       path: "/harmony-ledger/{proxy+}",
       methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.DELETE, HttpMethod.PATCH],
       integration: httpIntegration,

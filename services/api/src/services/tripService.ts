@@ -6,6 +6,7 @@ import { UserStore } from "../data/userStore.js";
 import {
   Trip,
   TripMember,
+  TripInvite,
   Expense,
   Receipt,
   Settlement,
@@ -13,7 +14,7 @@ import {
   type TextractExtraction,
   PaymentMethods
 } from "../types.js";
-import { ValidationError, ForbiddenError } from "../lib/errors.js";
+import { ValidationError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import type { AuthContext } from "../auth.js";
 import { generateReceiptUpload, generateReceiptDownloadUrl } from "./uploadService.js";
 import { analyzeReceiptBytes } from "./textractService.js";
@@ -470,6 +471,98 @@ export class TripService {
       return;
     }
     await getTripStore().unarchiveTrip(tripId);
+  }
+
+  async getTripInvite(tripId: string, auth: AuthContext): Promise<TripInvite | null> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const isMember = details.members.some((m) => m.memberId === auth.userId);
+    if (!isMember) {
+      throw new ForbiddenError("You do not have access to this trip");
+    }
+    return getTripStore().getTripInvite(tripId);
+  }
+
+  async createOrRotateInvite(tripId: string, auth: AuthContext): Promise<TripInvite> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    if (details.trip.ownerId !== auth.userId) {
+      throw new ForbiddenError("Only the trip owner can create or rotate invite links");
+    }
+    const existing = await getTripStore().getTripInvite(tripId);
+    if (existing) {
+      await getTripStore().deleteInvite(tripId, existing.inviteId);
+    }
+    const invite: TripInvite = {
+      tripId,
+      inviteId: `inv_${nanoid(14)}`,
+      createdBy: auth.userId,
+      createdAt: isoNow()
+    };
+    await getTripStore().createInvite(invite);
+    return invite;
+  }
+
+  async revokeInvite(tripId: string, auth: AuthContext): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    if (details.trip.ownerId !== auth.userId) {
+      throw new ForbiddenError("Only the trip owner can revoke invite links");
+    }
+    const existing = await getTripStore().getTripInvite(tripId);
+    if (!existing) return;
+    await getTripStore().deleteInvite(tripId, existing.inviteId);
+  }
+
+  async previewInvite(
+    inviteId: string,
+    auth: AuthContext
+  ): Promise<{
+    tripId: string;
+    tripName: string;
+    memberCount: number;
+    alreadyMember: boolean;
+  }> {
+    await ensureCurrentUserProfile(auth);
+    const invite = await getTripStore().getInviteById(inviteId);
+    if (!invite) {
+      throw new NotFoundError("This invite link is no longer valid");
+    }
+    const details = await getTripStore().getTripDetails(invite.tripId);
+    return {
+      tripId: details.trip.tripId,
+      tripName: details.trip.name,
+      memberCount: details.members.length,
+      alreadyMember: details.members.some((m) => m.memberId === auth.userId)
+    };
+  }
+
+  async redeemInvite(
+    inviteId: string,
+    auth: AuthContext
+  ): Promise<{ tripId: string }> {
+    const profile = await ensureCurrentUserProfile(auth);
+    const invite = await getTripStore().getInviteById(inviteId);
+    if (!invite) {
+      throw new NotFoundError("This invite link is no longer valid");
+    }
+    const details = await getTripStore().getTripDetails(invite.tripId);
+    const alreadyMember = details.members.some(
+      (m) => m.memberId === auth.userId
+    );
+    if (alreadyMember) {
+      return { tripId: details.trip.tripId };
+    }
+    const newMember: TripMember = {
+      tripId: details.trip.tripId,
+      memberId: auth.userId,
+      displayName: getDisplayName(profile),
+      email: profile.email,
+      addedBy: invite.createdBy,
+      createdAt: isoNow()
+    };
+    await getTripStore().addMembers(details.trip, [newMember]);
+    return { tripId: details.trip.tripId };
   }
 
   async getTripSummary(tripId: string, auth: AuthContext): Promise<TripSummary> {

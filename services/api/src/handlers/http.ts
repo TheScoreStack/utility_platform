@@ -306,6 +306,21 @@ export const handler = async (
         return noContent(origin);
       }
 
+      if (remainder === "/invite" && method === "GET") {
+        const invite = await tripService.getTripInvite(tripId, auth);
+        return ok({ invite }, origin);
+      }
+
+      if (remainder === "/invite" && method === "POST") {
+        const invite = await tripService.createOrRotateInvite(tripId, auth);
+        return created({ invite }, origin);
+      }
+
+      if (remainder === "/invite" && method === "DELETE") {
+        await tripService.revokeInvite(tripId, auth);
+        return noContent(origin);
+      }
+
       if (remainder === "/members" && method === "POST") {
         const body = parseBody(event);
         const members = await tripService.addMembers(tripId, body, auth);
@@ -404,6 +419,20 @@ export const handler = async (
         const settlementId = decodeURIComponent(settlementMatch[1]);
         await tripService.deleteSettlement(tripId, settlementId, auth);
         return noContent(origin);
+      }
+    }
+
+    const inviteMatch = path.match(/^\/invites\/([^/]+)(?:\/(redeem))?$/);
+    if (inviteMatch) {
+      const inviteId = decodeURIComponent(inviteMatch[1]);
+      const action = inviteMatch[2];
+      if (!action && method === "GET") {
+        const preview = await tripService.previewInvite(inviteId, auth);
+        return ok(preview, origin);
+      }
+      if (action === "redeem" && method === "POST") {
+        const result = await tripService.redeemInvite(inviteId, auth);
+        return ok(result, origin);
       }
     }
 
