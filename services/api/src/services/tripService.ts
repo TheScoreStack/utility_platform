@@ -318,7 +318,7 @@ export class TripService {
         );
 
         return {
-          ...trip,
+          ...details.trip,
           outstandingBalance: roundCents(outstandingBalance),
           owedToYou: roundCents(owedToYou),
           hasPendingActions
@@ -446,6 +446,30 @@ export class TripService {
     };
 
     return nextTrip;
+  }
+
+  async archiveTrip(tripId: string, auth: AuthContext): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    if (details.trip.ownerId !== auth.userId) {
+      throw new ForbiddenError("Only the trip owner can archive this trip");
+    }
+    if (details.trip.archivedAt) {
+      return;
+    }
+    await getTripStore().archiveTrip(tripId, auth.userId);
+  }
+
+  async unarchiveTrip(tripId: string, auth: AuthContext): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    if (details.trip.ownerId !== auth.userId) {
+      throw new ForbiddenError("Only the trip owner can unarchive this trip");
+    }
+    if (!details.trip.archivedAt) {
+      return;
+    }
+    await getTripStore().unarchiveTrip(tripId);
   }
 
   async getTripSummary(tripId: string, auth: AuthContext): Promise<TripSummary> {

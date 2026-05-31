@@ -68,7 +68,9 @@ const toTrip = (item: TripEntity): Trip => ({
   endDate: item.endDate,
   createdAt: item.createdAt,
   updatedAt: item.updatedAt,
-  currency: item.currency
+  currency: item.currency,
+  archivedAt: (item as Trip).archivedAt,
+  archivedBy: (item as Trip).archivedBy
 });
 
 export interface TripDetails {
@@ -288,6 +290,42 @@ export class TripStore {
       settlements,
       deletedSettlements
     };
+  }
+
+  async archiveTrip(tripId: string, archivedBy: string): Promise<void> {
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.tripSkMeta
+        },
+        UpdateExpression:
+          "SET archivedAt = :now, archivedBy = :who, updatedAt = :now",
+        ExpressionAttributeValues: {
+          ":now": new Date().toISOString(),
+          ":who": archivedBy
+        },
+        ConditionExpression: "attribute_exists(PK)"
+      })
+    );
+  }
+
+  async unarchiveTrip(tripId: string): Promise<void> {
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.tripSkMeta
+        },
+        UpdateExpression: "REMOVE archivedAt, archivedBy SET updatedAt = :now",
+        ExpressionAttributeValues: {
+          ":now": new Date().toISOString()
+        },
+        ConditionExpression: "attribute_exists(PK)"
+      })
+    );
   }
 
   async updateTripMetadata(

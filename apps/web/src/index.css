@@ -4045,3 +4045,191 @@ button.ghost {
   align-self: stretch;
   margin-top: 0.3rem;
 }
+
+/* ============================================================
+   Archive — trip-level closed-tab treatments
+   ============================================================ */
+.archive-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+  border-radius: 14px;
+  border: 1px dashed rgba(148, 163, 184, 0.32);
+  background: rgba(15, 23, 42, 0.55);
+  overflow: hidden;
+}
+
+.archive-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(148, 163, 184, 0.04) 0,
+    rgba(148, 163, 184, 0.04) 8px,
+    transparent 8px,
+    transparent 16px
+  );
+}
+
+.archive-banner__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  position: relative;
+}
+
+.archive-banner__eyebrow {
+  font-size: 0.65rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.archive-banner__title {
+  font-family: var(--serif);
+  font-size: 1.35rem;
+  color: #f8fafc;
+  margin: 0.1rem 0 0;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.archive-banner__title em {
+  font-style: italic;
+  color: #94a3b8;
+}
+
+.archive-banner__hint {
+  margin: 0.2rem 0 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.archive-banner__action {
+  padding: 0.55rem 1.1rem;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.12);
+  color: #bae6fd;
+  cursor: pointer;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 0.88rem;
+  letter-spacing: 0.01em;
+  transition: background 140ms ease, transform 100ms ease, border-color 140ms ease;
+  position: relative;
+  white-space: nowrap;
+}
+
+.archive-banner__action:hover:not(:disabled) {
+  background: rgba(56, 189, 248, 0.22);
+  border-color: rgba(56, 189, 248, 0.6);
+  transform: translateY(-1px);
+}
+
+.archive-banner__action:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* Archived section on the trip list */
+.tl-archived {
+  margin-top: 0.5rem;
+  border: 1px dashed rgba(148, 163, 184, 0.24);
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.42);
+  overflow: hidden;
+}
+
+.tl-archived__toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+}
+
+.tl-archived__toggle:hover {
+  background: rgba(148, 163, 184, 0.05);
+}
+
+.tl-archived__title {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-family: var(--serif);
+  font-style: italic;
+  color: #cbd5f5;
+  font-size: 1.1rem;
+}
+
+.tl-archived__chevron {
+  font-size: 0.8rem;
+  color: #64748b;
+  transition: transform 200ms ease;
+  display: inline-block;
+}
+
+.tl-archived__chevron--open {
+  transform: rotate(90deg);
+}
+
+.tl-archived__count {
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.tl-archived__list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0 1rem 1rem;
+}
+
+/* Archived card variant — softer, muted */
+.tl-card--archived {
+  opacity: 0.78;
+  filter: saturate(0.85);
+}
+
+.tl-card--archived:hover {
+  opacity: 1;
+  filter: none;
+}
+
+.tl-card--archived .tl-card__stamp {
+  background: transparent;
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+.tl-card__archived-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  font-size: 0.65rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 700;
+}

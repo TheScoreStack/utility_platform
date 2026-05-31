@@ -95,10 +95,24 @@ const TripListPage = () => {
     queryFn: () => api.get<TripListResponse>("/trips")
   });
 
-  const trips = useMemo<TripWithStatus[]>(
+  const allTrips = useMemo<TripWithStatus[]>(
     () => (data?.trips ?? []) as TripWithStatus[],
     [data]
   );
+  const trips = useMemo(
+    () => allTrips.filter((trip) => !trip.archivedAt),
+    [allTrips]
+  );
+  const archivedTrips = useMemo(
+    () =>
+      allTrips
+        .filter((trip) => Boolean(trip.archivedAt))
+        .sort((a, b) =>
+          (b.archivedAt ?? "").localeCompare(a.archivedAt ?? "")
+        ),
+    [allTrips]
+  );
+  const [archivedOpen, setArchivedOpen] = useState(false);
 
   const stats = useMemo(() => {
     let outstanding = 0;
@@ -343,6 +357,67 @@ const TripListPage = () => {
                   </Link>
                 );
               })}
+            </div>
+          )}
+
+          {archivedTrips.length > 0 && (
+            <div className="tl-archived">
+              <button
+                type="button"
+                className="tl-archived__toggle"
+                onClick={() => setArchivedOpen((v) => !v)}
+                aria-expanded={archivedOpen}
+              >
+                <span className="tl-archived__title">
+                  <span
+                    className={`tl-archived__chevron ${
+                      archivedOpen ? "tl-archived__chevron--open" : ""
+                    }`}
+                  >
+                    ▸
+                  </span>
+                  Archived
+                </span>
+                <span className="tl-archived__count">
+                  {archivedTrips.length}{" "}
+                  {archivedTrips.length === 1 ? "tab" : "tabs"}
+                </span>
+              </button>
+              {archivedOpen && (
+                <div className="tl-archived__list">
+                  {archivedTrips.map((trip) => {
+                    const stamp = formatStamp(trip.startDate, trip.endDate);
+                    const range = formatRange(trip.startDate, trip.endDate);
+                    return (
+                      <Link
+                        key={trip.tripId}
+                        to={`/group-expenses/trips/${trip.tripId}`}
+                        className="tl-card tl-card--neutral tl-card--archived"
+                      >
+                        <div className="tl-card__top">
+                          <span className="tl-card__stamp">
+                            {stamp ?? "OPEN TAB"}
+                          </span>
+                          <span className="tl-card__archived-tag">
+                            Closed
+                          </span>
+                        </div>
+                        <h3 className="tl-card__title">{trip.name}</h3>
+                        <p className="tl-card__meta">{range}</p>
+                        <div className="tl-card__foot">
+                          <div className="tl-card__pills">
+                            <span className="tl-card__pill tl-card__pill--neutral">
+                              Archived
+                            </span>
+                          </div>
+                          <span className="tl-card__open">Reopen →</span>
+                        </div>
+                        <span className="tl-card__stripe" aria-hidden="true" />
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
         </section>

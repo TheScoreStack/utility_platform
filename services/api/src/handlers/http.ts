@@ -296,6 +296,16 @@ export const handler = async (
         return ok(trip, origin);
       }
 
+      if (remainder === "/archive" && method === "POST") {
+        await tripService.archiveTrip(tripId, auth);
+        return noContent(origin);
+      }
+
+      if (remainder === "/unarchive" && method === "POST") {
+        await tripService.unarchiveTrip(tripId, auth);
+        return noContent(origin);
+      }
+
       if (remainder === "/members" && method === "POST") {
         const body = parseBody(event);
         const members = await tripService.addMembers(tripId, body, auth);

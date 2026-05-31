@@ -390,6 +390,28 @@ const TripDetailPage = () => {
     }
   });
 
+  const archiveTripMutation = useMutation({
+    mutationFn: () => {
+      if (!tripId) throw new Error("Trip not found");
+      return api.post<void>(`/trips/${tripId}/archive`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: ["trips"] });
+    }
+  });
+
+  const unarchiveTripMutation = useMutation({
+    mutationFn: () => {
+      if (!tripId) throw new Error("Trip not found");
+      return api.post<void>(`/trips/${tripId}/unarchive`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: ["trips"] });
+    }
+  });
+
   const updateTripMutation = useMutation({
     mutationFn: (payload: TripUpdateInput) => {
       if (!tripId) {
@@ -722,6 +744,31 @@ const TripDetailPage = () => {
 
   return (
     <div className="trip-detail">
+      {trip.archivedAt && (
+        <div className="archive-banner ov-rise ov-rise-1">
+          <div className="archive-banner__body">
+            <span className="archive-banner__eyebrow">Archived</span>
+            <p className="archive-banner__title">
+              This tab is <em>closed.</em>
+            </p>
+            <p className="archive-banner__hint">
+              You're viewing it read-style; everything still works. Unarchive
+              to bring it back to your active list.
+            </p>
+          </div>
+          {canManageMembers && (
+            <button
+              type="button"
+              className="archive-banner__action"
+              disabled={unarchiveTripMutation.isPending}
+              onClick={() => unarchiveTripMutation.mutate()}
+            >
+              {unarchiveTripMutation.isPending ? "Reopening…" : "Unarchive ↻"}
+            </button>
+          )}
+        </div>
+      )}
+
       <section className="card" style={{ marginBottom: "1rem" }}>
         <div
           style={{
@@ -738,10 +785,24 @@ const TripDetailPage = () => {
               {trip.endDate ? ` → ${trip.endDate}` : ""}
             </p>
           </div>
-          <div style={{ display: "flex", gap: "0.5rem" }}>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             {canManageMembers && !isEditingDetails && (
               <button type="button" className="secondary" onClick={handleStartEditingDetails}>
                 Edit details
+              </button>
+            )}
+            {canManageMembers && !isEditingDetails && !trip.archivedAt && (
+              <button
+                type="button"
+                className="secondary"
+                title="Archive this trip — it'll move out of your active tabs but stays viewable."
+                disabled={archiveTripMutation.isPending}
+                onClick={() => {
+                  if (!window.confirm(`Archive “${trip.name}”? It'll move to the Archived list. You can unarchive it any time.`)) return;
+                  archiveTripMutation.mutate();
+                }}
+              >
+                {archiveTripMutation.isPending ? "Archiving…" : "Archive"}
               </button>
             )}
             <button

@@ -20,6 +20,8 @@ export interface Trip {
   createdAt: string;
   updatedAt: string;
   currency: string;
+  archivedAt?: string;
+  archivedBy?: string;
 }
 
 export interface TripMember {
