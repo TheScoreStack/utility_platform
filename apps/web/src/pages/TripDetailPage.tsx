@@ -3339,6 +3339,30 @@ const ActivityTab = ({
   );
 };
 
+// Click-to-copy chip used in PeopleTab member rows
+const PplPayChip = ({ method, value }: { method: string; value: string }) => {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className={`ppl-method-chip ${copied ? "ppl-method-chip--copied" : ""}`}
+      title={`Copy ${value}`}
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        } catch {
+          /* clipboard write blocked — non-fatal */
+        }
+      }}
+    >
+      <span className="ppl-method-chip__key">{method}</span>
+      <span>{copied ? "✓ copied" : value}</span>
+    </button>
+  );
+};
+
 interface PeopleTabProps {
   members: TripSummary["members"];
   memberSearchTerm: string;
@@ -3408,201 +3432,293 @@ const PeopleTab = ({
   };
 
   return (
-    <div className="grid-two">
-      <section className="card">
-        <div className="section-title">
-          <h2>People</h2>
-        </div>
-        <div className="list">
-          <div className="input-group">
-            <label htmlFor="member-search">Find people</label>
-            <input
-              id="member-search"
-              value={memberSearchTerm}
-              onChange={(event) => onMemberSearchTermChange(event.target.value)}
-              placeholder="Search by name or email"
-            />
+    <div className="ppl-page">
+      <header className="ppl-head ov-rise ov-rise-1">
+        <span className="ppl-head__eyebrow">Guestbook</span>
+        <h2 className="ppl-head__title">
+          Who's <em>on the tab.</em>
+        </h2>
+        <p className="ppl-head__sub">
+          Everyone here can be paid through this group's settlements.
+        </p>
+        <div className="ppl-head__rule" aria-hidden="true" />
+      </header>
+
+      <div className="ppl-grid">
+        {/* MAIN — members list */}
+        <section className="ppl-members ov-rise ov-rise-2">
+          <div className="ppl-section-head">
+            <h3 className="ppl-section-head__title">Members</h3>
+            <span className="ppl-section-head__count">
+              {members.length} {members.length === 1 ? "person" : "people"}
+            </span>
           </div>
-          {searchMessage && <p className="muted">{searchMessage}</p>}
-          {feedbackMessage && (
-            <p
-              style={{
-                color: /fail|cannot|error/i.test(feedbackMessage)
-                  ? "#f87171"
-                  : "#4ade80"
-              }}
-            >
-              {feedbackMessage}
-            </p>
-          )}
-          {searchResults.length > 0 && (
-            <div className="list">
-              {searchResults.map((user) => {
-                const alreadyMember = members.some((member) => member.memberId === user.userId);
-                const label = `${user.displayName ?? user.email ?? user.userId}${user.userId === currentUserId ? " (you)" : ""}`;
+
+          {members.length === 0 ? (
+            <div className="empty-state">
+              <p className="empty-state__title">Nobody yet.</p>
+              <p className="empty-state__hint">
+                Search for people on the right to bring them in.
+              </p>
+            </div>
+          ) : (
+            <div className="ppl-member-list">
+              {members.map((member) => {
+                const canRemove =
+                  canManageMembers && member.memberId !== ownerId;
+                const isSelf = member.memberId === currentUserId;
+                const isOwner = member.memberId === ownerId;
+                const label =
+                  membersById[member.memberId] ??
+                  member.displayName ??
+                  member.email ??
+                  member.memberId;
+                const methods = paymentMethodsByMember[member.memberId];
+                const methodEntries = methods
+                  ? (Object.entries(methods).filter(
+                      ([, value]) => typeof value === "string" && value.trim()
+                    ) as Array<[string, string]>)
+                  : [];
+
                 return (
-                  <div
-                    key={user.userId}
-                    className="card"
-                    style={{ padding: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  <article
+                    key={member.memberId}
+                    className={`ppl-member ${isSelf ? "ppl-member--self" : ""}`}
                   >
-                    <div>
-                      <strong>{label}</strong>
-                      {user.email && (
-                        <p className="muted" style={{ margin: "0.2rem 0 0" }}>
-                          {user.email}
+                    <OvAvatar
+                      name={label}
+                      memberId={member.memberId}
+                      isSelf={isSelf}
+                    />
+
+                    <div className="ppl-member__body">
+                      <div className="ppl-member__id">
+                        <h4 className="ppl-member__name">
+                          {label}
+                          {isSelf && <em className="ppl-member__self">· you</em>}
+                        </h4>
+                        <div className="ppl-member__tags">
+                          {isOwner && (
+                            <span className="ppl-member__tag ppl-member__tag--owner">
+                              Owner
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      {member.email && (
+                        <p className="ppl-member__email">{member.email}</p>
+                      )}
+                      {methodEntries.length > 0 ? (
+                        <div className="ppl-member__methods">
+                          {methodEntries.map(([method, value]) => (
+                            <PplPayChip
+                              key={method}
+                              method={method}
+                              value={value}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="ppl-member__no-methods">
+                          No payment methods on file.
                         </p>
                       )}
                     </div>
-                    <button
-                      className="secondary"
-                      disabled={addLoading || alreadyMember}
-                      onClick={() => onAddMember(user.userId)}
-                    >
-                      {alreadyMember ? "Already added" : "Add"}
-                    </button>
-                  </div>
+
+                    {canRemove && (
+                      <button
+                        type="button"
+                        className="ppl-member__remove"
+                        disabled={
+                          removeLoading && removingMemberId === member.memberId
+                        }
+                        onClick={() => {
+                          if (!window.confirm(`Remove ${label} from this trip?`)) {
+                            return;
+                          }
+                          onRemoveMember(member.memberId).catch(() => {});
+                        }}
+                      >
+                        {removeLoading && removingMemberId === member.memberId
+                          ? "removing…"
+                          : "remove"}
+                      </button>
+                    )}
+                  </article>
                 );
               })}
             </div>
           )}
+        </section>
 
-          <div className="card" style={{ padding: "0.75rem", gap: "0.6rem", display: "flex", flexDirection: "column" }}>
-            <div className="section-title" style={{ marginBottom: 0 }}>
-              <h3 style={{ margin: 0 }}>Payment methods</h3>
-              <span className="muted">Visible to this group</span>
-            </div>
-            <p className="muted" style={{ margin: 0 }}>
-              You can only edit your own payment methods. Others will see them when recording a settlement to you.
+        {/* RAIL — search + payment methods */}
+        <aside className="ppl-rail">
+          <section className="ppl-panel ov-rise ov-rise-2">
+            <h3 className="ppl-panel__title">
+              Bring <em>someone in.</em>
+            </h3>
+            <p className="ppl-panel__sub">
+              Search by email — they'll show up in the group with their saved
+              payment methods.
             </p>
+
+            <div className="ppl-search">
+              <input
+                id="member-search"
+                className="ppl-search__input"
+                value={memberSearchTerm}
+                onChange={(event) => onMemberSearchTermChange(event.target.value)}
+                placeholder="Search by name or email"
+              />
+            </div>
+
+            {searchMessage && (
+              <p className="ppl-msg ppl-msg--muted">{searchMessage}</p>
+            )}
+            {feedbackMessage && (
+              <p
+                className={`ppl-msg ${
+                  /fail|cannot|error/i.test(feedbackMessage)
+                    ? "ppl-msg--error"
+                    : "ppl-msg--ok"
+                }`}
+              >
+                {feedbackMessage}
+              </p>
+            )}
+
+            {searchResults.length > 0 && (
+              <div className="ppl-search-results">
+                {searchResults.map((user) => {
+                  const alreadyMember = members.some(
+                    (member) => member.memberId === user.userId
+                  );
+                  const name =
+                    user.displayName ?? user.email ?? user.userId;
+                  return (
+                    <div key={user.userId} className="ppl-search-result">
+                      <OvAvatar
+                        name={name}
+                        memberId={user.userId}
+                        size="sm"
+                        isSelf={user.userId === currentUserId}
+                      />
+                      <div className="ppl-search-result__body">
+                        <span className="ppl-search-result__name">
+                          {name}
+                          {user.userId === currentUserId && (
+                            <em
+                              style={{
+                                color: "#94a3b8",
+                                fontWeight: 400,
+                                marginLeft: "0.35rem"
+                              }}
+                            >
+                              · you
+                            </em>
+                          )}
+                        </span>
+                        {user.email && (
+                          <span className="ppl-search-result__email">
+                            {user.email}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="ppl-search-result__add"
+                        disabled={addLoading || alreadyMember}
+                        onClick={() => onAddMember(user.userId)}
+                      >
+                        {alreadyMember ? "✓ in" : "Add"}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section className="ppl-panel ov-rise ov-rise-3">
+            <h3 className="ppl-panel__title">
+              How to <em>pay you.</em>
+            </h3>
+            <p className="ppl-panel__sub">
+              Group members will see these when they record a settlement to you.
+            </p>
+
             {!editableMemberId ? (
-              <p className="muted" style={{ margin: 0 }}>Join the trip to add your payment methods.</p>
+              <div className="empty-state" style={{ padding: "1.2rem" }}>
+                <p
+                  className="empty-state__hint"
+                  style={{ marginTop: 0, fontStyle: "italic" }}
+                >
+                  Join the trip first to add your handles.
+                </p>
+              </div>
             ) : (
-              <>
-                <div className="input-group">
-                  <label>Venmo</label>
-                  <input
-                    value={methodDraft.venmo ?? ""}
-                    onChange={(event) =>
-                      setMethodDraft((current) => ({ ...current, venmo: event.target.value }))
-                    }
-                    placeholder="@username"
-                  />
-                </div>
-                <div className="input-group">
-                  <label>PayPal</label>
-                  <input
-                    value={methodDraft.paypal ?? ""}
-                    onChange={(event) =>
-                      setMethodDraft((current) => ({ ...current, paypal: event.target.value }))
-                    }
-                    placeholder="email@example.com"
-                  />
-                </div>
-                <div className="input-group">
-                  <label>Zelle</label>
-                  <input
-                    value={methodDraft.zelle ?? ""}
-                    onChange={(event) =>
-                      setMethodDraft((current) => ({ ...current, zelle: event.target.value }))
-                    }
-                    placeholder="phone or email"
-                  />
-                </div>
+              <div className="ppl-methods">
+                {(
+                  [
+                    { key: "venmo", label: "Venmo", letter: "V", placeholder: "@hunter" },
+                    { key: "paypal", label: "PayPal", letter: "P", placeholder: "you@mail.com" },
+                    { key: "zelle", label: "Zelle", letter: "Z", placeholder: "phone or email" }
+                  ] as const
+                ).map(({ key, label, letter, placeholder }) => (
+                  <div key={key} className="ppl-method-field">
+                    <span className={`ppl-method-field__letter ppl-method-field__letter--${key}`}>
+                      {letter}
+                    </span>
+                    <div className="ppl-method-field__body">
+                      <label
+                        className="ppl-method-field__label"
+                        htmlFor={`method-${key}`}
+                      >
+                        {label}
+                      </label>
+                      <input
+                        id={`method-${key}`}
+                        className="ppl-method-field__input"
+                        value={methodDraft[key] ?? ""}
+                        onChange={(event) =>
+                          setMethodDraft((current) => ({
+                            ...current,
+                            [key]: event.target.value
+                          }))
+                        }
+                        placeholder={placeholder}
+                      />
+                    </div>
+                  </div>
+                ))}
+
                 {paymentMethodsMessage && (
                   <p
-                    style={{
-                      margin: 0,
-                      color: /fail|cannot|error|unable|invalid/i.test(paymentMethodsMessage)
-                        ? "#f87171"
-                        : "#4ade80"
-                    }}
+                    className={`ppl-msg ${
+                      /fail|cannot|error|unable|invalid/i.test(
+                        paymentMethodsMessage
+                      )
+                        ? "ppl-msg--error"
+                        : "ppl-msg--ok"
+                    }`}
                   >
                     {paymentMethodsMessage}
                   </p>
                 )}
+
                 <button
                   type="button"
-                  className="secondary"
+                  className="primary ppl-save"
                   onClick={handleSave}
                   disabled={savingPaymentMethods}
                 >
                   {savingPaymentMethods ? "Saving…" : "Save your methods"}
                 </button>
-              </>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="card">
-        <div className="section-title">
-          <h2>Trip Members</h2>
-          <span className="muted">{members.length}</span>
-        </div>
-        <div className="list">
-          {members.map((member) => {
-            const canRemove =
-              canManageMembers && member.memberId !== ownerId;
-            const label = membersById[member.memberId] ?? member.displayName ?? member.email ?? member.memberId;
-            const methods = paymentMethodsByMember[member.memberId];
-            const hasMethods = Boolean(
-              methods && Object.values(methods).some((value) => typeof value === "string" && value.trim())
-            );
-            return (
-              <div
-                key={member.memberId}
-                className="card"
-                style={{
-                  padding: "0.75rem 1rem",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: "1rem"
-                }}
-              >
-                <div style={{ flex: 1 }}>
-                  <strong>{label}</strong>
-                  {member.email && (
-                    <p className="muted" style={{ margin: "0.2rem 0 0" }}>
-                      {member.email}
-                    </p>
-                  )}
-                  {hasMethods && methods && (
-                    <p className="muted" style={{ margin: "0.4rem 0 0", fontSize: "0.85rem" }}>
-                      {methods.venmo && <span>Venmo: {methods.venmo} </span>}
-                      {methods.paypal && <span>PayPal: {methods.paypal} </span>}
-                      {methods.zelle && <span>Zelle: {methods.zelle}</span>}
-                    </p>
-                  )}
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                  {canRemove && (
-                    <button
-                      className="secondary"
-                      disabled={
-                        removeLoading && removingMemberId === member.memberId
-                      }
-                      onClick={() => {
-                        if (
-                          !window.confirm(
-                            `Remove ${label} from this trip?`
-                          )
-                        ) {
-                          return;
-                        }
-                        onRemoveMember(member.memberId).catch(() => {});
-                      }}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
               </div>
-            );
-          })}
-        </div>
-      </section>
+            )}
+          </section>
+        </aside>
+      </div>
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError, searchUsers as searchUsersRequest } from "../lib/api";
 import type { Trip, TripListResponse, UserProfile } from "../types";
+import { getInitials, seedAvatar } from "../lib/avatarPalette";
 
 interface FormState {
   name: string;
@@ -29,6 +30,56 @@ const formatCurrencyValue = (value: number, currency: string) =>
     maximumFractionDigits: 2
   }).format(value);
 
+const formatStamp = (startDate?: string, endDate?: string): string | null => {
+  const fmt = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric"
+      })
+        .format(d)
+        .toUpperCase();
+    } catch {
+      return iso;
+    }
+  };
+  if (!startDate && !endDate) return null;
+  if (startDate && endDate && startDate !== endDate) {
+    return `${fmt(startDate)} – ${fmt(endDate)}`;
+  }
+  return fmt(startDate ?? endDate!);
+};
+
+const formatRange = (startDate?: string, endDate?: string): string => {
+  if (!startDate && !endDate) return "Flexible dates";
+  const fmt = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "long",
+        day: "numeric",
+        year:
+          d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined
+      }).format(d);
+    } catch {
+      return iso;
+    }
+  };
+  if (startDate && endDate && startDate !== endDate) {
+    return `${fmt(startDate)} → ${fmt(endDate)}`;
+  }
+  return fmt(startDate ?? endDate!);
+};
+
+const tripTone = (trip: TripWithStatus): "owe" | "owed" | "neutral" => {
+  if ((trip.outstandingBalance ?? 0) > 0) return "owe";
+  if ((trip.owedToYou ?? 0) > 0) return "owed";
+  return "neutral";
+};
+
 const TripListPage = () => {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
@@ -44,15 +95,22 @@ const TripListPage = () => {
     queryFn: () => api.get<TripListResponse>("/trips")
   });
 
-  const trips = useMemo<TripWithStatus[]>(() => (data?.trips ?? []) as TripWithStatus[], [data]);
-  const outstandingTripCount = useMemo(
-    () => trips.filter((trip) => (trip.outstandingBalance ?? 0) > 0).length,
-    [trips]
+  const trips = useMemo<TripWithStatus[]>(
+    () => (data?.trips ?? []) as TripWithStatus[],
+    [data]
   );
-  const pendingTripCount = useMemo(
-    () => trips.filter((trip) => trip.hasPendingActions).length,
-    [trips]
-  );
+
+  const stats = useMemo(() => {
+    let outstanding = 0;
+    let owedBack = 0;
+    let pending = 0;
+    trips.forEach((trip) => {
+      if ((trip.outstandingBalance ?? 0) > 0) outstanding += 1;
+      if ((trip.owedToYou ?? 0) > 0) owedBack += 1;
+      if (trip.hasPendingActions) pending += 1;
+    });
+    return { outstanding, owedBack, pending };
+  }, [trips]);
 
   const createMutation = useMutation({
     mutationFn: (payload: unknown) => api.post<Trip>("/trips", payload),
@@ -75,10 +133,10 @@ const TripListPage = () => {
 
   const searchMutation = useMutation({
     mutationFn: (query: string) => searchUsersRequest(query),
-    onSuccess: (data) => {
-      setSearchResults(data.users);
+    onSuccess: (response) => {
+      setSearchResults(response.users);
       setSearchMessage(
-        data.users.length ? null : "No people found with that email prefix"
+        response.users.length ? null : "No people found with that email prefix"
       );
     },
     onError: (err: unknown) => {
@@ -126,196 +184,367 @@ const TripListPage = () => {
   };
 
   const removeSelectedMember = (userId: string) => {
-    setSelectedMembers((prev) => prev.filter((member) => member.userId !== userId));
+    setSelectedMembers((prev) =>
+      prev.filter((member) => member.userId !== userId)
+    );
   };
 
   return (
-    <div className="grid-two">
-      <section className="card">
-        <div className="section-title">
-          <h2>Your Groups</h2>
-          <span className="muted">{trips.length} active</span>
-        </div>
+    <div className="tl-page">
+      {/* HERO */}
+      <section className="tl-hero ov-rise ov-rise-1">
+        <span className="tl-hero__eyebrow">
+          Ledger · {trips.length} {trips.length === 1 ? "active" : "active"}
+        </span>
+        <h1 className="tl-hero__title">
+          Your tabs, <em>kept open.</em>
+        </h1>
+        <p className="tl-hero__sub">
+          {trips.length === 0
+            ? "Nothing on the books yet — start a tab on the right."
+            : stats.outstanding + stats.owedBack + stats.pending === 0
+              ? "Everything's squared up. A rare moment."
+              : "A small running record of who's owed what, and who paid last."}
+        </p>
+        <div className="tl-hero__rule" aria-hidden="true" />
+
         {trips.length > 0 && (
-          <p className="muted" style={{ marginTop: "0.5rem" }}>
-            {outstandingTripCount > 0
-              ? `You have outstanding payments on ${outstandingTripCount} ${outstandingTripCount === 1 ? "group" : "groups"}.`
-              : "No outstanding payments right now."}
-            {pendingTripCount > 0 && (
-              <>
-                {" "}
-                {pendingTripCount} {pendingTripCount === 1 ? "group has" : "groups have"} pending confirmations.
-              </>
-            )}
-          </p>
-        )}
-        {isLoading ? (
-          <div className="list">
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="card" style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
-                <span className="skel skel--title" style={{ width: `${140 + (i * 23) % 100}px` }}>&nbsp;</span>
-                <span className="skel skel--text" style={{ width: "180px" }}>&nbsp;</span>
-                <span className="skel skel--text" style={{ width: "240px" }}>&nbsp;</span>
-              </div>
-            ))}
-          </div>
-        ) : trips.length === 0 ? (
-          <div className="empty-state">
-            <p className="empty-state__title">No groups yet.</p>
-            <p className="empty-state__hint">
-              Start one above — name it after a trip, a dinner, or any shared bill — and invite people from the People tab.
-            </p>
-          </div>
-        ) : (
-          <div className="list">
-            {trips.map((trip) => (
-              <Link
-                key={trip.tripId}
-                to={`/group-expenses/trips/${trip.tripId}`}
-                className="card"
-                style={{ textDecoration: "none" }}
-              >
-                <h3 style={{ marginTop: 0 }}>{trip.name}</h3>
-                <p className="muted" style={{ margin: "0.25rem 0" }}>
-                  {trip.startDate ? `${trip.startDate}` : "Flexible dates"}
-                  {trip.endDate ? ` → ${trip.endDate}` : ""}
-                </p>
-                {typeof trip.outstandingBalance === "number" && trip.outstandingBalance > 0 && (
-                  <div className="pill" style={{ background: "#FEF3C7", color: "#92400E" }}>
-                    You owe • {formatCurrencyValue(trip.outstandingBalance, trip.currency)}
-                  </div>
-                )}
-                {!trip.outstandingBalance &&
-                  typeof trip.owedToYou === "number" &&
-                  trip.owedToYou > 0 && (
-                    <div className="pill" style={{ background: "#DCFCE7", color: "#166534" }}>
-                      You're owed • {formatCurrencyValue(trip.owedToYou, trip.currency)}
-                    </div>
-                  )}
-                {trip.hasPendingActions && (
-                  <div className="pill" style={{ background: "#E0E7FF", color: "#312E81" }}>
-                    Pending confirmations
-                  </div>
-                )}
-              </Link>
-            ))}
+          <div className="tl-hero__stamps">
+            <div className="tl-hero__stamp tl-hero__stamp--owe">
+              <span className="tl-hero__stamp-num">{stats.outstanding}</span>
+              <span className="tl-hero__stamp-label">You owe in</span>
+            </div>
+            <div className="tl-hero__stamp tl-hero__stamp--owed">
+              <span className="tl-hero__stamp-num">{stats.owedBack}</span>
+              <span className="tl-hero__stamp-label">Owed back in</span>
+            </div>
+            <div className="tl-hero__stamp tl-hero__stamp--pending">
+              <span className="tl-hero__stamp-num">{stats.pending}</span>
+              <span className="tl-hero__stamp-label">With pending</span>
+            </div>
           </div>
         )}
+
+        <span className="tl-hero__folio" aria-hidden="true">
+          No.&nbsp;{trips.length}
+        </span>
       </section>
 
-      <section className="card">
-        <div className="section-title">
-          <h2>Create Group</h2>
-        </div>
-        <form onSubmit={handleSubmit} className="list">
-          <div className="input-group">
-            <label htmlFor="trip-name">Group name</label>
-            <input
-              id="trip-name"
-              value={form.name}
-              onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))}
-              placeholder="Nashville Tour 2024"
-            />
+      <div className="tl-grid">
+        {/* MAIN — trips list */}
+        <section className="tl-main ov-rise ov-rise-2">
+          <div className="tl-section-head">
+            <h2 className="tl-section-head__title">Trips</h2>
+            <span className="tl-section-head__count">
+              {trips.length} {trips.length === 1 ? "entry" : "entries"}
+            </span>
           </div>
 
-          <div className="input-group">
-            <label>Dates (optional)</label>
-            <div className="input-row">
-              <input
-                type="date"
-                value={form.startDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, startDate: event.target.value }))}
-              />
-              <input
-                type="date"
-                value={form.endDate}
-                onChange={(event) => setForm((prev) => ({ ...prev, endDate: event.target.value }))}
-              />
-            </div>
-          </div>
-
-          <div className="input-group">
-            <label>Invite people (optional)</label>
-            <div className="input-row">
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="Search by email"
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    runSearch();
-                  }
-                }}
-              />
-              <button type="button" className="secondary" disabled={searchMutation.isPending} onClick={runSearch}>
-                {searchMutation.isPending ? "Searching…" : "Search"}
-              </button>
-            </div>
-            {searchMessage && <p className="muted">{searchMessage}</p>}
-            {searchResults.length > 0 && (
-              <div className="list">
-                {searchResults.map((user) => (
-                  <div key={user.userId} className="card" style={{ padding: "0.75rem" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div>
-                        <strong>{user.displayName ?? user.email ?? "Unnamed"}</strong>
-                        {user.email && (
-                          <p className="muted" style={{ margin: "0.2rem 0 0" }}>
-                            {user.email}
-                          </p>
-                        )}
-                      </div>
-                      <button
-                        type="button"
-                        className="secondary"
-                        onClick={() => addSelectedMember(user)}
-                        disabled={selectedMembers.some((member) => member.userId === user.userId)}
-                      >
-                        {selectedMembers.some((member) => member.userId === user.userId)
-                          ? "Added"
-                          : "Add"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {selectedMembers.length > 0 && (
-              <div className="list">
-                <p className="muted" style={{ marginBottom: 0 }}>
-                  Selected people
-                </p>
-                {selectedMembers.map((member) => (
-                  <div
-                    key={member.userId}
-                    className="card"
-                    style={{ padding: "0.75rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+          {isLoading ? (
+            <div className="tl-list">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="tl-card tl-card--skeleton">
+                  <span
+                    className="skel skel--text"
+                    style={{ width: "5rem", height: "0.7rem" }}
                   >
-                    <div>
-                      <strong>{member.displayName ?? member.email ?? member.userId}</strong>
-                      {member.email && (
-                        <p className="muted" style={{ margin: "0.2rem 0 0" }}>
-                          {member.email}
-                        </p>
+                    &nbsp;
+                  </span>
+                  <span
+                    className="skel skel--title"
+                    style={{ width: `${50 + ((i * 17) % 30)}%` }}
+                  >
+                    &nbsp;
+                  </span>
+                  <span className="skel skel--text" style={{ width: "10rem" }}>
+                    &nbsp;
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : trips.length === 0 ? (
+            <div className="empty-state">
+              <p className="empty-state__title">No trips yet.</p>
+              <p className="empty-state__hint">
+                Open a new tab on the right — name it after a trip, a dinner,
+                or any shared bill.
+              </p>
+            </div>
+          ) : (
+            <div className="tl-list">
+              {trips.map((trip, idx) => {
+                const tone = tripTone(trip);
+                const stamp = formatStamp(trip.startDate, trip.endDate);
+                const range = formatRange(trip.startDate, trip.endDate);
+                return (
+                  <Link
+                    key={trip.tripId}
+                    to={`/group-expenses/trips/${trip.tripId}`}
+                    className={`tl-card tl-card--${tone}`}
+                    style={{ animationDelay: `${0.08 * idx}s` }}
+                  >
+                    <div className="tl-card__top">
+                      <span className="tl-card__stamp">
+                        {stamp ?? "OPEN TAB"}
+                      </span>
+                      {trip.hasPendingActions && (
+                        <span
+                          className="tl-card__pill tl-card__pill--pending"
+                          title="Pending confirmations"
+                        >
+                          <span
+                            className="tl-card__pill-dot"
+                            aria-hidden="true"
+                          />
+                          Pending
+                        </span>
                       )}
                     </div>
-                    <button type="button" className="secondary" onClick={() => removeSelectedMember(member.userId)}>
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+
+                    <h3 className="tl-card__title">{trip.name}</h3>
+                    <p className="tl-card__meta">{range}</p>
+
+                    <div className="tl-card__foot">
+                      <div className="tl-card__pills">
+                        {tone === "owe" &&
+                          typeof trip.outstandingBalance === "number" && (
+                            <span className="tl-card__pill tl-card__pill--owe">
+                              You owe&nbsp;
+                              <strong>
+                                {formatCurrencyValue(
+                                  trip.outstandingBalance,
+                                  trip.currency
+                                )}
+                              </strong>
+                            </span>
+                          )}
+                        {tone === "owed" &&
+                          typeof trip.owedToYou === "number" && (
+                            <span className="tl-card__pill tl-card__pill--owed">
+                              You're owed&nbsp;
+                              <strong>
+                                {formatCurrencyValue(
+                                  trip.owedToYou,
+                                  trip.currency
+                                )}
+                              </strong>
+                            </span>
+                          )}
+                        {tone === "neutral" && (
+                          <span className="tl-card__pill tl-card__pill--neutral">
+                            All squared up
+                          </span>
+                        )}
+                      </div>
+                      <span className="tl-card__open">Open →</span>
+                    </div>
+
+                    <span className="tl-card__stripe" aria-hidden="true" />
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        {/* ASIDE — create */}
+        <aside className="tl-aside ov-rise ov-rise-3">
+          <div className="tl-aside__head">
+            <h2 className="tl-aside__title">
+              Start a <em>new tab.</em>
+            </h2>
+            <p className="tl-aside__sub">
+              Name it. Date it (or not). Invite the people who were there.
+            </p>
           </div>
 
-          {error && <p style={{ color: "#fda4af" }}>{error}</p>}
+          <form onSubmit={handleSubmit} className="tl-form">
+            <div className="input-group">
+              <label htmlFor="trip-name">Name</label>
+              <input
+                id="trip-name"
+                value={form.name}
+                onChange={(event) =>
+                  setForm((prev) => ({ ...prev, name: event.target.value }))
+                }
+                placeholder="Nashville Tour 2024"
+              />
+            </div>
 
-          <button type="submit" className="primary" disabled={createMutation.isPending}>
-            {createMutation.isPending ? "Creating…" : "Create group"}
-          </button>
-        </form>
-      </section>
+            <div className="input-group">
+              <label>
+                Dates{" "}
+                <span
+                  className="muted"
+                  style={{ fontSize: "0.8rem", fontWeight: 400 }}
+                >
+                  · optional
+                </span>
+              </label>
+              <div className="input-row">
+                <input
+                  type="date"
+                  value={form.startDate}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      startDate: event.target.value
+                    }))
+                  }
+                />
+                <input
+                  type="date"
+                  value={form.endDate}
+                  onChange={(event) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      endDate: event.target.value
+                    }))
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="tl-divider" aria-hidden="true" />
+
+            <div className="input-group">
+              <label>
+                Invite people
+                <span
+                  className="muted"
+                  style={{ fontSize: "0.8rem", fontWeight: 400 }}
+                >
+                  {" "}
+                  · optional
+                </span>
+              </label>
+              <div className="input-row">
+                <input
+                  value={searchTerm}
+                  onChange={(event) => setSearchTerm(event.target.value)}
+                  placeholder="Search by email"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      runSearch();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="secondary"
+                  disabled={searchMutation.isPending}
+                  onClick={runSearch}
+                >
+                  {searchMutation.isPending ? "Searching…" : "Search"}
+                </button>
+              </div>
+
+              {searchMessage && (
+                <p className="tl-form__msg muted">{searchMessage}</p>
+              )}
+
+              {searchResults.length > 0 && (
+                <div className="tl-search-results">
+                  {searchResults.map((user) => {
+                    const name = user.displayName ?? user.email ?? "Unnamed";
+                    const palette = seedAvatar(user.userId);
+                    const added = selectedMembers.some(
+                      (member) => member.userId === user.userId
+                    );
+                    return (
+                      <div key={user.userId} className="tl-search-result">
+                        <div
+                          className="tl-search-result__avatar"
+                          style={{
+                            background: palette.bg,
+                            color: palette.fg
+                          }}
+                          aria-hidden="true"
+                        >
+                          {getInitials(name)}
+                        </div>
+                        <div className="tl-search-result__body">
+                          <span className="tl-search-result__name">{name}</span>
+                          {user.email && (
+                            <span className="tl-search-result__email">
+                              {user.email}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="tl-search-result__add"
+                          onClick={() => addSelectedMember(user)}
+                          disabled={added}
+                        >
+                          {added ? "✓ added" : "Add"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {selectedMembers.length > 0 && (
+                <>
+                  <p className="tl-chips__label">
+                    Bringing along ({selectedMembers.length})
+                  </p>
+                  <div className="tl-chips">
+                    {selectedMembers.map((member) => {
+                      const name =
+                        member.displayName ??
+                        member.email ??
+                        member.userId;
+                      const palette = seedAvatar(member.userId);
+                      return (
+                        <span
+                          key={member.userId}
+                          className="tl-chip"
+                          title={member.email ?? undefined}
+                        >
+                          <span
+                            className="tl-chip__avatar"
+                            style={{
+                              background: palette.bg,
+                              color: palette.fg
+                            }}
+                            aria-hidden="true"
+                          >
+                            {getInitials(name)}
+                          </span>
+                          <span className="tl-chip__name">{name}</span>
+                          <button
+                            type="button"
+                            className="tl-chip__remove"
+                            onClick={() =>
+                              removeSelectedMember(member.userId)
+                            }
+                            aria-label={`Remove ${name}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {error && <p className="tl-form__error">{error}</p>}
+
+            <button
+              type="submit"
+              className="primary tl-form__submit"
+              disabled={createMutation.isPending}
+            >
+              {createMutation.isPending ? "Opening tab…" : "Open this tab →"}
+            </button>
+          </form>
+        </aside>
+      </div>
     </div>
   );
 };

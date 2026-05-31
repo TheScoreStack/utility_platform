@@ -21,6 +21,7 @@ import StackTimePage from "./pages/StackTimePage";
 import ProfilePage from "./pages/ProfilePage";
 import { useHarmonyLedgerAccess } from "./modules/useHarmonyLedgerAccess";
 import { useStackTimeAccess } from "./modules/useStackTimeAccess";
+import { getInitials, seedAvatar } from "./lib/avatarPalette";
 
 const queryClient = new QueryClient();
 const GroupExpensesModule = () => <Outlet />;
@@ -65,53 +66,106 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
     user?.signInDetails?.loginId ||
     user?.username;
 
+  const firstName = user?.attributes?.given_name;
+  const emailSeed =
+    user?.attributes?.email ||
+    user?.signInDetails?.loginId ||
+    displayName ||
+    "anon";
+  const avatarPalette = seedAvatar(emailSeed);
+  const avatarInitials = getInitials(displayName ?? firstName ?? "?");
+  const greeting = useMemo(() => {
+    const h = new Date().getHours();
+    if (h < 5) return "Up late";
+    if (h < 12) return "Good morning";
+    if (h < 17) return "Good afternoon";
+    if (h < 21) return "Good evening";
+    return "Late hours";
+  }, []);
+
   return (
     <BrowserRouter>
       <main className="app-container">
-        <header className="app-header">
-          <div style={{ flex: 1 }}>
-            <h1>The Stack Core</h1>
-            <p>Hi {displayName}</p>
-            <nav className="module-nav">
+        <header className="shell-header">
+          <div className="shell-header__lockup">
+            <NavLink to="/" className="shell-wordmark-link" aria-label="The Stack Core — home">
+              <span className="shell-wordmark">
+                <span className="shell-wordmark__the">The</span>
+                <span className="shell-wordmark__stack">Stack</span>
+                <span className="shell-wordmark__core">Core</span>
+              </span>
+            </NavLink>
+            {displayName && (
+              <p className="shell-greeting">
+                {greeting},{" "}
+                <span className="shell-greeting__name">{firstName ?? displayName}</span>.
+              </p>
+            )}
+          </div>
+
+          <div className="shell-actions">
+            <NavLink
+              to="/profile"
+              className={({ isActive }) =>
+                isActive ? "shell-user shell-user--active" : "shell-user"
+              }
+            >
+              <span
+                className="shell-user__avatar"
+                style={{ background: avatarPalette.bg, color: avatarPalette.fg }}
+                aria-hidden="true"
+              >
+                {avatarInitials}
+              </span>
+              {displayName && (
+                <span className="shell-user__name">{firstName ?? displayName}</span>
+              )}
+            </NavLink>
+            <button
+              type="button"
+              className="shell-signout"
+              onClick={() => signOut?.()}
+            >
+              Sign out
+            </button>
+          </div>
+
+          <nav className="shell-nav" aria-label="Tools">
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                isActive ? "shell-nav__link shell-nav__link--active" : "shell-nav__link"
+              }
+            >
+              All tools
+            </NavLink>
+            {availableModules.map((module) => (
               <NavLink
-                to="/"
+                key={module.id}
+                to={module.path}
                 className={({ isActive }) =>
-                  isActive ? "module-link active" : "module-link"
+                  isActive ? "shell-nav__link shell-nav__link--active" : "shell-nav__link"
                 }
               >
-                All tools
+                {module.name}
               </NavLink>
-              {availableModules.map((module) => (
-                <NavLink
-                  key={module.id}
-                  to={module.path}
-                  className={({ isActive }) =>
-                    isActive ? "module-link active" : "module-link"
-                  }
-                >
-                  {module.name}
-                </NavLink>
-              ))}
-            </nav>
-        </div>
-        <div className="header-actions">
-          <NavLink
-            to="/profile"
-            className={({ isActive }) =>
-              isActive ? "module-link active" : "module-link"
+            ))}
+          </nav>
+        </header>
+
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <ModuleHub
+                modules={availableModules}
+                firstName={firstName ?? displayName}
+              />
             }
-          >
-            Profile
-          </NavLink>
-          <button className="secondary" onClick={() => signOut?.()}>
-            Sign Out
-          </button>
-        </div>
-      </header>
-      <Routes>
-        <Route path="/" element={<ModuleHub modules={availableModules} />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        <Route path="/group-expenses" element={<GroupExpensesModule />}>
+          />
+          <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/group-expenses" element={<GroupExpensesModule />}>
             <Route index element={<Navigate to="trips" replace />} />
             <Route path="trips" element={<TripListPage />} />
             <Route path="trips/:tripId" element={<TripDetailPage />} />
