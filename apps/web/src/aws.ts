@@ -4,7 +4,6 @@ import { appConfig } from "./config";
 Amplify.configure({
   Auth: {
     Cognito: {
-      region: appConfig.region,
       userPoolId: appConfig.userPoolId,
       userPoolClientId: appConfig.userPoolClientId,
       loginWith: {

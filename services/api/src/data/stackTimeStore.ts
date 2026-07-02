@@ -340,7 +340,7 @@ export class StackTimeStore {
     userId: string,
     dateRange?: { startDate?: string; endDate?: string }
   ): Promise<StackTimeEntry[]> {
-    let keyCondition = "PK = :pk AND begins_with(SK, :skPrefix)";
+    const keyCondition = "PK = :pk AND begins_with(SK, :skPrefix)";
     const values: Record<string, unknown> = {
       ":pk": ENTRY_PK(userId),
       ":skPrefix": "STACKTIME#"

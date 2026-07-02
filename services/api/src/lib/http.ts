@@ -47,7 +47,7 @@ export const parseBody = <T = unknown>(
   }
   try {
     return JSON.parse(event.body) as T;
-  } catch (error) {
+  } catch {
     throw new ValidationError("Invalid JSON body");
   }
 };

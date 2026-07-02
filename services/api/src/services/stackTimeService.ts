@@ -545,7 +545,6 @@ export class StackTimeService {
     }
 
     const now = isoNow();
-    const finalDate = newDate ?? date;
 
     // If date is changing, we need to delete and recreate (date is part of SK)
     if (newDate && newDate !== date) {
