@@ -3,7 +3,8 @@ import { api } from "../lib/api";
 import { EXPENSE_CATEGORIES, resolveExpenseCategory } from "../lib/expenseCategories";
 import { getInitials, seedAvatar } from "../lib/avatarPalette";
 import { CURRENCY_OPTIONS } from "../lib/fx";
-import type { TripMember, Receipt, TextractExtraction } from "../types";
+import { computeItemizedAllocations } from "../lib/itemSplit";
+import type { ExtrasSplitMode, TripMember, Receipt, TextractExtraction } from "../types";
 
 const roundToCents = (value: number): number =>
   Math.round((value + Number.EPSILON) * 100) / 100;
@@ -136,6 +137,14 @@ const readFileAsBase64 = (file: File): Promise<string> =>
     reader.readAsDataURL(file);
   });
 
+export interface ExpenseLineItemInput {
+  description: string;
+  quantity?: number;
+  unitPrice?: number;
+  total: number;
+  assignedMemberIds: string[];
+}
+
 export interface CreateExpenseInput {
   description: string;
   vendor?: string;
@@ -149,7 +158,20 @@ export interface CreateExpenseInput {
   splitEvenly: boolean;
   remainderMemberId?: string;
   allocations?: { memberId: string; amount: number }[];
+  lineItems?: ExpenseLineItemInput[];
+  extrasSplitMode?: ExtrasSplitMode;
   receiptId?: string;
+}
+
+type SplitMode = "even" | "custom" | "items";
+
+interface ItemRow {
+  key: string;
+  description: string;
+  quantity?: number;
+  unitPrice?: number;
+  totalInput: string;
+  assignedMemberIds: string[];
 }
 
 interface AllocationSummaryItem {
@@ -267,9 +289,18 @@ const AddExpenseForm = ({
   const [sharedWith, setSharedWith] = useState<string[]>(
     members.map((member) => member.memberId)
   );
-  const [splitEvenly, setSplitEvenly] = useState(true);
+  const [splitMode, setSplitMode] = useState<SplitMode>("even");
+  const splitEvenly = splitMode === "even";
   const [splitExtrasEvenly, setSplitExtrasEvenly] = useState(false);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
+  const [itemRows, setItemRows] = useState<ItemRow[]>([]);
+  const [extrasSplitMode, setExtrasSplitMode] = useState<ExtrasSplitMode>("proportional");
+  const itemKeyCounter = useRef(0);
+  const nextItemKey = useCallback(() => {
+    itemKeyCounter.current += 1;
+    return `item-${itemKeyCounter.current}`;
+  }, []);
+  const lastAppliedItemsExtractionRef = useRef<string | null>(null);
   const [remainderMemberId, setRemainderMemberId] = useState<string>("");
   const [showRemainderPrompt, setShowRemainderPrompt] = useState(false);
   const [receiptId, setReceiptId] = useState<string>("");
@@ -301,7 +332,8 @@ const AddExpenseForm = ({
     setPaidBy(prefill.paidByMemberId);
     setPayerManuallySelected(true);
     setSharedWith(prefill.sharedWithMemberIds);
-    setSplitEvenly(prefill.splitEvenly);
+    setSplitMode(prefill.splitEvenly ? "even" : "custom");
+    setItemRows([]);
     setAllocations(prefill.allocations ?? {});
     setRemainderMemberId(prefill.remainderMemberId ?? "");
     setReceiptId("");
@@ -322,6 +354,14 @@ const AddExpenseForm = ({
   useEffect(() => {
     const validMemberIds = new Set(members.map((member) => member.memberId));
     setSharedWith((current) => current.filter((memberId) => validMemberIds.has(memberId)));
+    setItemRows((current) =>
+      current.map((row) => ({
+        ...row,
+        assignedMemberIds: row.assignedMemberIds.filter((memberId) =>
+          validMemberIds.has(memberId)
+        )
+      }))
+    );
   }, [members]);
 
   useEffect(() => {
@@ -382,11 +422,46 @@ const AddExpenseForm = ({
     () => roundToCents(taxValue + tipValue),
     [taxValue, tipValue]
   );
+  const itemsSubtotal = useMemo(
+    () =>
+      roundToCents(
+        itemRows.reduce(
+          (sum, row) => sum + parseCurrencyInput(row.totalInput),
+          0
+        )
+      ),
+    [itemRows]
+  );
+  const effectiveSubtotal = splitMode === "items" ? itemsSubtotal : subtotalValue;
   const grossTotal = useMemo(
-    () => roundToCents(subtotalValue + taxValue + tipValue),
-    [subtotalValue, taxValue, tipValue]
+    () => roundToCents(effectiveSubtotal + taxValue + tipValue),
+    [effectiveSubtotal, taxValue, tipValue]
   );
   const hasExtras = extrasTotal > 0.0001;
+
+  const itemizedPreview = useMemo(
+    () =>
+      computeItemizedAllocations({
+        lineItems: itemRows.map((row) => ({
+          total: parseCurrencyInput(row.totalInput),
+          assignedMemberIds: row.assignedMemberIds
+        })),
+        tax: taxValue,
+        tip: tipValue,
+        extrasSplitMode
+      }),
+    [itemRows, taxValue, tipValue, extrasSplitMode]
+  );
+
+  const unassignedItemCount = useMemo(
+    () =>
+      itemRows.filter(
+        (row) =>
+          row.assignedMemberIds.length === 0 &&
+          (parseCurrencyInput(row.totalInput) > 0 || row.description.trim())
+      ).length,
+    [itemRows]
+  );
 
   const sharedMembers = useMemo(
     () => members.filter((member) => sharedWith.includes(member.memberId)),
@@ -547,8 +622,43 @@ const AddExpenseForm = ({
       if (typeof extractedTip === "number") {
         setTipInput(extractedTip.toString());
       }
+
+      // Surface parsed line items as an assignable list. The signature guard
+      // keeps re-runs of this callback (receipt-status effect refiring, query
+      // refetches producing new extraction objects) from wiping out
+      // assignments the user has already made.
+      const usableItems = (lineItems ?? []).filter(
+        (item) => typeof item.total === "number" && item.total > 0
+      );
+      const extractionSignature = JSON.stringify([
+        usableItems,
+        extraction.total,
+        extraction.subtotal,
+        extraction.tax,
+        extraction.tip
+      ]);
+      if (
+        usableItems.length &&
+        lastAppliedItemsExtractionRef.current !== extractionSignature
+      ) {
+        lastAppliedItemsExtractionRef.current = extractionSignature;
+        const defaultAssigned = sharedWith.length
+          ? sharedWith
+          : members.map((member) => member.memberId);
+        setItemRows(
+          usableItems.map((item, index) => ({
+            key: nextItemKey(),
+            description: item.description?.trim() || `Item ${index + 1}`,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            totalInput: (item.total ?? 0).toFixed(2),
+            assignedMemberIds: [...defaultAssigned]
+          }))
+        );
+        setSplitMode("items");
+      }
     },
-    [category]
+    [category, sharedWith, members, nextItemKey]
   );
 
   const loadReceiptPreview = useCallback(
@@ -660,6 +770,56 @@ const AddExpenseForm = ({
     }));
   };
 
+  const handleAddItemRow = () => {
+    setItemRows((current) => [
+      ...current,
+      {
+        key: nextItemKey(),
+        description: "",
+        totalInput: "",
+        assignedMemberIds: members.map((member) => member.memberId)
+      }
+    ]);
+  };
+
+  const handleRemoveItemRow = (key: string) => {
+    setItemRows((current) => current.filter((row) => row.key !== key));
+  };
+
+  const handleItemRowChange = (
+    key: string,
+    updates: Partial<Pick<ItemRow, "description" | "totalInput">>
+  ) => {
+    setItemRows((current) =>
+      current.map((row) => (row.key === key ? { ...row, ...updates } : row))
+    );
+  };
+
+  const toggleItemMember = (key: string, memberId: string) => {
+    setItemRows((current) =>
+      current.map((row) => {
+        if (row.key !== key) return row;
+        const assigned = row.assignedMemberIds.includes(memberId)
+          ? row.assignedMemberIds.filter((id) => id !== memberId)
+          : [...row.assignedMemberIds, memberId];
+        return { ...row, assignedMemberIds: assigned };
+      })
+    );
+  };
+
+  const assignEveryoneToAllItems = () => {
+    const everyone = members.map((member) => member.memberId);
+    setItemRows((current) =>
+      current.map((row) => ({ ...row, assignedMemberIds: [...everyone] }))
+    );
+  };
+
+  const clearAllItemAssignments = () => {
+    setItemRows((current) =>
+      current.map((row) => ({ ...row, assignedMemberIds: [] }))
+    );
+  };
+
   const handleLiveReceiptRequest = () => {
     if (isParsingReceipt) return;
     setParseError(null);
@@ -755,9 +915,12 @@ const AddExpenseForm = ({
     setSubtotalInput("");
     setTaxInput("");
     setTipInput("");
-    setSplitEvenly(true);
+    setSplitMode("even");
     setSplitExtrasEvenly(false);
     setAllocations({});
+    setItemRows([]);
+    setExtrasSplitMode("proportional");
+    lastAppliedItemsExtractionRef.current = null;
     setReceiptId("");
     setReceiptStatusMessage(null);
     setParseStatus(null);
@@ -836,12 +999,16 @@ const AddExpenseForm = ({
       setError("Select who paid for this expense.");
       return;
     }
-    if (sharedWith.length === 0) {
+    if (splitMode !== "items" && sharedWith.length === 0) {
       setError("Select at least one person to share this expense.");
       return;
     }
     if (grossTotal <= 0) {
-      setError("Enter a positive subtotal, tax, or tip before saving.");
+      setError(
+        splitMode === "items"
+          ? "Add at least one line item with an amount before saving."
+          : "Enter a positive subtotal, tax, or tip before saving."
+      );
       return;
     }
     if (splitEvenly && evenSplitRemainderCents > 0 && !remainderMemberId) {
@@ -856,8 +1023,52 @@ const AddExpenseForm = ({
     }
 
     let allocationsPayload: { memberId: string; amount: number }[] = [];
+    let lineItemsPayload: ExpenseLineItemInput[] | undefined;
+    let sharedWithPayload = sharedWith;
 
-    if (splitEvenly) {
+    if (splitMode === "items") {
+      const rows = itemRows.filter(
+        (row) =>
+          row.description.trim() || parseCurrencyInput(row.totalInput) > 0
+      );
+      if (rows.length === 0) {
+        setError("Add at least one line item to split by item.");
+        return;
+      }
+      const missingAmount = rows.find(
+        (row) => parseCurrencyInput(row.totalInput) <= 0
+      );
+      if (missingAmount) {
+        setError(
+          `Enter an amount for "${missingAmount.description.trim() || "each item"}".`
+        );
+        return;
+      }
+      if (rows.some((row) => row.assignedMemberIds.length === 0)) {
+        setError("Assign at least one person to every item.");
+        return;
+      }
+
+      lineItemsPayload = rows.map((row, index) => ({
+        description: row.description.trim() || `Item ${index + 1}`,
+        quantity: row.quantity,
+        unitPrice: row.unitPrice,
+        total: parseCurrencyInput(row.totalInput),
+        assignedMemberIds: row.assignedMemberIds
+      }));
+      const assignedUnion = new Set(
+        rows.flatMap((row) => row.assignedMemberIds)
+      );
+      sharedWithPayload = members
+        .map((member) => member.memberId)
+        .filter((memberId) => assignedUnion.has(memberId));
+      allocationsPayload = itemizedPreview.allocations
+        .filter((detail) => assignedUnion.has(detail.memberId))
+        .map((detail) => ({
+          memberId: detail.memberId,
+          amount: detail.amount
+        }));
+    } else if (splitEvenly) {
       const distribution = distributeEvenly(
         grossTotal,
         sharedWith,
@@ -892,10 +1103,12 @@ const AddExpenseForm = ({
       tax: taxValue > 0 ? taxValue : undefined,
       tip: tipValue > 0 ? tipValue : undefined,
       paidByMemberId: paidBy,
-      sharedWithMemberIds: sharedWith,
+      sharedWithMemberIds: sharedWithPayload,
       splitEvenly,
       remainderMemberId: splitEvenly ? remainderMemberId || undefined : undefined,
       allocations: allocationsPayload,
+      lineItems: lineItemsPayload,
+      extrasSplitMode: lineItemsPayload ? extrasSplitMode : undefined,
       receiptId: receiptId || undefined
     };
 
@@ -1239,19 +1452,31 @@ const AddExpenseForm = ({
         </select>
       </div>
 
-      <div className="input-group">
-        <label htmlFor="expense-subtotal">Subtotal</label>
-        <input
-          id="expense-subtotal"
-          type="number"
-          inputMode="decimal"
-          min="0"
-          step="0.01"
-          value={subtotalInput}
-          onChange={(event) => setSubtotalInput(event.target.value)}
-          onWheel={handleNumberInputWheel}
-        />
-      </div>
+      {splitMode === "items" ? (
+        <div className="input-group">
+          <label>Subtotal (from items)</label>
+          <input
+            type="text"
+            readOnly
+            value={formatAmount(itemsSubtotal)}
+            style={{ opacity: 0.75 }}
+          />
+        </div>
+      ) : (
+        <div className="input-group">
+          <label htmlFor="expense-subtotal">Subtotal</label>
+          <input
+            id="expense-subtotal"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            value={subtotalInput}
+            onChange={(event) => setSubtotalInput(event.target.value)}
+            onWheel={handleNumberInputWheel}
+          />
+        </div>
+      )}
 
       <div style={{ display: "flex", gap: "0.75rem" }}>
         <div className="input-group" style={{ flex: 1 }}>
@@ -1297,7 +1522,9 @@ const AddExpenseForm = ({
       >
         <label>Quick receipt scan</label>
         <p className="muted" style={{ marginTop: "0.25rem" }}>
-          Upload a receipt to automatically fill subtotal, tax, and tip instantly.
+          Upload a receipt or invoice to automatically fill subtotal, tax, and
+          tip — line items are pulled out too so you can assign them to people
+          below.
         </p>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <button
@@ -1401,34 +1628,36 @@ const AddExpenseForm = ({
         </select>
       </div>
 
-      <div className="input-group">
-        <label>Split with</label>
-        <div className="list">
-          {members.map((member) => (
-            <label
-              key={member.memberId}
-              style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
-            >
-              <input
-                type="checkbox"
-                checked={sharedWith.includes(member.memberId)}
-                onChange={() => toggleSharedMember(member.memberId)}
-              />
-              {member.displayName}
-              {currentUserId === member.memberId ? " (you)" : ""}
-            </label>
-          ))}
+      {splitMode !== "items" && (
+        <div className="input-group">
+          <label>Split with</label>
+          <div className="list">
+            {members.map((member) => (
+              <label
+                key={member.memberId}
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+              >
+                <input
+                  type="checkbox"
+                  checked={sharedWith.includes(member.memberId)}
+                  onChange={() => toggleSharedMember(member.memberId)}
+                />
+                {member.displayName}
+                {currentUserId === member.memberId ? " (you)" : ""}
+              </label>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="input-group">
         <label>Split mode</label>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
+        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
           <button
             type="button"
-            className={splitEvenly ? "primary" : "secondary"}
+            className={splitMode === "even" ? "primary" : "secondary"}
             onClick={() => {
-              setSplitEvenly(true);
+              setSplitMode("even");
               setSplitExtrasEvenly(false);
             }}
           >
@@ -1436,12 +1665,25 @@ const AddExpenseForm = ({
           </button>
           <button
             type="button"
-            className={!splitEvenly ? "primary" : "secondary"}
-            onClick={() => setSplitEvenly(false)}
+            className={splitMode === "custom" ? "primary" : "secondary"}
+            onClick={() => setSplitMode("custom")}
           >
             Custom amounts
           </button>
+          <button
+            type="button"
+            className={splitMode === "items" ? "primary" : "secondary"}
+            onClick={() => setSplitMode("items")}
+          >
+            By item
+          </button>
         </div>
+        {splitMode === "items" && (
+          <p className="muted" style={{ marginTop: "0.35rem" }}>
+            Assign each line item to the people who shared it. Scanning a
+            receipt above fills the items in automatically.
+          </p>
+        )}
       </div>
 
       {showRemainderPrompt && (
@@ -1512,7 +1754,254 @@ const AddExpenseForm = ({
         </div>
       )}
 
-      {!splitEvenly && (
+      {splitMode === "items" && (
+        <>
+          <div className="input-group">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "0.5rem"
+              }}
+            >
+              <label style={{ margin: 0 }}>Line items</label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ paddingInline: "0.6rem", fontSize: "0.82rem" }}
+                  onClick={assignEveryoneToAllItems}
+                  disabled={itemRows.length === 0}
+                >
+                  Everyone on all items
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{ paddingInline: "0.6rem", fontSize: "0.82rem" }}
+                  onClick={clearAllItemAssignments}
+                  disabled={itemRows.length === 0}
+                >
+                  Clear assignments
+                </button>
+              </div>
+            </div>
+
+            {itemRows.length === 0 && (
+              <p className="muted" style={{ marginTop: "0.5rem" }}>
+                No items yet. Scan a receipt above or add items by hand.
+              </p>
+            )}
+
+            <div className="list" style={{ marginTop: "0.5rem" }}>
+              {itemRows.map((row, index) => {
+                const rowAmount = parseCurrencyInput(row.totalInput);
+                const needsPeople =
+                  row.assignedMemberIds.length === 0 &&
+                  (rowAmount > 0 || row.description.trim());
+                return (
+                  <div
+                    key={row.key}
+                    style={{
+                      border: needsPeople
+                        ? "1px solid rgba(250,204,21,0.55)"
+                        : "1px solid rgba(148,163,184,0.16)",
+                      borderRadius: "0.75rem",
+                      padding: "0.75rem",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.55rem"
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "0.5rem",
+                        alignItems: "center"
+                      }}
+                    >
+                      <input
+                        value={row.description}
+                        onChange={(event) =>
+                          handleItemRowChange(row.key, {
+                            description: event.target.value
+                          })
+                        }
+                        placeholder={`Item ${index + 1}`}
+                        aria-label={`Item ${index + 1} description`}
+                        style={{ flex: 2, minWidth: "8rem" }}
+                      />
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        value={row.totalInput}
+                        onChange={(event) =>
+                          handleItemRowChange(row.key, {
+                            totalInput: event.target.value
+                          })
+                        }
+                        onWheel={handleNumberInputWheel}
+                        placeholder="0.00"
+                        aria-label={`Item ${index + 1} amount`}
+                        style={{ width: "6.5rem" }}
+                      />
+                      <button
+                        type="button"
+                        className="secondary"
+                        onClick={() => handleRemoveItemRow(row.key)}
+                        aria-label={`Remove item ${index + 1}`}
+                        style={{ paddingInline: "0.6rem" }}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {typeof row.quantity === "number" && row.quantity > 1 && (
+                      <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
+                        Qty {row.quantity}
+                        {typeof row.unitPrice === "number"
+                          ? ` × ${formatAmount(row.unitPrice)}`
+                          : ""}
+                      </p>
+                    )}
+                    <div
+                      style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}
+                    >
+                      {members.map((member) => {
+                        const palette = seedAvatar(member.memberId);
+                        const name =
+                          member.displayName ?? member.email ?? member.memberId;
+                        const isActive = row.assignedMemberIds.includes(
+                          member.memberId
+                        );
+                        const isSelf = member.memberId === currentUserId;
+                        return (
+                          <button
+                            key={member.memberId}
+                            type="button"
+                            className={`qa-person-chip ${
+                              isActive ? "qa-person-chip--active" : ""
+                            }`}
+                            onClick={() =>
+                              toggleItemMember(row.key, member.memberId)
+                            }
+                            aria-pressed={isActive}
+                          >
+                            <span
+                              className="qa-person-chip__avatar"
+                              style={{ background: palette.bg, color: palette.fg }}
+                              aria-hidden="true"
+                            >
+                              {getInitials(name)}
+                            </span>
+                            <span className="qa-person-chip__name">
+                              {isSelf ? "You" : name.split(/\s+/)[0]}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {needsPeople && (
+                      <p style={{ margin: 0, fontSize: "0.82rem", color: "#facc15" }}>
+                        Pick who shared this item.
+                      </p>
+                    )}
+                    {row.assignedMemberIds.length > 0 && rowAmount > 0 && (
+                      <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
+                        {formatAmount(rowAmount / row.assignedMemberIds.length)}{" "}
+                        each across {row.assignedMemberIds.length}{" "}
+                        {row.assignedMemberIds.length === 1 ? "person" : "people"}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              className="secondary"
+              onClick={handleAddItemRow}
+              style={{ marginTop: "0.5rem", alignSelf: "flex-start" }}
+            >
+              + Add item
+            </button>
+          </div>
+
+          <div className="input-group">
+            <label>Tax &amp; tip split</label>
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button
+                type="button"
+                className={extrasSplitMode === "proportional" ? "primary" : "secondary"}
+                onClick={() => setExtrasSplitMode("proportional")}
+              >
+                Proportional to items
+              </button>
+              <button
+                type="button"
+                className={extrasSplitMode === "even" ? "primary" : "secondary"}
+                onClick={() => setExtrasSplitMode("even")}
+              >
+                Evenly
+              </button>
+            </div>
+            <p className="muted" style={{ marginTop: "0.5rem" }}>
+              {hasExtras
+                ? extrasSplitMode === "proportional"
+                  ? `The ${formatAmount(extrasTotal)} in tax & tip is split in proportion to each person's items.`
+                  : `The ${formatAmount(extrasTotal)} in tax & tip is split evenly among everyone with an item.`
+                : "Enter tax or tip above to include them automatically."}
+            </p>
+          </div>
+
+          {itemizedPreview.allocations.length > 0 && (
+            <div className="input-group">
+              <label>Per-person breakdown</label>
+              <div className="list" style={{ marginTop: "0.35rem" }}>
+                {itemizedPreview.allocations.map((detail) => {
+                  const member = membersById[detail.memberId];
+                  const name =
+                    member?.displayName ?? member?.email ?? detail.memberId;
+                  return (
+                    <div
+                      key={detail.memberId}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: "0.75rem",
+                        alignItems: "baseline"
+                      }}
+                    >
+                      <span>
+                        {name}
+                        {currentUserId === detail.memberId ? " (you)" : ""}
+                      </span>
+                      <span className="muted" style={{ fontSize: "0.82rem" }}>
+                        {formatAmount(detail.itemsAmount)} items
+                        {detail.extrasAmount > 0
+                          ? ` + ${formatAmount(detail.extrasAmount)} tax & tip`
+                          : ""}{" "}
+                        = <strong style={{ color: "#f1f5f9" }}>{formatAmount(detail.amount)}</strong>
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="muted" style={{ marginTop: "0.5rem" }}>
+                Items {formatAmount(itemsSubtotal)}
+                {extrasTotal > 0 ? ` + tax & tip ${formatAmount(extrasTotal)}` : ""} ={" "}
+                {formatAmount(grossTotal)}
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {splitMode === "custom" && (
         <>
           <div className="list">
             {sharedMembers.map((member) => {
@@ -1651,24 +2140,34 @@ const AddExpenseForm = ({
 
       {(() => {
         const allocationOff =
-          !splitEvenly && Math.abs(allocationDelta) > 0.01 && grossTotal > 0;
+          splitMode === "custom" &&
+          Math.abs(allocationDelta) > 0.01 &&
+          grossTotal > 0;
+        const itemsOff = splitMode === "items" && unassignedItemCount > 0;
+        const blocked = allocationOff || itemsOff;
         const buttonLabel = isSubmitting
           ? "Saving…"
           : allocationOff
             ? `Allocations off by ${formatAmount(Math.abs(allocationDelta))}`
-            : "Add expense";
+            : itemsOff
+              ? `Assign people to ${unassignedItemCount} ${
+                  unassignedItemCount === 1 ? "item" : "items"
+                }`
+              : "Add expense";
         return (
           <button
             type="submit"
             className="primary"
-            disabled={isSubmitting || allocationOff}
+            disabled={isSubmitting || blocked}
             title={
               allocationOff
                 ? "Adjust the per-person amounts so they match the total before saving."
-                : undefined
+                : itemsOff
+                  ? "Every item needs at least one person assigned before saving."
+                  : undefined
             }
             style={
-              allocationOff
+              blocked
                 ? { opacity: 0.55, cursor: "not-allowed", background: "rgba(148,163,184,0.25)", color: "#e2e8f0", boxShadow: "none" }
                 : undefined
             }

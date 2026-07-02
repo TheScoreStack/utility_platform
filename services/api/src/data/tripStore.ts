@@ -242,6 +242,8 @@ export class TripStore {
       paidByMemberId: item.paidByMemberId,
       sharedWithMemberIds: item.sharedWithMemberIds,
       allocations: item.allocations,
+      lineItems: item.lineItems,
+      extrasSplitMode: item.extrasSplitMode,
       receiptId: item.receiptId,
       receiptPreviewUrl: item.receiptPreviewUrl,
       deletedAt: item.deletedAt,
@@ -815,7 +817,7 @@ export class TripStore {
   async updateExpenseAllocations(
     tripId: string,
     expenseId: string,
-    updates: Partial<Pick<Expense, "allocations" | "sharedWithMemberIds" | "tax" | "tip" | "total" | "updatedAt">>
+    updates: Partial<Pick<Expense, "allocations" | "sharedWithMemberIds" | "tax" | "tip" | "total" | "lineItems" | "extrasSplitMode" | "updatedAt">>
   ): Promise<void> {
     const updateExpressions: string[] = [];
     const names: Record<string, string> = {};

@@ -9,6 +9,7 @@ import {
   TripInvite,
   ExpenseComment,
   Expense,
+  ExpenseLineItem,
   Receipt,
   Settlement,
   UserProfile,
@@ -16,6 +17,7 @@ import {
   PaymentMethods
 } from "../types.js";
 import { ValidationError, ForbiddenError, NotFoundError } from "../lib/errors.js";
+import { buildItemizedAllocations } from "../lib/splitMath.js";
 import { convertCurrency } from "../lib/fx.js";
 import type { AuthContext } from "../auth.js";
 import { generateReceiptUpload, generateReceiptDownloadUrl } from "./uploadService.js";
@@ -80,6 +82,17 @@ const addMembersSchema = z.object({
     .min(1)
 });
 
+const lineItemSchema = z.object({
+  lineItemId: z.string().optional(),
+  description: z.string().min(1),
+  quantity: z.number().positive().optional(),
+  unitPrice: z.number().nonnegative().optional(),
+  total: z.number().nonnegative(),
+  assignedMemberIds: z.array(z.string().min(1)).nonempty()
+});
+
+const extrasSplitModeSchema = z.enum(["proportional", "even"]);
+
 const expenseSchema = z.object({
   description: z.string().min(1),
   vendor: z.string().optional(),
@@ -99,6 +112,8 @@ const expenseSchema = z.object({
     )
     .optional(),
   splitEvenly: z.boolean().optional(),
+  lineItems: z.array(lineItemSchema).nonempty().optional(),
+  extrasSplitMode: extrasSplitModeSchema.optional(),
   receiptId: z.string().optional(),
   remainderMemberId: z.string().optional()
 });
@@ -116,6 +131,8 @@ const updateExpenseSchema = z.object({
       })
     )
     .optional(),
+  lineItems: z.array(lineItemSchema).nonempty().optional(),
+  extrasSplitMode: extrasSplitModeSchema.optional(),
   remainderMemberId: z.string().optional()
 });
 
@@ -293,6 +310,34 @@ const buildEvenSplitAllocations = (
     return {
       memberId,
       amount: roundCents((cents * sign) / 100)
+    };
+  });
+};
+
+type LineItemInput = z.infer<typeof lineItemSchema>;
+
+const finalizeLineItems = (
+  items: LineItemInput[],
+  members: TripMember[],
+  sharedWithMemberIds: string[]
+): ExpenseLineItem[] => {
+  const shared = new Set(sharedWithMemberIds);
+  return items.map((item) => {
+    item.assignedMemberIds.forEach((memberId) => {
+      ensureMember(members, memberId);
+      if (!shared.has(memberId)) {
+        throw new ValidationError(
+          `Item "${item.description}" is assigned to a member not included in the split`
+        );
+      }
+    });
+    return {
+      lineItemId: item.lineItemId ?? `li_${nanoid(8)}`,
+      description: item.description,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: roundCents(item.total),
+      assignedMemberIds: item.assignedMemberIds
     };
   });
 };
@@ -825,7 +870,22 @@ export class TripService {
 
     const splitWith = parsed.data.sharedWithMemberIds;
     let allocations = parsed.data.allocations ?? [];
-    if (parsed.data.splitEvenly || !allocations.length) {
+    let lineItems: ExpenseLineItem[] | undefined;
+    if (parsed.data.lineItems?.length) {
+      // Itemized split: allocations are derived server-side from the item
+      // assignments so stored amounts always match the item math.
+      lineItems = finalizeLineItems(
+        parsed.data.lineItems,
+        details.members,
+        splitWith
+      );
+      allocations = buildItemizedAllocations({
+        lineItems,
+        tax: parsed.data.tax,
+        tip: parsed.data.tip,
+        extrasSplitMode: parsed.data.extrasSplitMode
+      }).allocations;
+    } else if (parsed.data.splitEvenly || !allocations.length) {
       const remainderTarget = resolveRemainderTarget(
         splitWith,
         parsed.data.remainderMemberId,
@@ -863,6 +923,8 @@ export class TripService {
       paidByMemberId: parsed.data.paidByMemberId,
       sharedWithMemberIds: parsed.data.sharedWithMemberIds,
       allocations,
+      lineItems,
+      extrasSplitMode: lineItems ? parsed.data.extrasSplitMode ?? "proportional" : undefined,
       receiptId: parsed.data.receiptId
     };
 
@@ -923,7 +985,21 @@ export class TripService {
       );
     }
 
-    if (parsed.data.allocations) {
+    let lineItems: ExpenseLineItem[] | undefined;
+    if (parsed.data.lineItems?.length) {
+      lineItems = finalizeLineItems(
+        parsed.data.lineItems,
+        details.members,
+        parsed.data.sharedWithMemberIds ?? expense.sharedWithMemberIds
+      );
+      allocations = buildItemizedAllocations({
+        lineItems,
+        tax: parsed.data.tax ?? expense.tax,
+        tip: parsed.data.tip ?? expense.tip,
+        extrasSplitMode:
+          parsed.data.extrasSplitMode ?? expense.extrasSplitMode
+      }).allocations;
+    } else if (parsed.data.allocations) {
       allocations = parsed.data.allocations;
     } else if (
       parsed.data.total !== undefined &&
@@ -944,7 +1020,7 @@ export class TripService {
       );
     }
 
-    if (parsed.data.total ?? parsed.data.allocations) {
+    if (parsed.data.total ?? parsed.data.allocations ?? parsed.data.lineItems) {
       const total = parsed.data.total ?? expense.total;
       const allocatedTotal = roundCents(
         allocations.reduce((sum, allocation) => sum + allocation.amount, 0)
@@ -962,6 +1038,10 @@ export class TripService {
       tip: parsed.data.tip,
       sharedWithMemberIds: parsed.data.sharedWithMemberIds,
       allocations,
+      lineItems,
+      extrasSplitMode: lineItems
+        ? parsed.data.extrasSplitMode ?? expense.extrasSplitMode ?? "proportional"
+        : undefined,
       updatedAt: isoNow()
     });
   }

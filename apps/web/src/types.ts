@@ -39,6 +39,17 @@ export interface ExpenseAllocation {
   amount: number;
 }
 
+export interface ExpenseLineItem {
+  lineItemId: string;
+  description: string;
+  quantity?: number;
+  unitPrice?: number;
+  total: number;
+  assignedMemberIds: string[];
+}
+
+export type ExtrasSplitMode = "proportional" | "even";
+
 export interface Expense {
   tripId: string;
   expenseId: string;
@@ -54,6 +65,8 @@ export interface Expense {
   paidByMemberId: string;
   sharedWithMemberIds: string[];
   allocations: ExpenseAllocation[];
+  lineItems?: ExpenseLineItem[];
+  extrasSplitMode?: ExtrasSplitMode;
   receiptId?: string;
   receiptPreviewUrl?: string;
   deletedAt?: string;

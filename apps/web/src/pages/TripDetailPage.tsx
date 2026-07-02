@@ -2555,6 +2555,73 @@ const ExpensesTab = ({
                           </div>
                         )}
 
+                        {expense.lineItems && expense.lineItems.length > 0 && (
+                          <details
+                            style={{
+                              border: "1px solid rgba(148,163,184,0.14)",
+                              borderRadius: "0.75rem",
+                              padding: "0.55rem 0.8rem",
+                              background: "rgba(15,23,42,0.45)"
+                            }}
+                          >
+                            <summary
+                              className="muted"
+                              style={{ cursor: "pointer", fontSize: "0.88rem" }}
+                            >
+                              {expense.lineItems.length}{" "}
+                              {expense.lineItems.length === 1 ? "item" : "items"} · split by
+                              item
+                              {expense.extrasSplitMode === "even"
+                                ? " · tax & tip split evenly"
+                                : " · tax & tip proportional"}
+                            </summary>
+                            <div
+                              style={{
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: "0.45rem",
+                                marginTop: "0.6rem"
+                              }}
+                            >
+                              {expense.lineItems.map((item) => (
+                                <div
+                                  key={item.lineItemId}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    gap: "0.75rem",
+                                    alignItems: "baseline"
+                                  }}
+                                >
+                                  <span style={{ fontSize: "0.88rem" }}>
+                                    {item.description}
+                                    {typeof item.quantity === "number" &&
+                                      item.quantity > 1 && (
+                                        <span className="muted"> ×{item.quantity}</span>
+                                      )}
+                                    <span
+                                      className="muted"
+                                      style={{ fontSize: "0.78rem", marginLeft: "0.4rem" }}
+                                    >
+                                      {item.assignedMemberIds
+                                        .map(
+                                          (memberId) =>
+                                            (membersById[memberId] ?? memberId).split(
+                                              /\s+/
+                                            )[0]
+                                        )
+                                        .join(", ")}
+                                    </span>
+                                  </span>
+                                  <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>
+                                    {formatCurrency.format(item.total)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </details>
+                        )}
+
                         <div
                           style={{
                             display: "flex",

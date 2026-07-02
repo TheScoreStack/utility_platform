@@ -175,6 +175,12 @@ export class GroupExpensesStack extends Stack {
       handler: "handler",
       timeout: Duration.seconds(15),
       memorySize: 256,
+      // All function entries live in services/api; point the lock file there
+      // so NodejsFunction resolves projectRoot as services/api, not infra.
+      depsLockFilePath: path.join(
+        stackDir,
+        "../../../services/api/package-lock.json"
+      ),
       bundling: {
         format: OutputFormat.ESM,
         target: "node20",
