@@ -1,10 +1,17 @@
 import { CSSProperties, ChangeEvent, FormEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../lib/api";
 import { EXPENSE_CATEGORIES, resolveExpenseCategory } from "../lib/expenseCategories";
 import { getInitials, seedAvatar } from "../lib/avatarPalette";
 import { CURRENCY_OPTIONS } from "../lib/fx";
 import { computeItemizedAllocations } from "../lib/itemSplit";
-import type { ExtrasSplitMode, TripMember, Receipt, TextractExtraction } from "../types";
+import type {
+  ExtrasSplitMode,
+  TripMember,
+  Receipt,
+  ReceiptUploadResponse,
+  TextractExtraction
+} from "../types";
 
 const roundToCents = (value: number): number =>
   Math.round((value + Number.EPSILON) * 100) / 100;
@@ -309,7 +316,9 @@ const AddExpenseForm = ({
   const [parseStatus, setParseStatus] = useState<string | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
   const [isParsingReceipt, setIsParsingReceipt] = useState(false);
+  const [isAttachingReceipt, setIsAttachingReceipt] = useState(false);
   const liveReceiptInputRef = useRef<HTMLInputElement | null>(null);
+  const liveReceiptFileRef = useRef<File | null>(null);
   const [isFetchingReceiptUrl, setIsFetchingReceiptUrl] = useState(false);
   const [receiptPreviewError, setReceiptPreviewError] = useState<string | null>(null);
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
@@ -621,6 +630,18 @@ const AddExpenseForm = ({
       }
       if (typeof extractedTip === "number") {
         setTipInput(extractedTip.toString());
+      } else if (
+        typeof extractedTotal === "number" &&
+        typeof extractedSubtotal === "number"
+      ) {
+        // OCR often misses a handwritten or oddly-labeled tip; when the
+        // printed total exceeds subtotal + tax, the difference is the tip.
+        const inferredTip = roundToCents(
+          extractedTotal - extractedSubtotal - (extractedTax ?? 0)
+        );
+        if (inferredTip > 0.009) {
+          setTipInput(inferredTip.toFixed(2));
+        }
       }
 
       // Surface parsed line items as an assignable list. The signature guard
@@ -833,6 +854,7 @@ const AddExpenseForm = ({
     if (!file) return;
 
     event.target.value = "";
+    liveReceiptFileRef.current = file;
     setParseError(null);
     setParseStatus("Preparing receipt…");
     setIsParsingReceipt(true);
@@ -929,6 +951,7 @@ const AddExpenseForm = ({
     setShowRemainderPrompt(false);
     lastAcknowledgedRemainderRef.current = null;
     previousRemainderRef.current = 0;
+    liveReceiptFileRef.current = null;
     resetReceiptPreview();
   };
 
@@ -1143,8 +1166,47 @@ const AddExpenseForm = ({
   const handleConfirmSubmit = async () => {
     if (!pendingExpense) return;
     setError(null);
+
+    const payload = { ...pendingExpense.payload };
+
+    // A live-scanned receipt only exists in memory; upload it now so the
+    // saved expense links to the same file the user scanned.
+    if (!payload.receiptId && liveReceiptFileRef.current) {
+      const file = liveReceiptFileRef.current;
+      setIsAttachingReceipt(true);
+      try {
+        const receipt = await api.post<ReceiptUploadResponse>(
+          `/trips/${tripId}/receipts`,
+          {
+            fileName: file.name,
+            contentType: file.type || "application/octet-stream"
+          }
+        );
+        const uploadResponse = await fetch(receipt.uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream"
+          },
+          body: file
+        });
+        if (!uploadResponse.ok) {
+          throw new Error(`Upload failed (${uploadResponse.status})`);
+        }
+        payload.receiptId = receipt.receiptId;
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Receipt upload failed";
+        setError(
+          `Couldn't attach the scanned receipt (${message}). The expense was not saved — try again.`
+        );
+        return;
+      } finally {
+        setIsAttachingReceipt(false);
+      }
+    }
+
     try {
-      await onSubmit(pendingExpense.payload);
+      await onSubmit(payload);
       setPendingExpense(null);
       resetFormState();
     } catch (err) {
@@ -1171,7 +1233,7 @@ const AddExpenseForm = ({
       return null;
     }
     if (activeReceiptId === "__local__") {
-      return "Preview of the receipt you just selected. It is not attached to the expense yet.";
+      return "Preview of the receipt you just scanned. It will be uploaded and attached when you save.";
     }
     if (activeReceipt) {
       return `Preview of ${activeReceipt.fileName}`;
@@ -1698,7 +1760,7 @@ const AddExpenseForm = ({
           }}
         >
           <strong style={{ display: "block", marginBottom: "0.25rem" }}>
-            There's an extra {formatAmount(evenSplitRemainderCents / 100)} to assign.
+            There&rsquo;s an extra {formatAmount(evenSplitRemainderCents / 100)} to assign.
           </strong>
           <p className="muted" style={{ margin: 0 }}>
             Choose who should cover the remaining cents below.
@@ -2177,7 +2239,9 @@ const AddExpenseForm = ({
         );
       })()}
 
-      {pendingExpense && (
+      {/* Portaled to <body>: ancestor cards use backdrop-filter, which turns
+          them into containing blocks and breaks position:fixed centering. */}
+      {pendingExpense && createPortal(
         <div
           role="dialog"
           aria-modal="true"
@@ -2228,15 +2292,30 @@ const AddExpenseForm = ({
               </ul>
             </div>
             <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.5rem" }}>
-              <button type="button" className="secondary" onClick={handleCancelConfirmation} disabled={isSubmitting}>
+              <button
+                type="button"
+                className="secondary"
+                onClick={handleCancelConfirmation}
+                disabled={isSubmitting || isAttachingReceipt}
+              >
                 Go back
               </button>
-              <button type="button" className="primary" onClick={handleConfirmSubmit} disabled={isSubmitting}>
-                {isSubmitting ? "Saving…" : "Confirm & save"}
+              <button
+                type="button"
+                className="primary"
+                onClick={handleConfirmSubmit}
+                disabled={isSubmitting || isAttachingReceipt}
+              >
+                {isAttachingReceipt
+                  ? "Uploading receipt…"
+                  : isSubmitting
+                    ? "Saving…"
+                    : "Confirm & save"}
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       </form>
     </div>

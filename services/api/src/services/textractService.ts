@@ -20,14 +20,21 @@ const getSummaryValue = (
   document: ExpenseDocument,
   ...types: string[]
 ): string | undefined => {
+  const fields = document.SummaryFields ?? [];
+  // Exact type matches take priority across ALL requested types before any
+  // partial match is considered: "SUBTOTAL".includes("TOTAL") is true, so a
+  // partial-first search returns the subtotal as the total whenever the
+  // subtotal field happens to come first in the response.
   for (const type of types) {
-    const field = document.SummaryFields?.find(
-      (summary) =>
-        summary.Type?.Text === type || summary.Type?.Text?.includes(type)
-    );
-    const value = field?.ValueDetection?.Text ?? field?.ValueDetection?.Text;
-    if (value) {
-      return value;
+    const field = fields.find((summary) => summary.Type?.Text === type);
+    if (field?.ValueDetection?.Text) {
+      return field.ValueDetection.Text;
+    }
+  }
+  for (const type of types) {
+    const field = fields.find((summary) => summary.Type?.Text?.includes(type));
+    if (field?.ValueDetection?.Text) {
+      return field.ValueDetection.Text;
     }
   }
   return undefined;
@@ -35,11 +42,11 @@ const getSummaryValue = (
 
 const getSummaryNumber = (
   document: ExpenseDocument,
-  type: string
+  ...types: string[]
 ): number | undefined => {
-  const value = getSummaryValue(document, type);
+  const value = getSummaryValue(document, ...types);
   if (!value) return undefined;
-  const normalized = value.replace(/[^0-9.\-]/g, "");
+  const normalized = value.replace(/[^0-9.-]/g, "");
   const parsed = Number.parseFloat(normalized);
   return Number.isFinite(parsed) ? parsed : undefined;
 };
@@ -70,10 +77,10 @@ const analyzeDocument = async (
         "BUYER_NAME",
         "RECEIVER_NAME"
       ),
-    total: getSummaryNumber(document, "TOTAL"),
+    total: getSummaryNumber(document, "TOTAL", "AMOUNT_DUE", "AMOUNT_PAID"),
     subtotal: getSummaryNumber(document, "SUBTOTAL"),
     tax: getSummaryNumber(document, "TAX"),
-    tip: getSummaryNumber(document, "TIP"),
+    tip: getSummaryNumber(document, "GRATUITY", "TIP"),
     date: getSummaryValue(document, "INVOICE_RECEIPT_DATE")
   };
 
@@ -86,7 +93,7 @@ const analyzeDocument = async (
         fields.find((field) => field.Type?.Text === type)?.ValueDetection?.Text;
       const parseNumber = (value?: string) => {
         if (!value) return undefined;
-        const normalized = value.replace(/[^0-9.\-]/g, "");
+        const normalized = value.replace(/[^0-9.-]/g, "");
         const parsed = Number.parseFloat(normalized);
         return Number.isFinite(parsed) ? parsed : undefined;
       };
