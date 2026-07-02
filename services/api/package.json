@@ -17,6 +17,7 @@
     "@aws-sdk/lib-dynamodb": "^3.516.0",
     "@aws-sdk/s3-request-presigner": "^3.516.0",
     "@aws-sdk/util-dynamodb": "^3.516.0",
+    "@utility-platform/shared": "file:../../packages/shared",
     "nanoid": "^5.1.11",
     "tslib": "^2.6.3",
     "zod": "^3.22.4"

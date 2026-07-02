@@ -42,6 +42,18 @@ npm run deploy       # Deploy to AWS
 npm run diff         # Show pending changes
 ```
 
+### Shared Package (`packages/shared/`)
+```bash
+npm install          # Also runs the build (prepare script)
+npm run build        # Compile to dist/ — REQUIRED after editing src/
+```
+Domain entity types (Trip, Expense, Receipt, …) and the itemized split math
+live here. `services/api` and `apps/web` depend on it via `file:` links and
+re-export from their own `src/types.ts`. Add types used by both sides here,
+never in both packages; consumers import from `../types` as before. After
+changing `packages/shared/src/`, run its build so `dist/` is current — the
+consumers (tsc, Vite, Lambda bundling) resolve the compiled output.
+
 ## Architecture Overview
 
 This is a monorepo for a multi-tool utility platform. A single shared backend serves multiple frontend experiences (web + mobile). Modules are pluggable—each tool surfaces through both apps via a registry pattern.
