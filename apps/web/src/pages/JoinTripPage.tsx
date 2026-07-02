@@ -60,7 +60,7 @@ const JoinTripPage = () => {
       <section className="join-card join-card--error">
         <span className="join-card__eyebrow">Invite</span>
         <h1 className="join-card__title">
-          That link <em>doesn't open</em> anymore.
+          That link <em>doesn&rsquo;t open</em> anymore.
         </h1>
         <p className="join-card__sub">{message}</p>
         <button
@@ -77,7 +77,7 @@ const JoinTripPage = () => {
   const data = preview.data!;
   return (
     <section className="join-card">
-      <span className="join-card__eyebrow">You've been invited</span>
+      <span className="join-card__eyebrow">You&rsquo;ve been invited</span>
       <h1 className="join-card__title">
         Join <em>{data.tripName}</em>.
       </h1>

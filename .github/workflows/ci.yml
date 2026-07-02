@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  api:
+    name: API (type-check, lint, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            packages/shared/package-lock.json
+            services/api/package-lock.json
+      - name: Build shared package
+        working-directory: packages/shared
+        run: npm ci
+      - name: Install API dependencies
+        working-directory: services/api
+        run: npm ci
+      - name: Type-check
+        working-directory: services/api
+        run: npm run build
+      - name: Lint
+        working-directory: services/api
+        run: npm run lint
+      - name: Tests
+        working-directory: services/api
+        run: npx vitest run
+
+  web:
+    name: Web (type-check, lint, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            packages/shared/package-lock.json
+            apps/web/package-lock.json
+      - name: Build shared package
+        working-directory: packages/shared
+        run: npm ci
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Type-check and build
+        working-directory: apps/web
+        run: npm run build
+      - name: Lint
+        working-directory: apps/web
+        run: npx eslint src --max-warnings 10
+
+  infra:
+    name: Infra (type-check, synth)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            packages/shared/package-lock.json
+            services/api/package-lock.json
+            infra/package-lock.json
+      - name: Build shared package
+        working-directory: packages/shared
+        run: npm ci
+      # Lambda bundling resolves the API's dependencies during synth.
+      - name: Install API dependencies
+        working-directory: services/api
+        run: npm ci
+      - name: Install infra dependencies
+        working-directory: infra
+        run: npm ci
+      - name: Type-check
+        working-directory: infra
+        run: npm run build
+      - name: Synthesize
+        working-directory: infra
+        run: npx cdk synth --quiet

@@ -335,7 +335,7 @@ const TripListPage = () => {
                         {tone === "owed" &&
                           typeof trip.owedToYou === "number" && (
                             <span className="tl-card__pill tl-card__pill--owed">
-                              You're owed&nbsp;
+                              You&rsquo;re owed&nbsp;
                               <strong>
                                 {formatCurrencyValue(
                                   trip.owedToYou,

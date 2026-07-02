@@ -343,7 +343,7 @@ const StackTimePage = () => {
           Hours, <em>logged.</em>
         </h1>
         <p className="st-hero__sub">
-          Track time on Stack Technologies projects — yours and the team's.
+          Track time on Stack Technologies projects — yours and the team&rsquo;s.
         </p>
         <div className="st-hero__rule" aria-hidden="true" />
         <div className="st-tabs" role="tablist" aria-label="Stack Time sections">

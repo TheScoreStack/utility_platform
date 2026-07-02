@@ -679,7 +679,7 @@ const HarmonyLedgerPage = () => {
             Move funds
           </button>
           <p className="muted" style={{ margin: 0 }}>
-            Leave either dropdown on "Unallocated" to move money in or out of the general pool.
+            Leave either dropdown on &ldquo;Unallocated&rdquo; to move money in or out of the general pool.
           </p>
         </form>
       </section>
