@@ -18,6 +18,7 @@ interface ExpenseCardProps {
   commentsOpen: boolean;
   onToggleComments: () => void;
   onRepeatExpense: (expense: Expense) => void;
+  onEditExpense: (expense: Expense) => void;
   onDeleteExpense: (expenseId: string, description: string) => Promise<void>;
   deleteDisabled: boolean;
   previewData?: ReceiptPreviewData;
@@ -37,6 +38,7 @@ export const ExpenseCard = ({
   commentsOpen,
   onToggleComments,
   onRepeatExpense,
+  onEditExpense,
   onDeleteExpense,
   deleteDisabled,
   previewData,
@@ -278,6 +280,21 @@ export const ExpenseCard = ({
             onClick={() => onRepeatExpense(expense)}
           >
             <span aria-hidden="true">↻</span> Repeat
+          </button>
+          <button
+            type="button"
+            className="secondary"
+            style={{
+              paddingInline: "0.7rem",
+              fontSize: "0.85rem",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.3rem"
+            }}
+            title="Load this expense into the form and save changes to it"
+            onClick={() => onEditExpense(expense)}
+          >
+            <span aria-hidden="true">✎</span> Edit
           </button>
           <button
             type="button"

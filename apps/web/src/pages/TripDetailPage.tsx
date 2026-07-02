@@ -69,6 +69,7 @@ const TripDetailPage = () => {
   const [activeTab, setActiveTab] = useState<TripTab>("overview");
   const [settlementPrefill, setSettlementPrefill] = useState<SettlementPrefill | null>(null);
   const [expensePrefill, setExpensePrefill] = useState<ExpensePrefill | null>(null);
+  const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [undoToast, setUndoToast] = useState<{
     nonce: number;
     title: string;
@@ -130,18 +131,20 @@ const TripDetailPage = () => {
     []
   );
 
-  const handleRepeatExpense = useCallback((expense: Expense) => {
+  const buildExpensePrefill = useCallback((expense: Expense): ExpensePrefill => {
     const taxAmount = expense.tax ?? 0;
     const tipAmount = expense.tip ?? 0;
     const subtotal = Math.max(0, expense.total - taxAmount - tipAmount);
+    const hasItems = Boolean(expense.lineItems?.length);
     const shareCount = expense.sharedWithMemberIds.length;
     const evenShare = shareCount > 0 ? expense.total / shareCount : 0;
     const isEven =
+      !hasItems &&
       shareCount > 0 &&
       expense.allocations.length === shareCount &&
       expense.allocations.every((a) => Math.abs(a.amount - evenShare) <= 0.02);
 
-    setExpensePrefill({
+    return {
       nonce: Date.now(),
       description: expense.description,
       vendor: expense.vendor,
@@ -152,12 +155,34 @@ const TripDetailPage = () => {
       paidByMemberId: expense.paidByMemberId,
       sharedWithMemberIds: expense.sharedWithMemberIds,
       splitEvenly: isEven,
-      allocations: isEven
-        ? undefined
-        : Object.fromEntries(expense.allocations.map((a) => [a.memberId, a.amount.toFixed(2)]))
-    });
-    setActiveTab("expenses");
+      allocations:
+        isEven || hasItems
+          ? undefined
+          : Object.fromEntries(expense.allocations.map((a) => [a.memberId, a.amount.toFixed(2)])),
+      lineItems: hasItems
+        ? expense.lineItems?.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            total: item.total.toFixed(2),
+            assignedMemberIds: item.assignedMemberIds
+          }))
+        : undefined,
+      extrasSplitMode: expense.extrasSplitMode
+    };
   }, []);
+
+  const handleRepeatExpense = useCallback((expense: Expense) => {
+    setEditingExpense(null);
+    setExpensePrefill(buildExpensePrefill(expense));
+    setActiveTab("expenses");
+  }, [buildExpensePrefill]);
+
+  const handleEditExpense = useCallback((expense: Expense) => {
+    setEditingExpense(expense);
+    setExpensePrefill(buildExpensePrefill(expense));
+    setActiveTab("expenses");
+  }, [buildExpensePrefill]);
 
   const createExpenseMutation = useMutation({
     mutationFn: (payload: CreateExpenseInput) =>
@@ -166,6 +191,50 @@ const TripDetailPage = () => {
       queryClient.invalidateQueries({ queryKey });
     }
   });
+
+  const updateExpenseMutation = useMutation({
+    mutationFn: ({
+      expenseId,
+      payload
+    }: {
+      expenseId: string;
+      payload: Record<string, unknown>;
+    }) => api.patch<void>(`/trips/${tripId}/expenses/${expenseId}`, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+    }
+  });
+
+  const handleSubmitExpense = useCallback(
+    async (input: CreateExpenseInput) => {
+      if (!editingExpense) {
+        return createExpenseMutation.mutateAsync(input);
+      }
+      // PATCH semantics: omitted fields keep their stored value, so cleared
+      // optional fields are sent explicitly (empty string / 0 / empty items).
+      await updateExpenseMutation.mutateAsync({
+        expenseId: editingExpense.expenseId,
+        payload: {
+          description: input.description,
+          vendor: input.vendor ?? "",
+          category: input.category ?? "",
+          currency: input.currency,
+          paidByMemberId: input.paidByMemberId,
+          total: input.total,
+          tax: input.tax ?? 0,
+          tip: input.tip ?? 0,
+          sharedWithMemberIds: input.sharedWithMemberIds,
+          allocations: input.allocations,
+          lineItems: input.lineItems ?? [],
+          extrasSplitMode: input.extrasSplitMode,
+          remainderMemberId: input.remainderMemberId,
+          receiptId: input.receiptId
+        }
+      });
+      setEditingExpense(null);
+    },
+    [editingExpense, createExpenseMutation, updateExpenseMutation]
+  );
 
   const inviteQuery = useQuery({
     queryKey: ["trip-invite", tripId],
@@ -733,10 +802,13 @@ const TripDetailPage = () => {
           members={members}
           expenses={expenses}
           currency={trip.currency}
-          onCreateExpense={(input) =>
-            createExpenseMutation.mutateAsync(input)
+          onCreateExpense={handleSubmitExpense}
+          isCreating={
+            createExpenseMutation.isPending || updateExpenseMutation.isPending
           }
-          isCreating={createExpenseMutation.isPending}
+          editingExpense={editingExpense}
+          onCancelEditExpense={() => setEditingExpense(null)}
+          onEditExpense={handleEditExpense}
           membersById={membersById}
           onDeleteExpense={(expenseId, description) =>
             deleteExpenseMutation.mutateAsync({ expenseId, description })

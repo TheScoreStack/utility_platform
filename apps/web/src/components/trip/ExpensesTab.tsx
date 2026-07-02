@@ -26,6 +26,9 @@ interface ExpensesTabProps {
   expensePrefill?: ExpensePrefill | null;
   onExpensePrefillConsumed?: () => void;
   onRepeatExpense: (expense: Expense) => void;
+  editingExpense?: Expense | null;
+  onCancelEditExpense?: () => void;
+  onEditExpense: (expense: Expense) => void;
   deletedExpenses: Expense[];
   onRestoreExpense: (expenseId: string) => Promise<void>;
   onPurgeExpense: (expenseId: string) => Promise<void>;
@@ -50,6 +53,9 @@ export const ExpensesTab = ({
   expensePrefill,
   onExpensePrefillConsumed,
   onRepeatExpense,
+  editingExpense,
+  onCancelEditExpense,
+  onEditExpense,
   deletedExpenses,
   onRestoreExpense,
   onPurgeExpense,
@@ -414,7 +420,7 @@ export const ExpensesTab = ({
     <div className="grid-two">
       <section className="card">
         <div className="section-title">
-          <h2>Log Expense</h2>
+          <h2>{editingExpense ? "Edit Expense" : "Log Expense"}</h2>
         </div>
         <AddExpenseForm
           tripId={tripId}
@@ -426,6 +432,8 @@ export const ExpensesTab = ({
           currentUserId={currentUserId}
           prefill={expensePrefill}
           onPrefillConsumed={onExpensePrefillConsumed}
+          editingLabel={editingExpense?.description ?? null}
+          onCancelEdit={onCancelEditExpense}
         />
       </section>
 
@@ -505,6 +513,7 @@ export const ExpensesTab = ({
                             commentsOpen={Boolean(openComments[expense.expenseId])}
                             onToggleComments={() => toggleComments(expense.expenseId)}
                             onRepeatExpense={onRepeatExpense}
+                            onEditExpense={onEditExpense}
                             onDeleteExpense={onDeleteExpense}
                             deleteDisabled={
                               deletePending && deletingExpenseId === expense.expenseId

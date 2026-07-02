@@ -817,7 +817,7 @@ export class TripStore {
   async updateExpenseAllocations(
     tripId: string,
     expenseId: string,
-    updates: Partial<Pick<Expense, "allocations" | "sharedWithMemberIds" | "tax" | "tip" | "total" | "lineItems" | "extrasSplitMode" | "updatedAt">>
+    updates: Partial<Pick<Expense, "description" | "vendor" | "category" | "currency" | "paidByMemberId" | "receiptId" | "allocations" | "sharedWithMemberIds" | "tax" | "tip" | "total" | "lineItems" | "extrasSplitMode" | "updatedAt">>
   ): Promise<void> {
     const updateExpressions: string[] = [];
     const names: Record<string, string> = {};

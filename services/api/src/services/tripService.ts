@@ -119,6 +119,12 @@ const expenseSchema = z.object({
 });
 
 const updateExpenseSchema = z.object({
+  description: z.string().min(1).optional(),
+  // Empty string clears the field (renders treat "" as absent).
+  vendor: z.string().optional(),
+  category: z.string().optional(),
+  currency: z.string().min(1).optional(),
+  paidByMemberId: z.string().min(1).optional(),
   total: z.number().positive().optional(),
   tax: z.number().nonnegative().optional(),
   tip: z.number().nonnegative().optional(),
@@ -131,8 +137,11 @@ const updateExpenseSchema = z.object({
       })
     )
     .optional(),
-  lineItems: z.array(lineItemSchema).nonempty().optional(),
+  // An explicit empty array clears stored line items (e.g. an itemized
+  // expense edited back to an even/custom split); omitting leaves them.
+  lineItems: z.array(lineItemSchema).optional(),
   extrasSplitMode: extrasSplitModeSchema.optional(),
+  receiptId: z.string().optional(),
   remainderMemberId: z.string().optional()
 });
 
@@ -984,6 +993,17 @@ export class TripService {
         ensureMember(details.members, memberId)
       );
     }
+    if (parsed.data.paidByMemberId) {
+      ensureMember(details.members, parsed.data.paidByMemberId);
+    }
+    if (
+      parsed.data.receiptId &&
+      !details.receipts.some(
+        (item) => item.receiptId === parsed.data.receiptId
+      )
+    ) {
+      throw new ValidationError("Receipt not found on this trip");
+    }
 
     let lineItems: ExpenseLineItem[] | undefined;
     if (parsed.data.lineItems?.length) {
@@ -1033,12 +1053,22 @@ export class TripService {
     }
 
     await getTripStore().updateExpenseAllocations(tripId, expenseId, {
+      description: parsed.data.description,
+      vendor: parsed.data.vendor,
+      category: parsed.data.category,
+      currency: parsed.data.currency,
+      paidByMemberId: parsed.data.paidByMemberId,
+      receiptId: parsed.data.receiptId,
       total: parsed.data.total,
       tax: parsed.data.tax,
       tip: parsed.data.tip,
       sharedWithMemberIds: parsed.data.sharedWithMemberIds,
       allocations,
-      lineItems,
+      lineItems:
+        lineItems ??
+        (parsed.data.lineItems && parsed.data.lineItems.length === 0
+          ? []
+          : undefined),
       extrasSplitMode: lineItems
         ? parsed.data.extrasSplitMode ?? expense.extrasSplitMode ?? "proportional"
         : undefined,

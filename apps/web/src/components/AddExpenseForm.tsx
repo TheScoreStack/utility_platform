@@ -207,6 +207,15 @@ export type ExpensePrefill = {
   splitEvenly: boolean;
   allocations?: Record<string, string>;
   remainderMemberId?: string;
+  /** When present, the form opens in "By item" mode with these rows. */
+  lineItems?: Array<{
+    description: string;
+    quantity?: number;
+    unitPrice?: number;
+    total: string;
+    assignedMemberIds: string[];
+  }>;
+  extrasSplitMode?: ExtrasSplitMode;
 };
 
 interface AddExpenseFormProps {
@@ -219,6 +228,9 @@ interface AddExpenseFormProps {
   currentUserId?: string;
   prefill?: ExpensePrefill | null;
   onPrefillConsumed?: () => void;
+  /** When set, the form saves changes to this expense instead of creating. */
+  editingLabel?: string | null;
+  onCancelEdit?: () => void;
 }
 
 const AddExpenseForm = ({
@@ -230,7 +242,9 @@ const AddExpenseForm = ({
   isSubmitting,
   currentUserId,
   prefill,
-  onPrefillConsumed
+  onPrefillConsumed,
+  editingLabel,
+  onCancelEdit
 }: AddExpenseFormProps) => {
   const formRef = useRef<HTMLFormElement | null>(null);
   const [prefillFlash, setPrefillFlash] = useState(false);
@@ -341,8 +355,23 @@ const AddExpenseForm = ({
     setPaidBy(prefill.paidByMemberId);
     setPayerManuallySelected(true);
     setSharedWith(prefill.sharedWithMemberIds);
-    setSplitMode(prefill.splitEvenly ? "even" : "custom");
-    setItemRows([]);
+    if (prefill.lineItems?.length) {
+      setSplitMode("items");
+      setItemRows(
+        prefill.lineItems.map((item) => ({
+          key: nextItemKey(),
+          description: item.description,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          totalInput: item.total,
+          assignedMemberIds: [...item.assignedMemberIds]
+        }))
+      );
+      setExtrasSplitMode(prefill.extrasSplitMode ?? "proportional");
+    } else {
+      setSplitMode(prefill.splitEvenly ? "even" : "custom");
+      setItemRows([]);
+    }
     setAllocations(prefill.allocations ?? {});
     setRemainderMemberId(prefill.remainderMemberId ?? "");
     setReceiptId("");
@@ -352,7 +381,7 @@ const AddExpenseForm = ({
     const t = setTimeout(() => setPrefillFlash(false), 1400);
     onPrefillConsumed?.();
     return () => clearTimeout(t);
-  }, [prefill, onPrefillConsumed]);
+  }, [prefill, onPrefillConsumed, nextItemKey]);
 
   useEffect(() => {
     if (!payerManuallySelected) {
@@ -1436,6 +1465,37 @@ const AddExpenseForm = ({
           padding: prefillFlash ? "0.85rem" : undefined
         }}
       >
+      {editingLabel && (
+        <div
+          role="status"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: "0.75rem",
+            border: "1px solid rgba(56,189,248,0.45)",
+            background: "rgba(56,189,248,0.08)",
+            borderRadius: "0.75rem",
+            padding: "0.6rem 0.85rem"
+          }}
+        >
+          <span style={{ fontSize: "0.9rem" }}>
+            Editing <strong>{editingLabel}</strong> — saving updates the
+            existing expense.
+          </span>
+          <button
+            type="button"
+            className="secondary"
+            style={{ paddingInline: "0.65rem", fontSize: "0.82rem" }}
+            onClick={() => {
+              resetFormState();
+              onCancelEdit?.();
+            }}
+          >
+            Cancel edit
+          </button>
+        </div>
+      )}
       <div className="input-group">
         <label htmlFor="expense-description">Description</label>
         <input
@@ -2215,7 +2275,9 @@ const AddExpenseForm = ({
               ? `Assign people to ${unassignedItemCount} ${
                   unassignedItemCount === 1 ? "item" : "items"
                 }`
-              : "Add expense";
+              : editingLabel
+                ? "Save changes"
+                : "Add expense";
         return (
           <button
             type="submit"
@@ -2310,7 +2372,9 @@ const AddExpenseForm = ({
                   ? "Uploading receipt…"
                   : isSubmitting
                     ? "Saving…"
-                    : "Confirm & save"}
+                    : editingLabel
+                      ? "Save changes"
+                      : "Confirm & save"}
               </button>
             </div>
           </div>
