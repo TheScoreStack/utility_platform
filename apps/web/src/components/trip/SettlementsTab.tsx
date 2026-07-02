@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import SettlementForm, { type SettlementPrefill } from "../SettlementForm";
 import { formatDate } from "../../lib/tripFormat";
+import { buildPaymentLink } from "../../lib/paymentLinks";
 import type { SettlementSuggestion } from "../../lib/settlementSuggestions";
 import { OvAvatar } from "./OvAvatar";
 import { OvFlowArc } from "./OvFlowArc";
@@ -41,10 +42,27 @@ interface SettlementsTabProps {
 interface StlPayChipProps {
   method: string;
   value: string;
+  href?: string | null;
 }
 
-const StlPayChip = ({ method, value }: StlPayChipProps) => {
+const StlPayChip = ({ method, value, href }: StlPayChipProps) => {
   const [copied, setCopied] = useState(false);
+
+  if (href) {
+    return (
+      <a
+        className="stl-row__pay-method"
+        href={href}
+        target="_blank"
+        rel="noreferrer noopener"
+        title={`Open ${method} with the amount prefilled`}
+      >
+        <span className="stl-row__pay-key">{method}</span>
+        <span>{value} ↗</span>
+      </a>
+    );
+  }
+
   return (
     <button
       type="button"
@@ -227,7 +245,18 @@ export const SettlementsTab = ({
                       <span className="stl-row__pay-label">Pay {toName} via</span>
                       <div className="stl-row__pay-methods">
                         {payableMethods.map(([method, value]) => (
-                          <StlPayChip key={method} method={method} value={value} />
+                          <StlPayChip
+                            key={method}
+                            method={method}
+                            value={value}
+                            href={buildPaymentLink(
+                              method,
+                              value,
+                              settlement.amount,
+                              settlement.currency || currency,
+                              settlement.note || "Settle up"
+                            )}
+                          />
                         ))}
                       </div>
                     </div>
