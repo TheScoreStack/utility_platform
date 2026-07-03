@@ -62,6 +62,35 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
+  Future<void> _openPaymentMethods() async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _PaymentMethodsSheet(
+        api: widget.api,
+        current: _profile?.paymentMethods,
+      ),
+    );
+    if (saved == true && mounted) {
+      HapticFeedback.mediumImpact();
+      showAppSnackBar(context, 'Payment methods updated', success: true);
+      await _load();
+    }
+  }
+
+  String get _paymentMethodsSummary {
+    final methods = _profile?.paymentMethods;
+    final set = <String>[
+      if ((methods?.venmo ?? '').isNotEmpty) 'Venmo',
+      if ((methods?.paypal ?? '').isNotEmpty) 'PayPal',
+      if ((methods?.zelle ?? '').isNotEmpty) 'Zelle',
+    ];
+    return set.isEmpty
+        ? 'Add Venmo, PayPal, or Zelle so people can pay you'
+        : set.join(' · ');
+  }
+
   Future<void> _openChangePassword() async {
     final changed = await showModalBottomSheet<bool>(
       context: context,
@@ -167,6 +196,25 @@ class _AccountScreenState extends State<AccountScreen> {
                   margin: EdgeInsets.zero,
                   child: Column(
                     children: [
+                      ListTile(
+                        leading: const Icon(
+                          Icons.account_balance_wallet_rounded,
+                        ),
+                        title: const Text('Payment methods'),
+                        subtitle: Text(
+                          _paymentMethodsSummary,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white54,
+                          ),
+                        ),
+                        trailing: const Icon(
+                          Icons.chevron_right_rounded,
+                          color: Colors.white38,
+                        ),
+                        onTap: _openPaymentMethods,
+                      ),
+                      const Divider(height: 1),
                       ListTile(
                         leading: const Icon(Icons.password_rounded),
                         title: const Text('Change password'),
@@ -368,6 +416,164 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Text(blockedReason ?? 'Update password'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentMethodsSheet extends StatefulWidget {
+  final ApiClient api;
+  final PaymentMethods? current;
+
+  const _PaymentMethodsSheet({required this.api, this.current});
+
+  @override
+  State<_PaymentMethodsSheet> createState() => _PaymentMethodsSheetState();
+}
+
+class _PaymentMethodsSheetState extends State<_PaymentMethodsSheet> {
+  late final TextEditingController _venmoController;
+  late final TextEditingController _paypalController;
+  late final TextEditingController _zelleController;
+  bool _working = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _venmoController = TextEditingController(text: widget.current?.venmo ?? '');
+    _paypalController = TextEditingController(
+      text: widget.current?.paypal ?? '',
+    );
+    _zelleController = TextEditingController(text: widget.current?.zelle ?? '');
+  }
+
+  @override
+  void dispose() {
+    _venmoController.dispose();
+    _paypalController.dispose();
+    _zelleController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_working) return;
+    setState(() {
+      _working = true;
+      _error = null;
+    });
+    // Empty fields are sent as null, which clears the stored handle.
+    String? valueOf(TextEditingController controller) {
+      final trimmed = controller.text.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+
+    try {
+      await widget.api.patch('/profile', {
+        'venmo': valueOf(_venmoController),
+        'paypal': valueOf(_paypalController),
+        'zelle': valueOf(_zelleController),
+      });
+      if (!mounted) return;
+      Navigator.of(context).pop(true);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _working = false;
+        _error = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _working = false;
+        _error = 'Could not save payment methods.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 8,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Payment methods',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Shown to trip members when they settle up with you.',
+                style: TextStyle(fontSize: 13, color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _venmoController,
+                enabled: !_working,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'Venmo',
+                  hintText: '@username',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _paypalController,
+                enabled: !_working,
+                autocorrect: false,
+                decoration: const InputDecoration(
+                  labelText: 'PayPal',
+                  hintText: 'paypal.me handle',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _zelleController,
+                enabled: !_working,
+                autocorrect: false,
+                keyboardType: TextInputType.emailAddress,
+                onSubmitted: (_) => _save(),
+                decoration: const InputDecoration(
+                  labelText: 'Zelle',
+                  hintText: 'Email or phone number',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: const TextStyle(color: AppColors.danger, fontSize: 13),
+                ),
+              ],
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: _working ? null : _save,
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: _working
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save payment methods'),
               ),
             ],
           ),
