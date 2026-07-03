@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 
+import 'package:flutter/services.dart';
+
 import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/formatters.dart';
 import '../../../models/models.dart';
+import '../widgets/new_trip_sheet.dart';
 import 'trip_detail_screen.dart';
 
 /// Your trips, with a balance chip per trip. Pull to refresh; tap for detail.
@@ -101,8 +104,35 @@ class _TripListScreenState extends State<TripListScreen> {
           ),
         ],
       ),
+      floatingActionButton: _loading
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: _createTrip,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('New trip'),
+            ),
       body: _buildBody(),
     );
+  }
+
+  Future<void> _createTrip() async {
+    final trip = await showNewTripSheet(context: context, api: widget.api);
+    if (trip == null || !mounted) return;
+
+    HapticFeedback.mediumImpact();
+    showAppSnackBar(context, 'Trip "${trip.name}" created', success: true);
+    // Refresh the list in the background and jump straight into the trip.
+    _load();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripDetailScreen(
+          api: widget.api,
+          tripId: trip.tripId,
+          tripName: trip.name,
+        ),
+      ),
+    );
+    if (mounted) _load();
   }
 
   Widget _buildBody() {
@@ -123,7 +153,7 @@ class _TripListScreenState extends State<TripListScreen> {
                 Icon(Icons.luggage_rounded, size: 48, color: Colors.white24),
                 SizedBox(height: 16),
                 Text(
-                  'No trips yet.\nCreate one on the web app to get started.',
+                  'No trips yet.\nTap "New trip" below to get started.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white70),
                 ),

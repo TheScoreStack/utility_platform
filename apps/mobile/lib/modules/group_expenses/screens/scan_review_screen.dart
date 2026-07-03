@@ -34,18 +34,22 @@ enum _Phase { analyzing, analyzeFailed, review }
 
 /// The scan flow centerpiece: analyzes the picked photo with Textract, then
 /// becomes a review-and-assign screen with a sticky per-person money bar.
+///
+/// With no [imageBytes] it runs in manual mode: no analyze step, no receipt
+/// thumbnail or upload — just the itemized review form ("New itemized
+/// expense").
 class ScanReviewScreen extends StatefulWidget {
   final ApiClient api;
   final TripSummary summary;
-  final Uint8List imageBytes;
-  final String fileName;
+  final Uint8List? imageBytes;
+  final String? fileName;
 
   const ScanReviewScreen({
     super.key,
     required this.api,
     required this.summary,
-    required this.imageBytes,
-    required this.fileName,
+    this.imageBytes,
+    this.fileName,
   });
 
   @override
@@ -55,6 +59,8 @@ class ScanReviewScreen extends StatefulWidget {
 class _ScanReviewScreenState extends State<ScanReviewScreen> {
   _Phase _phase = _Phase.analyzing;
   String? _analyzeError;
+
+  bool get _isManual => widget.imageBytes == null;
 
   final _descriptionController = TextEditingController();
   final _taxController = TextEditingController();
@@ -77,7 +83,11 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   @override
   void initState() {
     super.initState();
-    _analyze();
+    if (_isManual) {
+      _startManually();
+    } else {
+      _analyze();
+    }
   }
 
   @override
@@ -101,9 +111,9 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
           await widget.api.post(
                 '/trips/${widget.summary.trip.tripId}/receipts/analyze',
                 {
-                  'fileName': widget.fileName,
+                  'fileName': widget.fileName ?? 'receipt.jpg',
                   'contentType': 'image/jpeg',
-                  'data': base64Encode(widget.imageBytes),
+                  'data': base64Encode(widget.imageBytes!),
                 },
               )
               as Map<String, dynamic>;
@@ -130,7 +140,8 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
 
   void _seedFromExtraction(TextractExtraction extraction) {
     _vendor = extraction.merchantName;
-    _descriptionController.text = extraction.merchantName ?? 'Receipt';
+    _descriptionController.text =
+        extraction.merchantName ?? (_isManual ? '' : 'Receipt');
     _receiptDate = extraction.date;
 
     final allMemberIds = _members.map((member) => member.memberId).toList();
@@ -236,7 +247,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
 
   Map<String, dynamic> _buildExpensePayload({
     required String payerId,
-    required String receiptId,
+    required String? receiptId,
     required ItemizedAllocationResult result,
     required bool draft,
   }) {
@@ -248,7 +259,9 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     };
 
     return {
-      'description': description.isEmpty ? 'Receipt' : description,
+      'description': description.isEmpty
+          ? (_isManual ? 'Expense' : 'Receipt')
+          : description,
       if (_vendor != null && _vendor!.isNotEmpty) 'vendor': _vendor,
       'total': result.grandTotal,
       'currency': _currency,
@@ -273,15 +286,15 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
           )
           .toList(),
       'extrasSplitMode': _extrasSplitMode,
-      'receiptId': receiptId,
+      if (receiptId != null) 'receiptId': receiptId,
       if (draft) 'draft': true,
     };
   }
 
-  /// Uploads the original photo (once) and saves the expense. Throws
-  /// [ApiException] on failure; the confirm sheet renders it inline.
-  /// With [draft] the receipt is presigned as draft too, so it stays hidden
-  /// from other members until the expense is published.
+  /// Uploads the original photo (once, when there is one) and saves the
+  /// expense. Throws [ApiException] on failure; the confirm sheet renders it
+  /// inline. With [draft] the receipt is presigned as draft too, so it stays
+  /// hidden from other members until the expense is published.
   Future<ScanSaveResult> _save({
     required String payerId,
     required bool draft,
@@ -291,12 +304,14 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     final result = _computeResult();
 
     // Re-presign if a previous attempt uploaded with a different draft mode:
-    // the receipt's visibility is fixed at creation.
-    if (_uploadedReceiptId == null || _uploadedReceiptWasDraft != draft) {
+    // the receipt's visibility is fixed at creation. Manual mode has no
+    // photo, so there is nothing to upload.
+    if (!_isManual &&
+        (_uploadedReceiptId == null || _uploadedReceiptWasDraft != draft)) {
       onProgress('Uploading receipt…');
       final presign =
           await widget.api.post('/trips/$tripId/receipts', {
-                'fileName': widget.fileName,
+                'fileName': widget.fileName ?? 'receipt.jpg',
                 'contentType': 'image/jpeg',
                 if (draft) 'draft': true,
               })
@@ -307,7 +322,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       }
       await widget.api.putBytes(
         receipt.uploadUrl,
-        widget.imageBytes,
+        widget.imageBytes!,
         contentType: 'image/jpeg',
       );
       _uploadedReceiptId = receipt.receiptId;
@@ -319,7 +334,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       '/trips/$tripId/expenses',
       _buildExpensePayload(
         payerId: payerId,
-        receiptId: _uploadedReceiptId!,
+        receiptId: _uploadedReceiptId,
         result: result,
         draft: draft,
       ),
@@ -363,7 +378,10 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan receipt'), centerTitle: false),
+      appBar: AppBar(
+        title: Text(_isManual ? 'New itemized expense' : 'Scan receipt'),
+        centerTitle: false,
+      ),
       body: LayoutBuilder(
         builder: (context, constraints) => Stack(
           fit: StackFit.expand,
@@ -385,7 +403,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                 ),
               },
             ),
-            _buildReceiptImageLayer(constraints),
+            if (!_isManual) _buildReceiptImageLayer(constraints),
           ],
         ),
       ),
@@ -426,7 +444,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                       : Border.all(color: Colors.transparent),
                 ),
                 child: Image.memory(
-                  widget.imageBytes,
+                  widget.imageBytes!,
                   fit: BoxFit.cover,
                   width: double.infinity,
                   height: double.infinity,
@@ -515,16 +533,17 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                 ),
                 child: Padding(
                   // Extra right padding keeps the merchant field clear of the
-                  // floating receipt thumbnail.
-                  padding: const EdgeInsets.fromLTRB(12, 4, 68, 10),
+                  // floating receipt thumbnail (scan mode only).
+                  padding: EdgeInsets.fromLTRB(12, 4, _isManual ? 12 : 68, 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       TextField(
                         controller: _descriptionController,
                         textCapitalization: TextCapitalization.words,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Description',
+                          hintText: _isManual ? 'What was this expense?' : null,
                           border: InputBorder.none,
                         ),
                         style: const TextStyle(

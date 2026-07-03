@@ -117,6 +117,18 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
             ListTile(
               leading: const CircleAvatar(
                 backgroundColor: Colors.white10,
+                child: Icon(Icons.list_alt_rounded),
+              ),
+              title: const Text('Itemized expense'),
+              subtitle: const Text(
+                'Type the items in and split by person',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              onTap: () => Navigator.of(sheetContext).pop('itemized'),
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Colors.white10,
                 child: Icon(Icons.edit_rounded),
               ),
               title: const Text('Enter manually'),
@@ -138,6 +150,25 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
         context: context,
         api: widget.api,
         summary: summary,
+      );
+      if (result == null || !mounted) return;
+      await _load();
+      if (!mounted) return;
+      _showSavedSnackBar(
+        total: result.total,
+        currency: result.currency,
+        peopleCount: result.peopleCount,
+        draft: result.draft,
+      );
+      return;
+    }
+
+    if (choice == 'itemized') {
+      // No-photo manual mode of the review screen: skips analyze + upload.
+      final result = await Navigator.of(context).push<ScanSaveResult>(
+        MaterialPageRoute(
+          builder: (_) => ScanReviewScreen(api: widget.api, summary: summary),
+        ),
       );
       if (result == null || !mounted) return;
       await _load();
@@ -213,6 +244,114 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 '${peopleCount == 1 ? 'person' : 'people'}',
       success: true,
     );
+  }
+
+  // ------------------------------------------------------------------ invite
+
+  /// Base URL for share links, matching the digest Lambda's APP_URL default.
+  static const _appBaseUrl = 'https://thestackcore.com';
+
+  Future<void> _openInvite() async {
+    final summary = _summary;
+    if (summary == null) return;
+    final isOwner = summary.trip.ownerId == summary.currentUserId;
+
+    try {
+      // GET returns the existing invite (any member); POST creates/rotates
+      // one but is owner-only, so only fall back to it for the owner.
+      final data =
+          await widget.api.get('/trips/${widget.tripId}/invite')
+              as Map<String, dynamic>;
+      var invite = data['invite'] as Map<String, dynamic>?;
+      if (invite == null) {
+        if (!isOwner) {
+          if (!mounted) return;
+          showAppSnackBar(
+            context,
+            'No invite link yet — ask the trip owner to create one.',
+          );
+          return;
+        }
+        final created =
+            await widget.api.post('/trips/${widget.tripId}/invite')
+                as Map<String, dynamic>;
+        invite = created['invite'] as Map<String, dynamic>?;
+      }
+      final inviteId = invite?['inviteId'] as String?;
+      if (inviteId == null || inviteId.isEmpty) {
+        throw const ApiException('Invite link is unavailable', 500);
+      }
+      if (!mounted) return;
+
+      // Same join route as the web app (App.tsx: /group-expenses/join/:id).
+      final joinUrl = '$_appBaseUrl/group-expenses/join/$inviteId';
+      await showModalBottomSheet<void>(
+        context: context,
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Invite to ${summary.trip.name}',
+                  style: Theme.of(sheetContext).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Anyone with this link can join the trip.',
+                  style: TextStyle(fontSize: 13, color: Colors.white70),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: AppColors.scaffold,
+                    border: Border.all(color: Colors.white12),
+                  ),
+                  child: Text(
+                    joinUrl,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFFA5B4FC),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: joinUrl));
+                    if (sheetContext.mounted) {
+                      Navigator.of(sheetContext).pop();
+                    }
+                    if (mounted) {
+                      showAppSnackBar(
+                        context,
+                        'Invite link copied',
+                        success: true,
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  label: const Text('Copy link'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not load the invite link.', error: true);
+    }
   }
 
   // ------------------------------------------------------------------ drafts
@@ -499,6 +638,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
               surfaceTintColor: Colors.transparent,
               title: Text(summary.trip.name),
               centerTitle: false,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.person_add_alt_1_rounded),
+                  tooltip: 'Invite',
+                  onPressed: _openInvite,
+                ),
+              ],
               flexibleSpace: FlexibleSpaceBar(
                 collapseMode: CollapseMode.parallax,
                 background: _TripHeader(summary: summary),
