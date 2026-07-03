@@ -42,6 +42,7 @@ class SettleUpView extends StatelessWidget {
     final recorded = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (_) => _RecordSettlementSheet(
         api: api,
         summary: summary,
@@ -139,7 +140,7 @@ class SettleUpView extends StatelessWidget {
           Card(
             margin: EdgeInsets.zero,
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Column(
                 children: summary.balances.map((row) {
                   final positive = row.balance > 0.01;
@@ -206,7 +207,7 @@ class SettleUpView extends StatelessWidget {
                 (suggestion) => Card(
                   margin: const EdgeInsets.only(bottom: 8),
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
                     child: Row(
                       children: [
                         MemberAvatar(
@@ -377,7 +378,7 @@ class _PendingSettlementCard extends StatelessWidget {
             icon: Icon(icon, size: 16),
             style: OutlinedButton.styleFrom(
               visualDensity: VisualDensity.compact,
-              side: const BorderSide(color: Colors.white24),
+              side: const BorderSide(color: Colors.white10),
             ),
             label: Text(
               method == 'venmo'
@@ -406,7 +407,7 @@ class _PendingSettlementCard extends StatelessWidget {
         side: BorderSide(color: AppColors.warning.withValues(alpha: 0.35)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -437,9 +438,9 @@ class _PendingSettlementCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 4),
-            const Text(
-              'Waiting for confirmation',
-              style: TextStyle(fontSize: 12, color: AppColors.warning),
+            Text(
+              'WAITING FOR CONFIRMATION',
+              style: eyebrowStyle(AppColors.warning),
             ),
             if (payButtons.isNotEmpty || canConfirm) ...[
               const SizedBox(height: 10),
@@ -583,9 +584,14 @@ class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
               ],
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Amount',
-                border: OutlineInputBorder(),
+                prefixText: '${currencySymbol(widget.summary.trip.currency)} ',
+                prefixStyle: const TextStyle(
+                  color: Colors.white38,
+                  fontSize: 14,
+                ),
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),

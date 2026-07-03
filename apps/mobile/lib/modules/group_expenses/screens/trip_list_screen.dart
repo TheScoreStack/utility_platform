@@ -65,6 +65,7 @@ class _TripListScreenState extends State<TripListScreen> {
   Future<void> _confirmSignOut() async {
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
+      showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -276,7 +277,7 @@ class _BalanceChip extends StatelessWidget {
     } else if (item.outstandingBalance > 0) {
       label =
           'You owe ${formatCurrency(item.outstandingBalance, item.trip.currency)}';
-      color = AppColors.warning;
+      color = AppColors.danger;
     } else {
       label = 'Settled';
       color = Colors.white70;
@@ -286,8 +287,8 @@ class _BalanceChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: color.withValues(alpha: 0.12),
-        border: Border.all(color: color.withValues(alpha: 0.45)),
+        color: color.withValues(alpha: 0.15),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         label,

@@ -33,6 +33,19 @@ abstract final class AppColors {
 /// Tabular figures so money amounts don't jiggle while animating.
 const List<FontFeature> kTabularFigures = [FontFeature.tabularFigures()];
 
+/// Shared "eyebrow" style for small uppercase labels ("PAID BY",
+/// "YOU'RE OWED", sheet section labels). Use [eyebrowStyle] for a semantic
+/// tint; pair with an upper-cased string.
+const TextStyle kEyebrow = TextStyle(
+  fontSize: 11,
+  fontWeight: FontWeight.w600,
+  letterSpacing: 1.2,
+  color: Colors.white54,
+);
+
+TextStyle eyebrowStyle([Color? color]) =>
+    color == null ? kEyebrow : kEyebrow.copyWith(color: color);
+
 /// Floating, rounded SnackBar with an emerald/rose accent stripe for
 /// success/error results.
 void showAppSnackBar(

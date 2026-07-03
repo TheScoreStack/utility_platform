@@ -118,8 +118,13 @@ class ReceiptItemCard extends StatelessWidget {
                       inputFormatters: [
                         FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
                       ],
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         hintText: '0.00',
+                        prefixText: currencySymbol(currency),
+                        prefixStyle: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 13,
+                        ),
                         isDense: true,
                         border: InputBorder.none,
                       ),

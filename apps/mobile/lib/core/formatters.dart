@@ -8,6 +8,13 @@ String formatCurrency(double amount, String currencyCode) {
   return format.format(amount);
 }
 
+/// Just the currency symbol (`$`, `€`, …), for muted amount-field prefixes.
+String currencySymbol(String currencyCode) {
+  return NumberFormat.simpleCurrency(
+    name: currencyCode.isEmpty ? 'USD' : currencyCode,
+  ).currencySymbol;
+}
+
 DateTime? _tryParseDate(String? value) {
   if (value == null || value.isEmpty) return null;
   return DateTime.tryParse(value);

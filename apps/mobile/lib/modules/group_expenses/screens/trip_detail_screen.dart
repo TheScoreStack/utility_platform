@@ -80,6 +80,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
     final choice = await showModalBottomSheet<String>(
       context: context,
+      showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -287,6 +288,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       final joinUrl = '$_appBaseUrl/group-expenses/join/$inviteId';
       await showModalBottomSheet<void>(
         context: context,
+        showDragHandle: true,
         builder: (sheetContext) => SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
@@ -309,7 +311,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     color: AppColors.scaffold,
-                    border: Border.all(color: Colors.white12),
+                    border: Border.all(color: Colors.white10),
                   ),
                   child: Text(
                     joinUrl,
@@ -359,6 +361,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   Future<void> _confirmPublishDraft(Expense draft) async {
     final confirmed = await showModalBottomSheet<bool>(
       context: context,
+      showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
@@ -427,6 +430,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     HapticFeedback.selectionClick();
     final action = await showModalBottomSheet<String>(
       context: context,
+      showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -534,6 +538,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     HapticFeedback.selectionClick();
     final action = await showModalBottomSheet<String>(
       context: context,
+      showDragHandle: true,
       builder: (sheetContext) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -701,13 +706,13 @@ class _TripHeader extends StatelessWidget {
     final String balanceLabel;
     final Color balanceColor;
     if (balance > 0.01) {
-      balanceLabel = "You're owed";
+      balanceLabel = "YOU'RE OWED";
       balanceColor = AppColors.positive;
     } else if (balance < -0.01) {
-      balanceLabel = 'You owe';
-      balanceColor = AppColors.warning;
+      balanceLabel = 'YOU OWE';
+      balanceColor = AppColors.danger;
     } else {
-      balanceLabel = 'All settled';
+      balanceLabel = 'ALL SETTLED';
       balanceColor = Colors.white70;
     }
 
@@ -737,21 +742,18 @@ class _TripHeader extends StatelessWidget {
             ),
             const SizedBox(height: 6),
           ],
-          Text(
-            balanceLabel,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: balanceColor,
-            ),
-          ),
+          Text(balanceLabel, style: eyebrowStyle(balanceColor)),
           AnimatedAmount(
             amount: balance.abs(),
             currency: currency,
             style: TextStyle(
               fontSize: 34,
               fontWeight: FontWeight.w700,
-              color: balanceColor,
+              // Big money figure stays neutral white unless it carries the
+              // owed/owe semantics.
+              color: balanceColor == Colors.white70
+                  ? Colors.white
+                  : balanceColor,
               height: 1.15,
             ),
           ),
@@ -900,7 +902,7 @@ class _DraftCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         onLongPress: onLongPress,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
           child: Row(
             children: [
               Expanded(
@@ -916,9 +918,9 @@ class _DraftCard extends StatelessWidget {
                           ),
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(999),
-                            color: AppColors.warning.withValues(alpha: 0.18),
+                            color: AppColors.warning.withValues(alpha: 0.15),
                             border: Border.all(
-                              color: AppColors.warning.withValues(alpha: 0.5),
+                              color: AppColors.warning.withValues(alpha: 0.4),
                             ),
                           ),
                           child: const Text(
@@ -1014,7 +1016,7 @@ class _ExpenseCardState extends State<_ExpenseCard> {
         onTap: hasItems ? () => setState(() => _expanded = !_expanded) : null,
         onLongPress: widget.onLongPress,
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1174,10 +1176,10 @@ class _SmallChip extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
         color: accent
-            ? AppColors.accent.withValues(alpha: 0.18)
+            ? AppColors.accent.withValues(alpha: 0.15)
             : Colors.white10,
         border: accent
-            ? Border.all(color: AppColors.accent.withValues(alpha: 0.6))
+            ? Border.all(color: AppColors.accent.withValues(alpha: 0.4))
             : null,
       ),
       child: Row(

@@ -93,6 +93,9 @@ class MemberToggleChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = seedAvatarColor(memberId);
+    // Tint treatment: soft fill + colored border/text. Solid saturated color
+    // stays reserved for the circular initials avatars.
+    final tintedText = Color.lerp(color, Colors.white, 0.4)!;
     return AnimatedScale(
       scale: selected ? 1.0 : 0.94,
       duration: const Duration(milliseconds: 140),
@@ -114,13 +117,15 @@ class MemberToggleChip extends StatelessWidget {
         label: Text(displayName),
         labelStyle: TextStyle(
           fontSize: 13,
-          color: selected ? Colors.white : Colors.white70,
+          color: selected ? tintedText : Colors.white70,
           fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
         ),
-        selectedColor: color.withValues(alpha: 0.45),
-        checkmarkColor: Colors.white,
-        backgroundColor: Colors.transparent,
-        side: BorderSide(color: selected ? color : Colors.white24),
+        selectedColor: color.withValues(alpha: 0.15),
+        checkmarkColor: tintedText,
+        backgroundColor: Colors.white.withValues(alpha: 0.04),
+        side: BorderSide(
+          color: selected ? color.withValues(alpha: 0.4) : Colors.white10,
+        ),
         visualDensity: VisualDensity.compact,
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),

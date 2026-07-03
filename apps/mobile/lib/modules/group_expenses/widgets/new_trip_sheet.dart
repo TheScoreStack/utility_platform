@@ -27,6 +27,7 @@ Future<Trip?> showNewTripSheet({
   return showModalBottomSheet<Trip>(
     context: context,
     isScrollControlled: true,
+    showDragHandle: true,
     builder: (_) => _NewTripSheet(api: api),
   );
 }

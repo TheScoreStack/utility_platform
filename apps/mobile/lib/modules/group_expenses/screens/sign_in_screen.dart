@@ -71,7 +71,7 @@ class _SignInScreenState extends State<SignInScreen> {
       fillColor: AppColors.scaffold.withValues(alpha: 0.6),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Colors.white12),
+        borderSide: const BorderSide(color: Colors.white10),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),

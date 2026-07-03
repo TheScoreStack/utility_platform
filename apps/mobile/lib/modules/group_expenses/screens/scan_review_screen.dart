@@ -352,6 +352,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     final saved = await showModalBottomSheet<ScanSaveResult>(
       context: context,
       isScrollControlled: true,
+      showDragHandle: true,
       builder: (_) => _ConfirmSheet(
         summary: widget.summary,
         result: _computeResult(),
@@ -603,7 +604,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                 label: const Text('Add item'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
-                  side: const BorderSide(color: Colors.white24),
+                  side: const BorderSide(color: Colors.white10),
                 ),
               ),
               const SizedBox(height: 20),
@@ -617,6 +618,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                     child: _AmountField(
                       controller: _taxController,
                       label: 'Tax',
+                      currency: _currency,
                       onChanged: () => setState(() {}),
                     ),
                   ),
@@ -625,6 +627,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                     child: _AmountField(
                       controller: _tipController,
                       label: 'Tip',
+                      currency: _currency,
                       onChanged: () => setState(() {}),
                     ),
                   ),
@@ -700,11 +703,13 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
 class _AmountField extends StatelessWidget {
   final TextEditingController controller;
   final String label;
+  final String currency;
   final VoidCallback onChanged;
 
   const _AmountField({
     required this.controller,
     required this.label,
+    required this.currency,
     required this.onChanged,
   });
 
@@ -718,6 +723,8 @@ class _AmountField extends StatelessWidget {
       decoration: InputDecoration(
         labelText: label,
         hintText: '0.00',
+        prefixText: '${currencySymbol(currency)} ',
+        prefixStyle: const TextStyle(color: Colors.white38, fontSize: 14),
         isDense: true,
         border: const OutlineInputBorder(),
       ),
@@ -832,7 +839,7 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
             const SizedBox(height: 16),
             Row(
               children: [
-                const Text('Paid by', style: TextStyle(color: Colors.white70)),
+                Text('PAID BY', style: eyebrowStyle()),
                 const SizedBox(width: 16),
                 Expanded(
                   child: DropdownButton<String>(

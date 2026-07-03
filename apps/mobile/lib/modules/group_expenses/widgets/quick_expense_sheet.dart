@@ -35,6 +35,7 @@ Future<QuickExpenseResult?> showQuickExpenseSheet({
   return showModalBottomSheet<QuickExpenseResult>(
     context: context,
     isScrollControlled: true,
+    showDragHandle: true,
     builder: (_) => _QuickExpenseSheet(api: api, summary: summary),
   );
 }
@@ -200,6 +201,13 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
                     fontWeight: FontWeight.w700,
                     color: Colors.white.withValues(alpha: 0.25),
                   ),
+                  // Muted currency symbol so the amount reads unambiguously.
+                  prefixText: '${currencySymbol(_currency)} ',
+                  prefixStyle: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white38,
+                  ),
                   border: InputBorder.none,
                 ),
               ),
@@ -216,10 +224,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
               const SizedBox(height: 14),
               Row(
                 children: [
-                  const Text(
-                    'Paid by',
-                    style: TextStyle(color: Colors.white70),
-                  ),
+                  Text('PAID BY', style: eyebrowStyle()),
                   const SizedBox(width: 16),
                   Expanded(
                     child: DropdownButton<String>(

@@ -44,8 +44,24 @@ class UtilityApp extends StatelessWidget {
         bottomSheetTheme: const BottomSheetThemeData(
           backgroundColor: Color(0xFF141C33),
           surfaceTintColor: Colors.transparent,
+          dragHandleColor: Colors.white24,
+          dragHandleSize: Size(32, 4),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+        ),
+        // Disabled primaries read clearly quieter so the enabled state pops.
+        filledButtonTheme: FilledButtonThemeData(
+          style: ButtonStyle(
+            backgroundColor: WidgetStateProperty.resolveWith(
+              (states) => states.contains(WidgetState.disabled)
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : null,
+            ),
+            foregroundColor: WidgetStateProperty.resolveWith(
+              (states) =>
+                  states.contains(WidgetState.disabled) ? Colors.white38 : null,
+            ),
           ),
         ),
         snackBarTheme: SnackBarThemeData(
