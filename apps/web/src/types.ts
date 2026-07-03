@@ -23,6 +23,8 @@ export interface TripSummary {
   trip: Trip;
   members: TripMember[];
   expenses: Expense[];
+  /** The requesting user's own unpublished drafts. */
+  draftExpenses: Expense[];
   deletedExpenses: Expense[];
   receipts: Receipt[];
   settlements: Settlement[];

@@ -168,6 +168,8 @@ export interface CreateExpenseInput {
   lineItems?: ExpenseLineItemInput[];
   extrasSplitMode?: ExtrasSplitMode;
   receiptId?: string;
+  /** Save privately — visible only to the creator until published. */
+  draft?: boolean;
 }
 
 type SplitMode = "even" | "custom" | "items";
@@ -230,6 +232,8 @@ interface AddExpenseFormProps {
   onPrefillConsumed?: () => void;
   /** When set, the form saves changes to this expense instead of creating. */
   editingLabel?: string | null;
+  /** True when the expense being edited is still a draft. */
+  editingIsDraft?: boolean;
   onCancelEdit?: () => void;
 }
 
@@ -244,6 +248,7 @@ const AddExpenseForm = ({
   prefill,
   onPrefillConsumed,
   editingLabel,
+  editingIsDraft,
   onCancelEdit
 }: AddExpenseFormProps) => {
   const formRef = useRef<HTMLFormElement | null>(null);
@@ -1038,22 +1043,21 @@ const AddExpenseForm = ({
     }
   };
 
-  const handleSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setError(null);
-
+  // Runs all detailed-mode validation; returns the payload or null after
+  // surfacing the error. Shared by the confirm flow and "Save draft".
+  const buildDetailedPayload = (): CreateExpenseInput | null => {
     const trimmedDescription = description.trim();
     if (!trimmedDescription) {
       setError("Description is required");
-      return;
+      return null;
     }
     if (!paidBy) {
       setError("Select who paid for this expense.");
-      return;
+      return null;
     }
     if (splitMode !== "items" && sharedWith.length === 0) {
       setError("Select at least one person to share this expense.");
-      return;
+      return null;
     }
     if (grossTotal <= 0) {
       setError(
@@ -1061,7 +1065,7 @@ const AddExpenseForm = ({
           ? "Add at least one line item with an amount before saving."
           : "Enter a positive subtotal, tax, or tip before saving."
       );
-      return;
+      return null;
     }
     if (splitEvenly && evenSplitRemainderCents > 0 && !remainderMemberId) {
       setError(
@@ -1071,7 +1075,7 @@ const AddExpenseForm = ({
         behavior: "smooth",
         block: "center"
       });
-      return;
+      return null;
     }
 
     let allocationsPayload: { memberId: string; amount: number }[] = [];
@@ -1085,7 +1089,7 @@ const AddExpenseForm = ({
       );
       if (rows.length === 0) {
         setError("Add at least one line item to split by item.");
-        return;
+        return null;
       }
       const missingAmount = rows.find(
         (row) => parseCurrencyInput(row.totalInput) <= 0
@@ -1094,11 +1098,11 @@ const AddExpenseForm = ({
         setError(
           `Enter an amount for "${missingAmount.description.trim() || "each item"}".`
         );
-        return;
+        return null;
       }
       if (rows.some((row) => row.assignedMemberIds.length === 0)) {
         setError("Assign at least one person to every item.");
-        return;
+        return null;
       }
 
       lineItemsPayload = rows.map((row, index) => ({
@@ -1137,7 +1141,7 @@ const AddExpenseForm = ({
             Math.abs(allocationDelta)
           )}).`
         );
-        return;
+        return null;
       }
 
       allocationsPayload = customAllocationPreview.perMember.map((detail) => ({
@@ -1164,11 +1168,21 @@ const AddExpenseForm = ({
       receiptId: receiptId || undefined
     };
 
+    return payload;
+  };
+
+  const handleSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    setError(null);
+
+    const payload = buildDetailedPayload();
+    if (!payload) return;
+
     const payerMember = membersById[payload.paidByMemberId];
     const payerName =
       payerMember?.displayName ??
       (payerMember?.email ?? "Selected member");
-    const allocationSummary = allocationsPayload
+    const allocationSummary = (payload.allocations ?? [])
       .filter((item) => item.amount > 0.0001)
       .map((item) => {
         const member = membersById[item.memberId];
@@ -1192,14 +1206,14 @@ const AddExpenseForm = ({
     });
   };
 
-  const handleConfirmSubmit = async () => {
-    if (!pendingExpense) return;
+  const submitPayload = async (input: CreateExpenseInput) => {
     setError(null);
 
-    const payload = { ...pendingExpense.payload };
+    const payload = { ...input };
 
     // A live-scanned receipt only exists in memory; upload it now so the
-    // saved expense links to the same file the user scanned.
+    // saved expense links to the same file the user scanned. Draft expenses
+    // upload a draft receipt so the file stays hidden until publish.
     if (!payload.receiptId && liveReceiptFileRef.current) {
       const file = liveReceiptFileRef.current;
       setIsAttachingReceipt(true);
@@ -1208,7 +1222,8 @@ const AddExpenseForm = ({
           `/trips/${tripId}/receipts`,
           {
             fileName: file.name,
-            contentType: file.type || "application/octet-stream"
+            contentType: file.type || "application/octet-stream",
+            draft: payload.draft === true ? true : undefined
           }
         );
         const uploadResponse = await fetch(receipt.uploadUrl, {
@@ -1243,6 +1258,19 @@ const AddExpenseForm = ({
         err instanceof Error ? err.message : "Failed to save expense";
       setError(message);
     }
+  };
+
+  const handleConfirmSubmit = async () => {
+    if (!pendingExpense) return;
+    await submitPayload(pendingExpense.payload);
+  };
+
+  // Drafts skip the confirmation dialog — they're private and low-stakes.
+  const handleSaveDraft = async () => {
+    setError(null);
+    const payload = buildDetailedPayload();
+    if (!payload) return;
+    await submitPayload({ ...payload, draft: true });
   };
 
   const handleCancelConfirmation = () => {
@@ -2278,26 +2306,48 @@ const AddExpenseForm = ({
               : editingLabel
                 ? "Save changes"
                 : "Add expense";
+        const canSaveDraft = !editingLabel || editingIsDraft;
         return (
-          <button
-            type="submit"
-            className="primary"
-            disabled={isSubmitting || blocked}
-            title={
-              allocationOff
-                ? "Adjust the per-person amounts so they match the total before saving."
-                : itemsOff
-                  ? "Every item needs at least one person assigned before saving."
-                  : undefined
-            }
-            style={
-              blocked
-                ? { opacity: 0.55, cursor: "not-allowed", background: "rgba(148,163,184,0.25)", color: "#e2e8f0", boxShadow: "none" }
-                : undefined
-            }
-          >
-            {buttonLabel}
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+            <button
+              type="submit"
+              className="primary"
+              disabled={isSubmitting || blocked}
+              style={{
+                flex: "2 1 12rem",
+                ...(blocked
+                  ? { opacity: 0.55, cursor: "not-allowed", background: "rgba(148,163,184,0.25)", color: "#e2e8f0", boxShadow: "none" }
+                  : {})
+              }}
+              title={
+                allocationOff
+                  ? "Adjust the per-person amounts so they match the total before saving."
+                  : itemsOff
+                    ? "Every item needs at least one person assigned before saving."
+                    : undefined
+              }
+            >
+              {buttonLabel}
+            </button>
+            {canSaveDraft && (
+              <button
+                type="button"
+                className="secondary"
+                disabled={isSubmitting || isAttachingReceipt || blocked}
+                style={{ flex: "1 1 8rem" }}
+                title="Only you can see drafts. Publish whenever it's ready."
+                onClick={() => {
+                  void handleSaveDraft();
+                }}
+              >
+                {isAttachingReceipt
+                  ? "Uploading…"
+                  : editingIsDraft
+                    ? "Keep as draft"
+                    : "Save draft"}
+              </button>
+            )}
+          </div>
         );
       })()}
 

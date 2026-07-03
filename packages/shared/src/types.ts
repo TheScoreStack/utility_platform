@@ -83,6 +83,10 @@ export interface Expense {
   extrasSplitMode?: ExtrasSplitMode;
   receiptId?: string;
   receiptPreviewUrl?: string;
+  /** Draft expenses are visible only to their creator and excluded from
+   *  balances until published. */
+  draft?: boolean;
+  createdBy?: string;
   deletedAt?: string;
   deletedBy?: string;
 }
@@ -95,6 +99,10 @@ export interface Receipt {
   fileName: string;
   status: "PENDING_UPLOAD" | "UPLOADED" | "PROCESSING" | "COMPLETED" | "FAILED";
   extractedData?: TextractExtraction;
+  /** Receipts uploaded for a draft expense stay hidden from other members
+   *  until the expense is published. */
+  draft?: boolean;
+  createdBy?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -82,7 +82,10 @@ const toTrip = (item: TripEntity): Trip => ({
 export interface TripDetails {
   trip: Trip;
   members: TripMember[];
+  /** Published, non-deleted expenses — the only ones that count toward balances. */
   expenses: Expense[];
+  /** All members' drafts; callers must filter to the requesting user's own. */
+  draftExpenses: Expense[];
   deletedExpenses: Expense[];
   receipts: Receipt[];
   settlements: Settlement[];
@@ -246,12 +249,19 @@ export class TripStore {
       extrasSplitMode: item.extrasSplitMode,
       receiptId: item.receiptId,
       receiptPreviewUrl: item.receiptPreviewUrl,
+      draft: item.draft,
+      createdBy: item.createdBy,
       deletedAt: item.deletedAt,
       deletedBy: item.deletedBy
     }));
-    const expenses = allExpenses.filter((e) => !e.deletedAt);
+    // Drafts never reach `expenses` (and therefore never reach balances,
+    // digests, or other members) — they surface only via `draftExpenses`.
+    const expenses = allExpenses.filter((e) => !e.deletedAt && !e.draft);
+    const draftExpenses = allExpenses.filter(
+      (e) => Boolean(e.draft) && !e.deletedAt
+    );
     const deletedExpenses = allExpenses
-      .filter((e) => Boolean(e.deletedAt))
+      .filter((e) => Boolean(e.deletedAt) && !e.draft)
       .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
 
     const receipts: Receipt[] = Items.filter(
@@ -264,6 +274,8 @@ export class TripStore {
       fileName: item.fileName,
       status: item.status,
       extractedData: item.extractedData,
+      draft: item.draft,
+      createdBy: item.createdBy,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt
     }));
@@ -293,6 +305,7 @@ export class TripStore {
       trip,
       members,
       expenses,
+      draftExpenses,
       deletedExpenses,
       receipts,
       settlements,
@@ -664,7 +677,7 @@ export class TripStore {
   async updateReceiptExtraction(
     tripId: string,
     receiptId: string,
-    updates: Partial<Pick<Receipt, "status" | "extractedData" | "updatedAt">>
+    updates: Partial<Pick<Receipt, "status" | "extractedData" | "draft" | "updatedAt">>
   ): Promise<void> {
     const updateExpressions: string[] = [];
     const names: Record<string, string> = {};
@@ -817,7 +830,7 @@ export class TripStore {
   async updateExpenseAllocations(
     tripId: string,
     expenseId: string,
-    updates: Partial<Pick<Expense, "description" | "vendor" | "category" | "currency" | "paidByMemberId" | "receiptId" | "allocations" | "sharedWithMemberIds" | "tax" | "tip" | "total" | "lineItems" | "extrasSplitMode" | "updatedAt">>
+    updates: Partial<Pick<Expense, "description" | "vendor" | "category" | "currency" | "paidByMemberId" | "receiptId" | "allocations" | "sharedWithMemberIds" | "tax" | "tip" | "total" | "lineItems" | "extrasSplitMode" | "draft" | "updatedAt">>
   ): Promise<void> {
     const updateExpressions: string[] = [];
     const names: Record<string, string> = {};

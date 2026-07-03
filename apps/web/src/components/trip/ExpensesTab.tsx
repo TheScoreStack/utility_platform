@@ -19,7 +19,11 @@ interface ExpensesTabProps {
   onCreateExpense: (payload: CreateExpenseInput) => Promise<unknown>;
   isCreating: boolean;
   membersById: Record<string, string>;
-  onDeleteExpense: (expenseId: string, description: string) => Promise<void>;
+  onDeleteExpense: (
+    expenseId: string,
+    description: string,
+    isDraft?: boolean
+  ) => Promise<void>;
   deletePending: boolean;
   deletingExpenseId?: string;
   currentUserId?: string;
@@ -29,6 +33,9 @@ interface ExpensesTabProps {
   editingExpense?: Expense | null;
   onCancelEditExpense?: () => void;
   onEditExpense: (expense: Expense) => void;
+  draftExpenses: Expense[];
+  onPublishDraft: (expenseId: string) => Promise<unknown>;
+  publishingExpenseId?: string;
   deletedExpenses: Expense[];
   onRestoreExpense: (expenseId: string) => Promise<void>;
   onPurgeExpense: (expenseId: string) => Promise<void>;
@@ -56,6 +63,9 @@ export const ExpensesTab = ({
   editingExpense,
   onCancelEditExpense,
   onEditExpense,
+  draftExpenses,
+  onPublishDraft,
+  publishingExpenseId,
   deletedExpenses,
   onRestoreExpense,
   onPurgeExpense,
@@ -433,9 +443,115 @@ export const ExpensesTab = ({
           prefill={expensePrefill}
           onPrefillConsumed={onExpensePrefillConsumed}
           editingLabel={editingExpense?.description ?? null}
+          editingIsDraft={Boolean(editingExpense?.draft)}
           onCancelEdit={onCancelEditExpense}
         />
       </section>
+
+      {draftExpenses.length > 0 && (
+        <section
+          className="card"
+          style={{
+            gridColumn: "1 / -1",
+            border: "1px dashed rgba(250,204,21,0.45)"
+          }}
+        >
+          <div className="section-title">
+            <h2>Your drafts</h2>
+            <span className="muted">
+              Only you can see these until you publish.
+            </span>
+          </div>
+          <div className="list">
+            {draftExpenses.map((draft) => (
+              <div
+                key={draft.expenseId}
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "1rem",
+                  flexWrap: "wrap",
+                  border: "1px solid rgba(148,163,184,0.14)",
+                  borderRadius: "0.85rem",
+                  padding: "0.85rem 1rem"
+                }}
+              >
+                <div style={{ minWidth: "12rem" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.5rem"
+                    }}
+                  >
+                    <span
+                      className="pill"
+                      style={{
+                        background: "rgba(250,204,21,0.16)",
+                        color: "#fde68a",
+                        fontSize: "0.72rem"
+                      }}
+                    >
+                      Draft
+                    </span>
+                    <strong>{draft.description}</strong>
+                  </div>
+                  <p className="muted" style={{ margin: "0.3rem 0 0" }}>
+                    {formatCurrency.format(draft.total)}
+                    {draft.lineItems && draft.lineItems.length > 0
+                      ? ` · ${draft.lineItems.length} ${
+                          draft.lineItems.length === 1 ? "item" : "items"
+                        }`
+                      : ""}
+                    {draft.receiptId ? " · receipt attached" : ""}
+                    {" · saved "}
+                    {formatDate(draft.updatedAt)}
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem" }}>
+                  <button
+                    type="button"
+                    className="primary"
+                    style={{ paddingInline: "0.85rem" }}
+                    disabled={publishingExpenseId === draft.expenseId}
+                    onClick={() => {
+                      void onPublishDraft(draft.expenseId);
+                    }}
+                  >
+                    {publishingExpenseId === draft.expenseId
+                      ? "Publishing…"
+                      : "Publish"}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => onEditExpense(draft)}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary"
+                    style={{ opacity: 0.7 }}
+                    disabled={deletePending && deletingExpenseId === draft.expenseId}
+                    title="Deletes the draft permanently"
+                    onClick={() => {
+                      onDeleteExpense(
+                        draft.expenseId,
+                        draft.description,
+                        true
+                      ).catch(() => {});
+                    }}
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="card" style={{ gridColumn: "1 / -1" }}>
         <div className="section-title">

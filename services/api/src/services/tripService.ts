@@ -115,7 +115,8 @@ const expenseSchema = z.object({
   lineItems: z.array(lineItemSchema).nonempty().optional(),
   extrasSplitMode: extrasSplitModeSchema.optional(),
   receiptId: z.string().optional(),
-  remainderMemberId: z.string().optional()
+  remainderMemberId: z.string().optional(),
+  draft: z.boolean().optional()
 });
 
 const updateExpenseSchema = z.object({
@@ -142,12 +143,15 @@ const updateExpenseSchema = z.object({
   lineItems: z.array(lineItemSchema).optional(),
   extrasSplitMode: extrasSplitModeSchema.optional(),
   receiptId: z.string().optional(),
-  remainderMemberId: z.string().optional()
+  remainderMemberId: z.string().optional(),
+  // draft:false publishes; draft:true on a published expense is rejected.
+  draft: z.boolean().optional()
 });
 
 const receiptSchema = z.object({
   fileName: z.string().min(1),
-  contentType: z.string().min(1)
+  contentType: z.string().min(1),
+  draft: z.boolean().optional()
 });
 
 const liveReceiptSchema = z.object({
@@ -205,6 +209,8 @@ export interface TripSummary {
   trip: Trip;
   members: TripMember[];
   expenses: Expense[];
+  /** The requesting user's own unpublished drafts. */
+  draftExpenses: Expense[];
   deletedExpenses: Expense[];
   receipts: Receipt[];
   settlements: Settlement[];
@@ -651,32 +657,43 @@ export class TripService {
     const receiptById = new Map(
       details.receipts.map((receipt) => [receipt.receiptId, receipt])
     );
-    const expensesWithPreview = await Promise.all(
-      sortedExpenses.map(async (expense) => {
-        if (!expense.receiptId) {
-          return expense;
-        }
-        const receipt = receiptById.get(expense.receiptId);
-        if (!receipt?.storageKey || receipt.status === "FAILED") {
-          return expense;
-        }
-        try {
-          const previewUrl = await generateReceiptDownloadUrl(
-            receipt.storageKey
-          );
-          return {
-            ...expense,
-            receiptPreviewUrl: previewUrl
-          };
-        } catch (error) {
-          console.warn("Failed to generate receipt preview URL", {
-            tripId,
-            receiptId: expense.receiptId,
-            error
-          });
-          return expense;
-        }
-      })
+    const addPreviews = (expenses: Expense[]) =>
+      Promise.all(
+        expenses.map(async (expense) => {
+          if (!expense.receiptId) {
+            return expense;
+          }
+          const receipt = receiptById.get(expense.receiptId);
+          if (!receipt?.storageKey || receipt.status === "FAILED") {
+            return expense;
+          }
+          try {
+            const previewUrl = await generateReceiptDownloadUrl(
+              receipt.storageKey
+            );
+            return {
+              ...expense,
+              receiptPreviewUrl: previewUrl
+            };
+          } catch (error) {
+            console.warn("Failed to generate receipt preview URL", {
+              tripId,
+              receiptId: expense.receiptId,
+              error
+            });
+            return expense;
+          }
+        })
+      );
+    const expensesWithPreview = await addPreviews(sortedExpenses);
+
+    const ownDrafts = details.draftExpenses
+      .filter((expense) => expense.createdBy === auth.userId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const draftsWithPreview = await addPreviews(ownDrafts);
+
+    const visibleReceipts = details.receipts.filter(
+      (receipt) => !receipt.draft || receipt.createdBy === auth.userId
     );
 
     const userProfiles = await getUserStore().getUsersByIds(
@@ -695,6 +712,8 @@ export class TripService {
       ...details,
       members: membersWithPayments,
       expenses: expensesWithPreview,
+      draftExpenses: draftsWithPreview,
+      receipts: visibleReceipts,
       balances,
       pendingSettlements,
       currentUserId: auth.userId
@@ -934,7 +953,9 @@ export class TripService {
       allocations,
       lineItems,
       extrasSplitMode: lineItems ? parsed.data.extrasSplitMode ?? "proportional" : undefined,
-      receiptId: parsed.data.receiptId
+      receiptId: parsed.data.receiptId,
+      draft: parsed.data.draft ? true : undefined,
+      createdBy: auth.userId
     };
 
     await getTripStore().saveExpense(expense);
@@ -980,12 +1001,24 @@ export class TripService {
       throw new ForbiddenError("Not authorized");
     }
 
-    const expense = details.expenses.find(
-      (item) => item.expenseId === expenseId
-    );
+    const expense =
+      details.expenses.find((item) => item.expenseId === expenseId) ??
+      details.draftExpenses.find(
+        (item) =>
+          item.expenseId === expenseId && item.createdBy === auth.userId
+      );
     if (!expense) {
+      // Covers both "does not exist" and "someone else's draft" — drafts are
+      // invisible to non-creators, so don't reveal their existence.
       throw new ValidationError("Expense not found");
     }
+
+    if (parsed.data.draft === true && !expense.draft) {
+      throw new ValidationError(
+        "A published expense cannot be turned back into a draft"
+      );
+    }
+    const isPublishing = expense.draft === true && parsed.data.draft === false;
 
     let allocations = parsed.data.allocations ?? expense.allocations;
     if (parsed.data.sharedWithMemberIds) {
@@ -1072,8 +1105,18 @@ export class TripService {
       extrasSplitMode: lineItems
         ? parsed.data.extrasSplitMode ?? expense.extrasSplitMode ?? "proportional"
         : undefined,
+      draft: isPublishing ? false : undefined,
       updatedAt: isoNow()
     });
+
+    // Publishing an expense also reveals its receipt to the rest of the trip.
+    const publishedReceiptId = parsed.data.receiptId ?? expense.receiptId;
+    if (isPublishing && publishedReceiptId) {
+      await getTripStore().updateReceiptExtraction(tripId, publishedReceiptId, {
+        draft: false,
+        updatedAt: isoNow()
+      });
+    }
   }
 
   async deleteExpense(
@@ -1088,6 +1131,17 @@ export class TripService {
     );
     if (!isMember) {
       throw new ForbiddenError("Not authorized");
+    }
+
+    const draft = details.draftExpenses.find(
+      (item) =>
+        item.expenseId === expenseId && item.createdBy === auth.userId
+    );
+    if (draft) {
+      // Drafts were never visible to the trip, so skip the recoverable
+      // soft-delete stage and remove them outright.
+      await getTripStore().purgeExpense(tripId, expenseId);
+      return;
     }
 
     const expense = details.expenses.find(
@@ -1192,6 +1246,8 @@ export class TripService {
       uploadUrl,
       fileName: parsed.data.fileName,
       status: "PENDING_UPLOAD",
+      draft: parsed.data.draft ? true : undefined,
+      createdBy: auth.userId,
       createdAt: now,
       updatedAt: now
     };

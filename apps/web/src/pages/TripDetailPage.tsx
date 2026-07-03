@@ -228,13 +228,24 @@ const TripDetailPage = () => {
           lineItems: input.lineItems ?? [],
           extrasSplitMode: input.extrasSplitMode,
           remainderMemberId: input.remainderMemberId,
-          receiptId: input.receiptId
+          receiptId: input.receiptId,
+          draft: input.draft
         }
       });
       setEditingExpense(null);
     },
     [editingExpense, createExpenseMutation, updateExpenseMutation]
   );
+
+  const publishDraftMutation = useMutation({
+    mutationFn: (expenseId: string) =>
+      api.patch<void>(`/trips/${tripId}/expenses/${expenseId}`, {
+        draft: false
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+    }
+  });
 
   const inviteQuery = useQuery({
     queryKey: ["trip-invite", tripId],
@@ -317,7 +328,7 @@ const TripDetailPage = () => {
     }
   });
 
-  const deleteExpenseMutation = useMutation<void, unknown, { expenseId: string; description: string }>({
+  const deleteExpenseMutation = useMutation<void, unknown, { expenseId: string; description: string; isDraft?: boolean }>({
     mutationFn: ({ expenseId }) => {
       if (!tripId) {
         throw new Error("Trip not found");
@@ -326,6 +337,8 @@ const TripDetailPage = () => {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey });
+      // Drafts are purged outright server-side, so there's nothing to undo.
+      if (variables.isDraft) return;
       setUndoToast({
         nonce: Date.now(),
         kind: "expense",
@@ -807,11 +820,20 @@ const TripDetailPage = () => {
             createExpenseMutation.isPending || updateExpenseMutation.isPending
           }
           editingExpense={editingExpense}
+          draftExpenses={data.draftExpenses ?? []}
+          onPublishDraft={(expenseId) =>
+            publishDraftMutation.mutateAsync(expenseId)
+          }
+          publishingExpenseId={
+            publishDraftMutation.isPending
+              ? publishDraftMutation.variables
+              : undefined
+          }
           onCancelEditExpense={() => setEditingExpense(null)}
           onEditExpense={handleEditExpense}
           membersById={membersById}
-          onDeleteExpense={(expenseId, description) =>
-            deleteExpenseMutation.mutateAsync({ expenseId, description })
+          onDeleteExpense={(expenseId, description, isDraft) =>
+            deleteExpenseMutation.mutateAsync({ expenseId, description, isDraft })
           }
           deletePending={deleteExpenseMutation.isPending}
           deletingExpenseId={deleteExpenseMutation.variables?.expenseId}
