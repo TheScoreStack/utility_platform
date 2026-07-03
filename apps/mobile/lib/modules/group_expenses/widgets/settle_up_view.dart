@@ -96,12 +96,35 @@ class SettleUpView extends StatelessWidget {
       return;
     }
 
+    final note = 'Settling up: ${summary.trip.name}';
+
+    // Venmo: prefer the native scheme (guaranteed app-open when installed);
+    // universal links occasionally stay in the browser.
+    if (method == 'venmo') {
+      final appLink = buildVenmoAppLink(
+        handle,
+        amount: settlement.amount,
+        currency: settlement.currency,
+        note: note,
+      );
+      if (appLink != null) {
+        final appUri = Uri.parse(appLink);
+        if (await canLaunchUrl(appUri)) {
+          final opened = await launchUrl(
+            appUri,
+            mode: LaunchMode.externalApplication,
+          );
+          if (opened) return;
+        }
+      }
+    }
+
     final link = buildPaymentLink(
       method,
       handle,
       amount: settlement.amount,
       currency: settlement.currency,
-      note: 'Settling up: ${summary.trip.name}',
+      note: note,
     );
     if (link == null) {
       await Clipboard.setData(ClipboardData(text: handle));

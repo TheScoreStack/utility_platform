@@ -57,3 +57,35 @@ String? buildPaymentLink(
 
   return null;
 }
+
+/// Venmo's native app scheme — guaranteed to open the app when installed
+/// (universal links sometimes stay in the browser). Callers should try this
+/// first and fall back to [buildPaymentLink]'s https form.
+String? buildVenmoAppLink(
+  String value, {
+  double? amount,
+  String? currency,
+  String? note,
+}) {
+  final handle = value.trim().replaceFirst(RegExp(r'^@'), '');
+  if (handle.isEmpty) return null;
+
+  final params = <String, String>{'txn': 'pay', 'recipients': handle};
+  // Venmo is USD-only; don't prefill a number that's in another currency.
+  if (amount != null &&
+      amount > 0 &&
+      (currency == null || currency.toUpperCase() == 'USD')) {
+    params['amount'] = amount.toStringAsFixed(2);
+  }
+  if (note != null && note.isNotEmpty) {
+    params['note'] = note;
+  }
+  final query = params.entries
+      .map(
+        (entry) =>
+            '${Uri.encodeQueryComponent(entry.key)}='
+            '${Uri.encodeQueryComponent(entry.value)}',
+      )
+      .join('&');
+  return 'venmo://paycharge?$query';
+}

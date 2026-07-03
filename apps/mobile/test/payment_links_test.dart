@@ -50,4 +50,30 @@ void main() {
       expect(buildPaymentLink('venmo', '  @  '), isNull);
     });
   });
+
+  group('buildVenmoAppLink', () {
+    test('builds the native scheme with recipient, amount, and note', () {
+      expect(
+        buildVenmoAppLink(
+          '@Hunter-Adam-123',
+          amount: 58.96,
+          currency: 'USD',
+          note: 'Settling up: Trip',
+        ),
+        'venmo://paycharge?txn=pay&recipients=Hunter-Adam-123'
+        '&amount=58.96&note=Settling+up%3A+Trip',
+      );
+    });
+
+    test('omits the amount for non-USD settlements', () {
+      expect(
+        buildVenmoAppLink('@bob', amount: 10, currency: 'EUR'),
+        'venmo://paycharge?txn=pay&recipients=bob',
+      );
+    });
+
+    test('blank handle returns null', () {
+      expect(buildVenmoAppLink('  @  '), isNull);
+    });
+  });
 }
