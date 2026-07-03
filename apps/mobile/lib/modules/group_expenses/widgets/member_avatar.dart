@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Deterministic avatar colors, ported from the web's `seedAvatar`
 /// (`apps/web/src/lib/avatarPalette.ts`): hash the memberId and pick from a
@@ -92,29 +93,37 @@ class MemberToggleChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = seedAvatarColor(memberId);
-    return FilterChip(
-      selected: selected,
-      showCheckmark: true,
-      onSelected: (_) => onTap(),
-      avatar: selected
-          ? null
-          : MemberAvatar(
-              memberId: memberId,
-              displayName: displayName,
-              radius: 10,
-            ),
-      label: Text(displayName),
-      labelStyle: TextStyle(
-        fontSize: 13,
-        color: selected ? Colors.white : Colors.white70,
-        fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+    return AnimatedScale(
+      scale: selected ? 1.0 : 0.94,
+      duration: const Duration(milliseconds: 140),
+      curve: Curves.easeOut,
+      child: FilterChip(
+        selected: selected,
+        showCheckmark: true,
+        onSelected: (_) {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        avatar: selected
+            ? null
+            : MemberAvatar(
+                memberId: memberId,
+                displayName: displayName,
+                radius: 10,
+              ),
+        label: Text(displayName),
+        labelStyle: TextStyle(
+          fontSize: 13,
+          color: selected ? Colors.white : Colors.white70,
+          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+        ),
+        selectedColor: color.withValues(alpha: 0.45),
+        checkmarkColor: Colors.white,
+        backgroundColor: Colors.transparent,
+        side: BorderSide(color: selected ? color : Colors.white24),
+        visualDensity: VisualDensity.compact,
+        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),
-      selectedColor: color.withValues(alpha: 0.45),
-      checkmarkColor: Colors.white,
-      backgroundColor: Colors.transparent,
-      side: BorderSide(color: selected ? color : Colors.white24),
-      visualDensity: VisualDensity.compact,
-      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
   }
 }

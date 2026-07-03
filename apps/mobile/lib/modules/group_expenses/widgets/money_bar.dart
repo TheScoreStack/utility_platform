@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/formatters.dart';
 import '../../../core/split_math.dart';
 import '../../../models/models.dart';
+import 'animated_amount.dart';
 import 'member_avatar.dart';
 
 /// Sticky bottom "money bar": per-person running totals, always visible while
@@ -69,8 +70,9 @@ class PerPersonMoneyBar extends StatelessWidget {
                                 color: Colors.white70,
                               ),
                             ),
-                            Text(
-                              formatCurrency(allocation.amount, currency),
+                            AnimatedAmount(
+                              amount: allocation.amount,
+                              currency: currency,
                               style: const TextStyle(
                                 fontSize: 15,
                                 fontWeight: FontWeight.w700,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/api_client.dart';
+import '../../../core/app_theme.dart';
 import '../../../core/formatters.dart';
 import '../../../models/models.dart';
 import 'trip_detail_screen.dart';
@@ -241,11 +242,11 @@ class _BalanceChip extends StatelessWidget {
     if (item.owedToYou > 0) {
       label =
           "You're owed ${formatCurrency(item.owedToYou, item.trip.currency)}";
-      color = Colors.green.shade400;
+      color = AppColors.positive;
     } else if (item.outstandingBalance > 0) {
       label =
           'You owe ${formatCurrency(item.outstandingBalance, item.trip.currency)}';
-      color = Colors.amber.shade400;
+      color = AppColors.warning;
     } else {
       label = 'Settled';
       color = Colors.white70;

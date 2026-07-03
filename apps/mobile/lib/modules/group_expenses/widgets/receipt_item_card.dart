@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../../core/app_theme.dart';
 import '../../../core/formatters.dart';
 import '../../../models/models.dart';
 import 'member_avatar.dart';
@@ -59,18 +60,21 @@ class ReceiptItemCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final needsAssignees = item.amount > 0 && item.assignedMemberIds.isEmpty;
     final shareCount = item.assignedMemberIds.length;
-    final amber = Colors.amber.shade400;
+    const amber = AppColors.warning;
 
     return Dismissible(
       key: ValueKey(item.id),
       direction: DismissDirection.endToStart,
-      onDismissed: (_) => onRemoved(),
+      onDismissed: (_) {
+        HapticFeedback.lightImpact();
+        onRemoved();
+      },
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 24),
         margin: const EdgeInsets.symmetric(vertical: 4),
         decoration: BoxDecoration(
-          color: Colors.red.shade700,
+          color: AppColors.danger.withValues(alpha: 0.85),
           borderRadius: BorderRadius.circular(12),
         ),
         child: const Icon(Icons.delete_outline, color: Colors.white),

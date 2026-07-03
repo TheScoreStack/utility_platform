@@ -1,14 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api_client.dart';
+import '../../../core/app_theme.dart';
 import '../../../core/formatters.dart';
 import '../../../models/models.dart';
+import '../widgets/animated_amount.dart';
 import '../widgets/member_avatar.dart';
+import '../widgets/quick_expense_sheet.dart';
+import '../widgets/settle_up_view.dart';
+import 'receipt_viewer_screen.dart';
 import 'scan_review_screen.dart';
 
-/// One trip: your balance, the expense feed, and the camera-first FAB that
-/// launches the scan flow.
+/// One trip: collapsing gradient header (name, dates, your balance, members),
+/// Expenses / Settle up tabs, and the camera-first FAB.
 class TripDetailScreen extends StatefulWidget {
   final ApiClient api;
   final String tripId;
@@ -66,11 +72,13 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
 
-  Future<void> _startScanFlow() async {
+  // ---------------------------------------------------------------- add flow
+
+  Future<void> _startAddFlow() async {
     final summary = _summary;
     if (summary == null) return;
 
-    final source = await showModalBottomSheet<ImageSource>(
+    final choice = await showModalBottomSheet<String>(
       context: context,
       builder: (sheetContext) => SafeArea(
         child: Column(
@@ -78,7 +86,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
           children: [
             const SizedBox(height: 12),
             const Text(
-              'Add a receipt',
+              'Add an expense',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
@@ -92,7 +100,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 'Snap the receipt with your camera',
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
-              onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+              onTap: () => Navigator.of(sheetContext).pop('camera'),
             ),
             ListTile(
               leading: const CircleAvatar(
@@ -104,15 +112,49 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 'Pick an existing photo',
                 style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
-              onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+              onTap: () => Navigator.of(sheetContext).pop('gallery'),
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Colors.white10,
+                child: Icon(Icons.edit_rounded),
+              ),
+              title: const Text('Enter manually'),
+              subtitle: const Text(
+                'Quick amount, split evenly',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              onTap: () => Navigator.of(sheetContext).pop('manual'),
             ),
             const SizedBox(height: 12),
           ],
         ),
       ),
     );
-    if (source == null || !mounted) return;
+    if (choice == null || !mounted) return;
 
+    if (choice == 'manual') {
+      final result = await showQuickExpenseSheet(
+        context: context,
+        api: widget.api,
+        summary: summary,
+      );
+      if (result == null || !mounted) return;
+      await _load();
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        'Added ${formatCurrency(result.total, result.currency)} · '
+        'split across ${result.peopleCount} '
+        '${result.peopleCount == 1 ? 'person' : 'people'}',
+        success: true,
+      );
+      return;
+    }
+
+    final source = choice == 'camera'
+        ? ImageSource.camera
+        : ImageSource.gallery;
     final XFile? picked;
     try {
       picked = await _picker.pickImage(
@@ -122,8 +164,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       );
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not open the camera or library.')),
+      showAppSnackBar(
+        context,
+        'Could not open the camera or library.',
+        error: true,
       );
       return;
     }
@@ -147,95 +191,188 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
     await _load();
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Added ${formatCurrency(result.total, result.currency)} · '
-          'split across ${result.peopleCount} '
-          '${result.peopleCount == 1 ? 'person' : 'people'}',
+    showAppSnackBar(
+      context,
+      'Added ${formatCurrency(result.total, result.currency)} · '
+      'split across ${result.peopleCount} '
+      '${result.peopleCount == 1 ? 'person' : 'people'}',
+      success: true,
+    );
+  }
+
+  // ----------------------------------------------------------- expense menu
+
+  Future<void> _openReceipt(Expense expense) async {
+    final receiptId = expense.receiptId;
+    if (receiptId == null) return;
+    try {
+      final data =
+          await widget.api.get('/trips/${widget.tripId}/receipts/$receiptId')
+              as Map<String, dynamic>;
+      final url = data['url'] as String?;
+      if (url == null || url.isEmpty) {
+        throw const ApiException('Receipt has no image yet', 404);
+      }
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => ReceiptViewerScreen(imageUrl: url)),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not open the receipt.', error: true);
+    }
+  }
+
+  Future<void> _showExpenseActions(Expense expense) async {
+    HapticFeedback.selectionClick();
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              title: Text(
+                expense.description,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                formatCurrency(expense.total, expense.currency),
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ),
+            const Divider(height: 1),
+            if (expense.receiptId != null)
+              ListTile(
+                leading: const Icon(Icons.receipt_long_rounded),
+                title: const Text('View receipt'),
+                onTap: () => Navigator.of(sheetContext).pop('receipt'),
+              ),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.danger,
+              ),
+              title: const Text(
+                'Delete expense',
+                style: TextStyle(color: AppColors.danger),
+              ),
+              onTap: () => Navigator.of(sheetContext).pop('delete'),
+            ),
+            const SizedBox(height: 8),
+          ],
         ),
       ),
     );
+    if (action == null || !mounted) return;
+    if (action == 'receipt') {
+      await _openReceipt(expense);
+    } else if (action == 'delete') {
+      await _deleteExpense(expense);
+    }
   }
+
+  Future<void> _deleteExpense(Expense expense) async {
+    try {
+      await widget.api.delete(
+        '/trips/${widget.tripId}/expenses/${expense.expenseId}',
+      );
+      if (!mounted) return;
+      HapticFeedback.lightImpact();
+      await _load();
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        'Deleted "${expense.description}"',
+        success: true,
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not delete the expense.', error: true);
+    }
+  }
+
+  // ----------------------------------------------------------------- build
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_summary?.trip.name ?? widget.tripName),
-        centerTitle: false,
-      ),
-      floatingActionButton: _summary == null
-          ? null
-          : FloatingActionButton.extended(
-              onPressed: _startScanFlow,
-              icon: const Icon(Icons.photo_camera_rounded),
-              label: const Text('Scan receipt'),
-            ),
-      body: _buildBody(),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
-    }
     final summary = _summary;
-    if (summary == null) {
-      return _ErrorState(
-        message: _error ?? 'Could not load this trip.',
-        onRetry: _load,
+
+    if (_loading || summary == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(widget.tripName), centerTitle: false),
+        body: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _ErrorState(
+                message: _error ?? 'Could not load this trip.',
+                onRetry: _load,
+              ),
       );
     }
 
-    final membersById = {
-      for (final member in summary.members) member.memberId: member,
-    };
-
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
-        children: [
-          _TripHeaderCard(summary: summary),
-          const SizedBox(height: 16),
-          Text('Expenses', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          if (summary.expenses.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 40),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.receipt_long_rounded,
-                    size: 44,
-                    color: Colors.white24,
-                  ),
-                  SizedBox(height: 12),
-                  Text(
-                    'No expenses yet.\nScan your first receipt to get started.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70),
-                  ),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _startAddFlow,
+          icon: const Icon(Icons.photo_camera_rounded),
+          label: const Text('Scan receipt'),
+        ),
+        body: NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            SliverAppBar(
+              pinned: true,
+              expandedHeight: 248,
+              backgroundColor: AppColors.scaffold,
+              surfaceTintColor: Colors.transparent,
+              title: Text(summary.trip.name),
+              centerTitle: false,
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.parallax,
+                background: _TripHeader(summary: summary),
+              ),
+              bottom: const TabBar(
+                indicatorColor: AppColors.accent,
+                labelColor: Colors.white,
+                unselectedLabelColor: Colors.white70,
+                dividerColor: Colors.white10,
+                tabs: [
+                  Tab(text: 'Expenses'),
+                  Tab(text: 'Settle up'),
                 ],
               ),
-            )
-          else
-            ...summary.expenses.map(
-              (expense) =>
-                  _ExpenseCard(expense: expense, membersById: membersById),
             ),
-        ],
+          ],
+          body: TabBarView(
+            children: [
+              _ExpensesTab(
+                summary: summary,
+                onRefresh: _load,
+                onExpenseLongPress: _showExpenseActions,
+                onReceiptTap: _openReceipt,
+              ),
+              SettleUpView(api: widget.api, summary: summary, onRefresh: _load),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-class _TripHeaderCard extends StatelessWidget {
+/// Gradient header content inside the collapsing app bar: date range, big
+/// animated balance figure, and the member avatar row.
+class _TripHeader extends StatelessWidget {
   final TripSummary summary;
 
-  const _TripHeaderCard({required this.summary});
+  const _TripHeader({required this.summary});
 
   @override
   Widget build(BuildContext context) {
@@ -251,13 +388,13 @@ class _TripHeaderCard extends StatelessWidget {
     final String balanceLabel;
     final Color balanceColor;
     if (balance > 0.01) {
-      balanceLabel = "You're owed ${formatCurrency(balance, currency)}";
-      balanceColor = Colors.green.shade400;
+      balanceLabel = "You're owed";
+      balanceColor = AppColors.positive;
     } else if (balance < -0.01) {
-      balanceLabel = 'You owe ${formatCurrency(balance.abs(), currency)}';
-      balanceColor = Colors.amber.shade400;
+      balanceLabel = 'You owe';
+      balanceColor = AppColors.warning;
     } else {
-      balanceLabel = "You're settled up";
+      balanceLabel = 'All settled';
       balanceColor = Colors.white70;
     }
 
@@ -265,39 +402,44 @@ class _TripHeaderCard extends StatelessWidget {
       summary.trip.startDate,
       summary.trip.endDate,
     );
+    final topPadding = MediaQuery.of(context).padding.top;
 
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white10),
-        gradient: const LinearGradient(
-          colors: [Color(0xFF1E1B4B), Color(0xFF0F172A)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+      decoration: const BoxDecoration(gradient: AppColors.headerGradient),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        topPadding + kToolbarHeight,
+        16,
+        // Leave room for the TabBar pinned at the bottom of the header.
+        kTextTabBarHeight + 12,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          Text(
-            summary.trip.name,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-          ),
           if (dateRange != null) ...[
-            const SizedBox(height: 4),
             Text(
               dateRange,
               style: const TextStyle(fontSize: 13, color: Colors.white70),
             ),
+            const SizedBox(height: 6),
           ],
-          const SizedBox(height: 12),
           Text(
             balanceLabel,
             style: TextStyle(
-              fontSize: 17,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: balanceColor,
+            ),
+          ),
+          AnimatedAmount(
+            amount: balance.abs(),
+            currency: currency,
+            style: TextStyle(
+              fontSize: 34,
               fontWeight: FontWeight.w700,
               color: balanceColor,
+              height: 1.15,
             ),
           ),
           const SizedBox(height: 12),
@@ -322,11 +464,75 @@ class _TripHeaderCard extends StatelessWidget {
   }
 }
 
+class _ExpensesTab extends StatelessWidget {
+  final TripSummary summary;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function(Expense) onExpenseLongPress;
+  final Future<void> Function(Expense) onReceiptTap;
+
+  const _ExpensesTab({
+    required this.summary,
+    required this.onRefresh,
+    required this.onExpenseLongPress,
+    required this.onReceiptTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final membersById = {
+      for (final member in summary.members) member.memberId: member,
+    };
+
+    return RefreshIndicator(
+      onRefresh: onRefresh,
+      child: summary.expenses.isEmpty
+          ? ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              children: const [
+                SizedBox(height: 80),
+                Icon(
+                  Icons.receipt_long_rounded,
+                  size: 44,
+                  color: Colors.white24,
+                ),
+                SizedBox(height: 12),
+                Text(
+                  'No expenses yet.\nScan your first receipt to get started.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70),
+                ),
+              ],
+            )
+          : ListView.builder(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+              itemCount: summary.expenses.length,
+              itemBuilder: (context, index) {
+                final expense = summary.expenses[index];
+                return _ExpenseCard(
+                  expense: expense,
+                  membersById: membersById,
+                  onLongPress: () => onExpenseLongPress(expense),
+                  onReceiptTap: () => onReceiptTap(expense),
+                );
+              },
+            ),
+    );
+  }
+}
+
 class _ExpenseCard extends StatefulWidget {
   final Expense expense;
   final Map<String, TripMember> membersById;
+  final VoidCallback onLongPress;
+  final VoidCallback onReceiptTap;
 
-  const _ExpenseCard({required this.expense, required this.membersById});
+  const _ExpenseCard({
+    required this.expense,
+    required this.membersById,
+    required this.onLongPress,
+    required this.onReceiptTap,
+  });
 
   @override
   State<_ExpenseCard> createState() => _ExpenseCardState();
@@ -349,13 +555,10 @@ class _ExpenseCardState extends State<_ExpenseCard> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Colors.white10),
-      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         onTap: hasItems ? () => setState(() => _expanded = !_expanded) : null,
+        onLongPress: widget.onLongPress,
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(
@@ -394,15 +597,26 @@ class _ExpenseCardState extends State<_ExpenseCard> {
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
+                      fontFeatures: kTabularFigures,
                     ),
                   ),
                 ],
               ),
-              if ((expense.tax ?? 0) > 0 || (expense.tip ?? 0) > 0) ...[
+              if ((expense.tax ?? 0) > 0 ||
+                  (expense.tip ?? 0) > 0 ||
+                  expense.receiptId != null) ...[
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 6,
+                  runSpacing: 4,
                   children: [
+                    if (expense.receiptId != null)
+                      _SmallChip(
+                        label: 'Receipt',
+                        icon: Icons.receipt_long_rounded,
+                        accent: true,
+                        onTap: widget.onReceiptTap,
+                      ),
                     if ((expense.tax ?? 0) > 0)
                       _SmallChip(
                         label: 'Tax ${formatCurrency(expense.tax!, currency)}',
@@ -439,7 +653,7 @@ class _ExpenseCardState extends State<_ExpenseCard> {
                 ),
               ],
               if (_expanded && hasItems) ...[
-                const Divider(height: 20, color: Colors.white10),
+                const Divider(height: 20),
                 ...lineItems.map(
                   (item) => Padding(
                     padding: const EdgeInsets.only(bottom: 8),
@@ -468,7 +682,10 @@ class _ExpenseCardState extends State<_ExpenseCard> {
                         ),
                         Text(
                           formatCurrency(item.total, currency),
-                          style: const TextStyle(fontSize: 13),
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontFeatures: kTabularFigures,
+                          ),
                         ),
                       ],
                     ),
@@ -485,18 +702,56 @@ class _ExpenseCardState extends State<_ExpenseCard> {
 
 class _SmallChip extends StatelessWidget {
   final String label;
+  final IconData? icon;
+  final bool accent;
+  final VoidCallback? onTap;
 
-  const _SmallChip({required this.label});
+  const _SmallChip({
+    required this.label,
+    this.icon,
+    this.accent = false,
+    this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(999),
-        color: Colors.white10,
+        color: accent
+            ? AppColors.accent.withValues(alpha: 0.18)
+            : Colors.white10,
+        border: accent
+            ? Border.all(color: AppColors.accent.withValues(alpha: 0.6))
+            : null,
       ),
-      child: Text(label, style: const TextStyle(fontSize: 11)),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[
+            Icon(
+              icon,
+              size: 12,
+              color: accent ? const Color(0xFFA5B4FC) : Colors.white70,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: accent ? const Color(0xFFA5B4FC) : Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+    if (onTap == null) return chip;
+    return InkWell(
+      borderRadius: BorderRadius.circular(999),
+      onTap: onTap,
+      child: chip,
     );
   }
 }

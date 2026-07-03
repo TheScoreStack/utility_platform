@@ -47,6 +47,47 @@ double roundCents(double value) => (value * 100).roundToDouble() / 100;
 
 int _toCents(double value) => (value * 100).round();
 
+class EvenSplitAllocation {
+  final String memberId;
+  final double amount;
+
+  const EvenSplitAllocation({required this.memberId, required this.amount});
+}
+
+/// Port of the API's `buildEvenSplitAllocations` (tripService.ts): splits a
+/// total into cent-exact even shares, with the leftover cents assigned to
+/// [remainderMemberId] when present, otherwise the last member — matching how
+/// the server recomputes allocations for `splitEvenly` expenses.
+List<EvenSplitAllocation> buildEvenSplitAllocations(
+  double total,
+  List<String> memberIds, {
+  String? remainderMemberId,
+}) {
+  if (memberIds.isEmpty) return const [];
+
+  final totalCents = _toCents(total);
+  final absoluteCents = totalCents.abs();
+  final baseShare = absoluteCents ~/ memberIds.length;
+  var remainder = absoluteCents - baseShare * memberIds.length;
+  final sign = totalCents < 0 ? -1 : 1;
+  final target =
+      remainderMemberId != null && memberIds.contains(remainderMemberId)
+      ? remainderMemberId
+      : memberIds.last;
+
+  return memberIds.map((memberId) {
+    var cents = baseShare;
+    if (remainder > 0 && memberId == target) {
+      cents += remainder;
+      remainder = 0;
+    }
+    return EvenSplitAllocation(
+      memberId: memberId,
+      amount: roundCents(cents * sign / 100),
+    );
+  }).toList();
+}
+
 /// Converts per-line-item member assignments into cent-accurate per-person
 /// allocations. Each item's cost is split evenly among the members assigned to
 /// it; tax + tip are then layered on top either proportionally to each

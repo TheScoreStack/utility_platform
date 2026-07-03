@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/api_client.dart';
+import '../../../core/app_theme.dart';
 import '../../../core/formatters.dart';
 import '../../../core/split_math.dart';
 import '../../../models/models.dart';
 import '../widgets/member_avatar.dart';
 import '../widgets/money_bar.dart';
 import '../widgets/receipt_item_card.dart';
+import 'receipt_viewer_screen.dart';
 
 /// Returned to the trip detail screen after a successful save.
 class ScanSaveResult {
@@ -330,45 +332,114 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     }
   }
 
+  void _openLocalReceipt() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ReceiptViewerScreen(
+          imageBytes: widget.imageBytes,
+          heroTag: 'scan-receipt-thumb',
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Scan receipt'), centerTitle: false),
-      body: switch (_phase) {
-        _Phase.analyzing => _buildAnalyzing(),
-        _Phase.analyzeFailed => _buildAnalyzeError(),
-        _Phase.review => _buildReview(),
-      },
+      body: LayoutBuilder(
+        builder: (context, constraints) => Stack(
+          fit: StackFit.expand,
+          children: [
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 280),
+              child: switch (_phase) {
+                _Phase.analyzing => KeyedSubtree(
+                  key: const ValueKey('analyzing'),
+                  child: _buildAnalyzing(),
+                ),
+                _Phase.analyzeFailed => KeyedSubtree(
+                  key: const ValueKey('failed'),
+                  child: _buildAnalyzeError(),
+                ),
+                _Phase.review => KeyedSubtree(
+                  key: const ValueKey('review'),
+                  child: _buildReview(),
+                ),
+              },
+            ),
+            _buildReceiptImageLayer(constraints),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The picked photo, persistent across phases: full-screen and dimmed while
+  /// analyzing, then it shrinks into a tappable corner thumbnail on review
+  /// (and Hero-transitions into the full-screen viewer from there).
+  Widget _buildReceiptImageLayer(BoxConstraints constraints) {
+    final analyzing = _phase == _Phase.analyzing;
+    final review = _phase == _Phase.review;
+
+    return AnimatedPositioned(
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeInOutCubic,
+      top: analyzing ? 0 : 10,
+      right: analyzing ? 0 : 16,
+      width: analyzing ? constraints.maxWidth : 46,
+      height: analyzing ? constraints.maxHeight : 62,
+      child: IgnorePointer(
+        ignoring: !review,
+        child: AnimatedOpacity(
+          duration: const Duration(milliseconds: 300),
+          opacity: analyzing ? 0.22 : (review ? 1 : 0),
+          child: GestureDetector(
+            onTap: review ? _openLocalReceipt : null,
+            child: Hero(
+              tag: 'scan-receipt-thumb',
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 450),
+                curve: Curves.easeInOutCubic,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(analyzing ? 0 : 10),
+                  border: review
+                      ? Border.all(color: Colors.white24)
+                      : Border.all(color: Colors.transparent),
+                ),
+                child: Image.memory(
+                  widget.imageBytes,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
   Widget _buildAnalyzing() {
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        Opacity(
-          opacity: 0.25,
-          child: Image.memory(widget.imageBytes, fit: BoxFit.cover),
-        ),
-        const Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 20),
-              Text(
-                'Reading your receipt…',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-              SizedBox(height: 6),
-              Text(
-                'Pulling out the merchant, items, and totals.',
-                style: TextStyle(fontSize: 13, color: Colors.white70),
-              ),
-            ],
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 20),
+          Text(
+            'Reading your receipt…',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
           ),
-        ),
-      ],
+          SizedBox(height: 6),
+          Text(
+            'Pulling out the merchant, items, and totals.',
+            style: TextStyle(fontSize: 13, color: Colors.white70),
+          ),
+        ],
+      ),
     );
   }
 
@@ -426,7 +497,9 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                   side: const BorderSide(color: Colors.white10),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+                  // Extra right padding keeps the merchant field clear of the
+                  // floating receipt thumbnail.
+                  padding: const EdgeInsets.fromLTRB(12, 4, 68, 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -531,8 +604,10 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                   ButtonSegment(value: 'even', label: Text('Evenly')),
                 ],
                 selected: {_extrasSplitMode},
-                onSelectionChanged: (selection) =>
-                    setState(() => _extrasSplitMode = selection.first),
+                onSelectionChanged: (selection) {
+                  HapticFeedback.selectionClick();
+                  setState(() => _extrasSplitMode = selection.first);
+                },
               ),
               const SizedBox(height: 6),
               Text(
@@ -671,6 +746,7 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
         },
       );
       if (!mounted) return;
+      HapticFeedback.mediumImpact();
       Navigator.of(context).pop(saved);
     } on ApiException catch (error) {
       if (!mounted) return;
@@ -815,7 +891,7 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
               const SizedBox(height: 10),
               Text(
                 _error!,
-                style: TextStyle(color: Colors.red.shade300, fontSize: 13),
+                style: const TextStyle(color: AppColors.danger, fontSize: 13),
               ),
             ],
             const SizedBox(height: 16),
