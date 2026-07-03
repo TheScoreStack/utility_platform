@@ -227,6 +227,11 @@ class Expense {
   final String? extrasSplitMode;
   final String? receiptId;
   final String? receiptPreviewUrl;
+
+  /// Draft expenses are visible only to their creator and excluded from
+  /// balances until published.
+  final bool draft;
+  final String? createdBy;
   final String? deletedAt;
   final String? deletedBy;
 
@@ -249,6 +254,8 @@ class Expense {
     this.extrasSplitMode,
     this.receiptId,
     this.receiptPreviewUrl,
+    this.draft = false,
+    this.createdBy,
     this.deletedAt,
     this.deletedBy,
   });
@@ -274,6 +281,8 @@ class Expense {
     extrasSplitMode: json['extrasSplitMode'] as String?,
     receiptId: json['receiptId'] as String?,
     receiptPreviewUrl: json['receiptPreviewUrl'] as String?,
+    draft: json['draft'] == true,
+    createdBy: json['createdBy'] as String?,
     deletedAt: json['deletedAt'] as String?,
     deletedBy: json['deletedBy'] as String?,
   );
@@ -297,6 +306,8 @@ class Expense {
     'extrasSplitMode': extrasSplitMode,
     'receiptId': receiptId,
     'receiptPreviewUrl': receiptPreviewUrl,
+    'draft': draft ? true : null,
+    'createdBy': createdBy,
     'deletedAt': deletedAt,
     'deletedBy': deletedBy,
   });
@@ -311,6 +322,11 @@ class Receipt {
   final String fileName;
   final String status;
   final TextractExtraction? extractedData;
+
+  /// Receipts uploaded for a draft expense stay hidden from other members
+  /// until the expense is published.
+  final bool draft;
+  final String? createdBy;
   final String createdAt;
   final String updatedAt;
 
@@ -322,6 +338,8 @@ class Receipt {
     required this.fileName,
     required this.status,
     this.extractedData,
+    this.draft = false,
+    this.createdBy,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -338,6 +356,8 @@ class Receipt {
             json['extractedData'] as Map<String, dynamic>,
           )
         : null,
+    draft: json['draft'] == true,
+    createdBy: json['createdBy'] as String?,
     createdAt: _reqString(json['createdAt']),
     updatedAt: _reqString(json['updatedAt']),
   );
@@ -482,6 +502,10 @@ class TripSummary {
   final Trip trip;
   final List<TripMember> members;
   final List<Expense> expenses;
+
+  /// The requesting user's own unpublished drafts (server-filtered; never in
+  /// [expenses] or [balances]). Absent on older API responses → empty.
+  final List<Expense> draftExpenses;
   final List<Expense> deletedExpenses;
   final List<Receipt> receipts;
   final List<Settlement> settlements;
@@ -494,6 +518,7 @@ class TripSummary {
     required this.trip,
     required this.members,
     required this.expenses,
+    this.draftExpenses = const [],
     required this.deletedExpenses,
     required this.receipts,
     required this.settlements,
@@ -507,6 +532,7 @@ class TripSummary {
     trip: Trip.fromJson((json['trip'] as Map<String, dynamic>?) ?? const {}),
     members: _mapList(json['members'], TripMember.fromJson),
     expenses: _mapList(json['expenses'], Expense.fromJson),
+    draftExpenses: _mapList(json['draftExpenses'], Expense.fromJson),
     deletedExpenses: _mapList(json['deletedExpenses'], Expense.fromJson),
     receipts: _mapList(json['receipts'], Receipt.fromJson),
     settlements: _mapList(json['settlements'], Settlement.fromJson),

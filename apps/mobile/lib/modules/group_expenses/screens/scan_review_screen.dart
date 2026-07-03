@@ -19,10 +19,14 @@ class ScanSaveResult {
   final int peopleCount;
   final String currency;
 
+  /// True when the expense was saved as a private draft.
+  final bool draft;
+
   const ScanSaveResult({
     required this.total,
     required this.peopleCount,
     required this.currency,
+    this.draft = false,
   });
 }
 
@@ -61,8 +65,10 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   String? _vendor;
 
   /// Set once the receipt bytes have been uploaded, so a failed expense save
-  /// can be retried without re-uploading.
+  /// can be retried without re-uploading. [_uploadedReceiptWasDraft] tracks
+  /// the visibility mode the upload was presigned with.
   String? _uploadedReceiptId;
+  bool _uploadedReceiptWasDraft = false;
 
   List<TripMember> get _members => widget.summary.members;
 
@@ -232,6 +238,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     required String payerId,
     required String receiptId,
     required ItemizedAllocationResult result,
+    required bool draft,
   }) {
     final tax = _parseAmount(_taxController);
     final tip = _parseAmount(_tipController);
@@ -267,24 +274,31 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
           .toList(),
       'extrasSplitMode': _extrasSplitMode,
       'receiptId': receiptId,
+      if (draft) 'draft': true,
     };
   }
 
   /// Uploads the original photo (once) and saves the expense. Throws
   /// [ApiException] on failure; the confirm sheet renders it inline.
+  /// With [draft] the receipt is presigned as draft too, so it stays hidden
+  /// from other members until the expense is published.
   Future<ScanSaveResult> _save({
     required String payerId,
+    required bool draft,
     required void Function(String) onProgress,
   }) async {
     final tripId = widget.summary.trip.tripId;
     final result = _computeResult();
 
-    if (_uploadedReceiptId == null) {
+    // Re-presign if a previous attempt uploaded with a different draft mode:
+    // the receipt's visibility is fixed at creation.
+    if (_uploadedReceiptId == null || _uploadedReceiptWasDraft != draft) {
       onProgress('Uploading receipt…');
       final presign =
           await widget.api.post('/trips/$tripId/receipts', {
                 'fileName': widget.fileName,
                 'contentType': 'image/jpeg',
+                if (draft) 'draft': true,
               })
               as Map<String, dynamic>;
       final receipt = Receipt.fromJson(presign);
@@ -297,15 +311,17 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
         contentType: 'image/jpeg',
       );
       _uploadedReceiptId = receipt.receiptId;
+      _uploadedReceiptWasDraft = draft;
     }
 
-    onProgress('Saving…');
+    onProgress(draft ? 'Saving draft…' : 'Saving…');
     await widget.api.post(
       '/trips/$tripId/expenses',
       _buildExpensePayload(
         payerId: payerId,
         receiptId: _uploadedReceiptId!,
         result: result,
+        draft: draft,
       ),
     );
 
@@ -313,6 +329,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       total: result.grandTotal,
       peopleCount: result.allocations.length,
       currency: _currency,
+      draft: draft,
     );
   }
 
@@ -699,6 +716,7 @@ class _ConfirmSheet extends StatefulWidget {
   final String currency;
   final Future<ScanSaveResult> Function({
     required String payerId,
+    required bool draft,
     required void Function(String) onProgress,
   })
   onSave;
@@ -720,6 +738,10 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
   String _progressLabel = '';
   String? _error;
 
+  /// Which mode the in-flight (or failed) save used, so retry repeats it and
+  /// the right button shows the spinner.
+  bool _savingAsDraft = false;
+
   @override
   void initState() {
     super.initState();
@@ -732,8 +754,9 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
         : widget.summary.members.first.memberId;
   }
 
-  Future<void> _save() async {
+  Future<void> _save({required bool draft}) async {
     setState(() {
+      _savingAsDraft = draft;
       _phase = _SavePhase.working;
       _error = null;
       _progressLabel = 'Uploading receipt…';
@@ -741,6 +764,7 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
     try {
       final saved = await widget.onSave(
         payerId: _payerId,
+        draft: draft,
         onProgress: (label) {
           if (mounted) setState(() => _progressLabel = label);
         },
@@ -896,11 +920,11 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
             ],
             const SizedBox(height: 16),
             FilledButton(
-              onPressed: working ? null : _save,
+              onPressed: working ? null : () => _save(draft: false),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 14),
               ),
-              child: working
+              child: working && !_savingAsDraft
                   ? Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -914,10 +938,45 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
                       ],
                     )
                   : Text(
-                      _phase == _SavePhase.failed
+                      _phase == _SavePhase.failed && !_savingAsDraft
                           ? 'Retry save'
                           : 'Save expense',
                     ),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: working ? null : () => _save(draft: true),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                side: BorderSide(
+                  color: AppColors.warning.withValues(alpha: 0.45),
+                ),
+                foregroundColor: AppColors.warning,
+              ),
+              child: working && _savingAsDraft
+                  ? Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(_progressLabel),
+                      ],
+                    )
+                  : Text(
+                      _phase == _SavePhase.failed && _savingAsDraft
+                          ? 'Retry draft'
+                          : 'Save as draft',
+                    ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Only you can see drafts until you publish.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
         ),

@@ -142,12 +142,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       if (result == null || !mounted) return;
       await _load();
       if (!mounted) return;
-      showAppSnackBar(
-        context,
-        'Added ${formatCurrency(result.total, result.currency)} · '
-        'split across ${result.peopleCount} '
-        '${result.peopleCount == 1 ? 'person' : 'people'}',
-        success: true,
+      _showSavedSnackBar(
+        total: result.total,
+        currency: result.currency,
+        peopleCount: result.peopleCount,
+        draft: result.draft,
       );
       return;
     }
@@ -191,13 +190,179 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
     await _load();
     if (!mounted) return;
+    _showSavedSnackBar(
+      total: result.total,
+      currency: result.currency,
+      peopleCount: result.peopleCount,
+      draft: result.draft,
+    );
+  }
+
+  void _showSavedSnackBar({
+    required double total,
+    required String currency,
+    required int peopleCount,
+    required bool draft,
+  }) {
     showAppSnackBar(
       context,
-      'Added ${formatCurrency(result.total, result.currency)} · '
-      'split across ${result.peopleCount} '
-      '${result.peopleCount == 1 ? 'person' : 'people'}',
+      draft
+          ? 'Draft saved — only you can see it'
+          : 'Added ${formatCurrency(total, currency)} · '
+                'split across $peopleCount '
+                '${peopleCount == 1 ? 'person' : 'people'}',
       success: true,
     );
+  }
+
+  // ------------------------------------------------------------------ drafts
+
+  Future<void> _confirmPublishDraft(Expense draft) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Publish to the group?',
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Everyone will see it and balances will update.',
+                style: TextStyle(fontSize: 13, color: Colors.white70),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '${draft.description} · '
+                '${formatCurrency(draft.total, draft.currency)}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.of(sheetContext).pop(true),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: const Text('Publish'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(sheetContext).pop(false),
+                child: const Text('Not yet'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      await widget.api.patch(
+        '/trips/${widget.tripId}/expenses/${draft.expenseId}',
+        {'draft': false},
+      );
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      await _load();
+      if (!mounted) return;
+      showAppSnackBar(
+        context,
+        'Published "${draft.description}" to the group',
+        success: true,
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not publish the draft.', error: true);
+    }
+  }
+
+  Future<void> _showDraftActions(Expense draft) async {
+    HapticFeedback.selectionClick();
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              title: Text(
+                draft.description,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                'Draft · ${formatCurrency(draft.total, draft.currency)}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ),
+            const Divider(height: 1),
+            if (draft.receiptId != null)
+              ListTile(
+                leading: const Icon(Icons.receipt_long_rounded),
+                title: const Text('View receipt'),
+                onTap: () => Navigator.of(sheetContext).pop('receipt'),
+              ),
+            ListTile(
+              leading: const Icon(Icons.publish_rounded),
+              title: const Text('Publish to the group'),
+              onTap: () => Navigator.of(sheetContext).pop('publish'),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_forever_rounded,
+                color: AppColors.danger,
+              ),
+              title: const Text(
+                'Delete draft',
+                style: TextStyle(color: AppColors.danger),
+              ),
+              subtitle: const Text(
+                'Deletes permanently — drafts have no undo.',
+                style: TextStyle(fontSize: 12, color: Colors.white54),
+              ),
+              onTap: () => Navigator.of(sheetContext).pop('delete'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !mounted) return;
+    if (action == 'receipt') {
+      await _openReceipt(draft);
+    } else if (action == 'publish') {
+      await _confirmPublishDraft(draft);
+    } else if (action == 'delete') {
+      await _deleteDraft(draft);
+    }
+  }
+
+  Future<void> _deleteDraft(Expense draft) async {
+    try {
+      // DELETE on a draft purges it permanently server-side (no soft delete).
+      await widget.api.delete(
+        '/trips/${widget.tripId}/expenses/${draft.expenseId}',
+      );
+      if (!mounted) return;
+      HapticFeedback.lightImpact();
+      await _load();
+      if (!mounted) return;
+      showAppSnackBar(context, 'Draft deleted permanently', success: true);
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not delete the draft.', error: true);
+    }
   }
 
   // ----------------------------------------------------------- expense menu
@@ -357,6 +522,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 onRefresh: _load,
                 onExpenseLongPress: _showExpenseActions,
                 onReceiptTap: _openReceipt,
+                onDraftPublish: _confirmPublishDraft,
+                onDraftLongPress: _showDraftActions,
               ),
               SettleUpView(api: widget.api, summary: summary, onRefresh: _load),
             ],
@@ -469,12 +636,16 @@ class _ExpensesTab extends StatelessWidget {
   final Future<void> Function() onRefresh;
   final Future<void> Function(Expense) onExpenseLongPress;
   final Future<void> Function(Expense) onReceiptTap;
+  final Future<void> Function(Expense) onDraftPublish;
+  final Future<void> Function(Expense) onDraftLongPress;
 
   const _ExpensesTab({
     required this.summary,
     required this.onRefresh,
     required this.onExpenseLongPress,
     required this.onReceiptTap,
+    required this.onDraftPublish,
+    required this.onDraftLongPress,
   });
 
   @override
@@ -482,10 +653,12 @@ class _ExpensesTab extends StatelessWidget {
     final membersById = {
       for (final member in summary.members) member.memberId: member,
     };
+    final drafts = summary.draftExpenses;
+    final expenses = summary.expenses;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
-      child: summary.expenses.isEmpty
+      child: drafts.isEmpty && expenses.isEmpty
           ? ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: const [
@@ -503,20 +676,155 @@ class _ExpensesTab extends StatelessWidget {
                 ),
               ],
             )
-          : ListView.builder(
+          : ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-              itemCount: summary.expenses.length,
-              itemBuilder: (context, index) {
-                final expense = summary.expenses[index];
-                return _ExpenseCard(
-                  expense: expense,
-                  membersById: membersById,
-                  onLongPress: () => onExpenseLongPress(expense),
-                  onReceiptTap: () => onReceiptTap(expense),
-                );
-              },
+              children: [
+                // Drafts are the caller's private list from a separate field;
+                // never merged into the group expenses or money math.
+                if (drafts.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.visibility_off_rounded,
+                        size: 16,
+                        color: AppColors.warning,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Your drafts',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Only you can see these until you publish.',
+                    style: TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 8),
+                  ...drafts.map(
+                    (draft) => _DraftCard(
+                      draft: draft,
+                      onPublish: () => onDraftPublish(draft),
+                      onLongPress: () => onDraftLongPress(draft),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                ...expenses.map(
+                  (expense) => _ExpenseCard(
+                    expense: expense,
+                    membersById: membersById,
+                    onLongPress: () => onExpenseLongPress(expense),
+                    onReceiptTap: () => onReceiptTap(expense),
+                  ),
+                ),
+              ],
             ),
+    );
+  }
+}
+
+/// A private draft row: amber-tinted, "Draft" chip, and a trailing Publish
+/// button. Long-press for actions (publish / permanent delete).
+class _DraftCard extends StatelessWidget {
+  final Expense draft;
+  final VoidCallback onPublish;
+  final VoidCallback onLongPress;
+
+  const _DraftCard({
+    required this.draft,
+    required this.onPublish,
+    required this.onLongPress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final itemCount = draft.lineItems?.length ?? 0;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: AppColors.warning.withValues(alpha: 0.06),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: AppColors.warning.withValues(alpha: 0.35)),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onLongPress: onLongPress,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(999),
+                            color: AppColors.warning.withValues(alpha: 0.18),
+                            border: Border.all(
+                              color: AppColors.warning.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: const Text(
+                            'Draft',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.warning,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            draft.description,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      [
+                        formatCurrency(draft.total, draft.currency),
+                        if (itemCount > 0)
+                          '$itemCount ${itemCount == 1 ? 'item' : 'items'}',
+                      ].join(' · '),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white70,
+                        fontFeatures: kTabularFigures,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.tonal(
+                onPressed: onPublish,
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                ),
+                child: const Text('Publish'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -13,10 +13,14 @@ class QuickExpenseResult {
   final int peopleCount;
   final String currency;
 
+  /// True when the expense was saved as a private draft.
+  final bool draft;
+
   const QuickExpenseResult({
     required this.total,
     required this.peopleCount,
     required this.currency,
+    this.draft = false,
   });
 }
 
@@ -51,6 +55,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
   late String _payerId;
   late final Set<String> _selectedMemberIds;
   bool _saving = false;
+  bool _savingAsDraft = false;
   String? _error;
 
   List<TripMember> get _members => widget.summary.members;
@@ -83,7 +88,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
     return null;
   }
 
-  Future<void> _save() async {
+  Future<void> _save({required bool draft}) async {
     final total = roundCents(_amount);
     final memberIds = _members
         .map((member) => member.memberId)
@@ -100,6 +105,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
 
     setState(() {
       _saving = true;
+      _savingAsDraft = draft;
       _error = null;
     });
     try {
@@ -113,6 +119,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
         'allocations': allocations
             .map((a) => {'memberId': a.memberId, 'amount': a.amount})
             .toList(),
+        if (draft) 'draft': true,
       });
       if (!mounted) return;
       HapticFeedback.mediumImpact();
@@ -121,6 +128,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
           total: total,
           peopleCount: memberIds.length,
           currency: _currency,
+          draft: draft,
         ),
       );
     } on ApiException catch (error) {
@@ -294,17 +302,45 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
               ],
               const SizedBox(height: 16),
               FilledButton(
-                onPressed: blockedReason == null && !_saving ? _save : null,
+                onPressed: blockedReason == null && !_saving
+                    ? () => _save(draft: false)
+                    : null,
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
-                child: _saving
+                child: _saving && !_savingAsDraft
                     ? const SizedBox(
                         width: 20,
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Text(blockedReason ?? 'Save expense'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: blockedReason == null && !_saving
+                    ? () => _save(draft: true)
+                    : null,
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: BorderSide(
+                    color: AppColors.warning.withValues(alpha: 0.45),
+                  ),
+                  foregroundColor: AppColors.warning,
+                ),
+                child: _saving && _savingAsDraft
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Save as draft'),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Only you can see drafts until you publish.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Colors.white70),
               ),
             ],
           ),
