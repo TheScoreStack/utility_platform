@@ -1,5 +1,6 @@
 import {
   BatchGetCommand,
+  DeleteCommand,
   GetCommand,
   PutCommand,
   QueryCommand,
@@ -41,6 +42,22 @@ export class UserStore {
   constructor() {
     const config = loadConfig();
     this.tableName = config.tableName;
+  }
+
+  /** Removes the user's profile item (and with it the email/name search
+   *  GSI entries, since they live on the same item). Trip memberships and
+   *  expenses are intentionally left intact so group balances stay
+   *  coherent — the member records carry a display-name snapshot. */
+  async deleteUserProfile(userId: string): Promise<void> {
+    await this.docClient.send(
+      new DeleteCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: userPk(userId),
+          SK: userSk
+        }
+      })
+    );
   }
 
   async ensureUserProfile(auth: AuthContext): Promise<UserProfile> {

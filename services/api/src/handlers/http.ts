@@ -89,6 +89,11 @@ export const handler = async (
       return ok({ profile }, origin);
     }
 
+    if (path === "/profile" && method === "DELETE") {
+      await userService.deleteAccount(auth);
+      return noContent(origin);
+    }
+
     if (path === "/harmony-ledger/access" && method === "GET") {
       const response = await harmonyLedgerService.getAccessOverview(auth);
       return ok(response, origin);

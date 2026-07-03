@@ -50,6 +50,13 @@ export class UserService {
     return userStore.ensureUserProfile(auth);
   }
 
+  /** Deletes the caller's platform data (profile + search entries). The
+   *  client is expected to delete the Cognito account afterwards; this call
+   *  is idempotent so a failed Cognito step can simply retry the pair. */
+  async deleteAccount(auth: AuthContext): Promise<void> {
+    await userStore.deleteUserProfile(auth.userId);
+  }
+
   async updateProfile(
     body: unknown,
     auth: AuthContext

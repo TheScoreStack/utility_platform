@@ -343,7 +343,7 @@ export class GroupExpensesStack extends Stack {
 
     httpApi.addRoutes({
       path: "/profile",
-      methods: [HttpMethod.GET, HttpMethod.PATCH],
+      methods: [HttpMethod.GET, HttpMethod.PATCH, HttpMethod.DELETE],
       integration: httpIntegration,
       authorizer
     });
