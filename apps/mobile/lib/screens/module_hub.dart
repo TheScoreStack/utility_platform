@@ -10,10 +10,7 @@ class ModuleHub extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Utility Platform'),
-        centerTitle: false,
-      ),
+      appBar: AppBar(title: const Text('Utility Platform'), centerTitle: false),
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemBuilder: (context, index) {
@@ -37,9 +34,7 @@ class _ModuleCard extends StatelessWidget {
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: module.builder),
-        );
+        Navigator.of(context).push(MaterialPageRoute(builder: module.builder));
       },
       child: Ink(
         decoration: BoxDecoration(
@@ -64,7 +59,10 @@ class _ModuleCard extends StatelessWidget {
                   child: Icon(module.icon, size: 26),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(999),
                     color: Colors.white10,
@@ -73,7 +71,7 @@ class _ModuleCard extends StatelessWidget {
                     module.maturity.toUpperCase(),
                     style: const TextStyle(letterSpacing: 0.08, fontSize: 12),
                   ),
-                )
+                ),
               ],
             ),
             const SizedBox(height: 16),
@@ -100,7 +98,7 @@ class _ModuleCard extends StatelessWidget {
                     ),
                   )
                   .toList(),
-            )
+            ),
           ],
         ),
       ),

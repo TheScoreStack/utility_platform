@@ -18,7 +18,7 @@ class ModuleDefinition {
     required this.maturity,
     required this.tags,
     required this.icon,
-    required this.builder
+    required this.builder,
   });
 }
 
@@ -31,6 +31,6 @@ final List<ModuleDefinition> registeredModules = [
     maturity: 'beta',
     tags: ['travel', 'finance', 'receipts'],
     icon: Icons.currency_exchange_rounded,
-    builder: (_) => const GroupExpensesScreen()
-  )
+    builder: (_) => const GroupExpensesScreen(),
+  ),
 ];

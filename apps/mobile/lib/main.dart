@@ -18,13 +18,13 @@ class UtilityApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF4C6EF5),
-          brightness: Brightness.dark
+          brightness: Brightness.dark,
         ),
         useMaterial3: true,
         textTheme: const TextTheme(
           headlineSmall: TextStyle(fontWeight: FontWeight.w600),
-          titleMedium: TextStyle(fontWeight: FontWeight.w500)
-        )
+          titleMedium: TextStyle(fontWeight: FontWeight.w500),
+        ),
       ),
       home: ModuleHub(modules: registeredModules),
     );
