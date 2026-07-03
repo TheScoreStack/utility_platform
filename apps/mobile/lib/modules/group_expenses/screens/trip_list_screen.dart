@@ -7,6 +7,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/formatters.dart';
 import '../../../models/models.dart';
 import '../widgets/new_trip_sheet.dart';
+import 'account_screen.dart';
 import 'trip_detail_screen.dart';
 
 /// Your trips, with a balance chip per trip. Pull to refresh; tap for detail.
@@ -62,33 +63,17 @@ class _TripListScreenState extends State<TripListScreen> {
     }
   }
 
-  Future<void> _confirmSignOut() async {
-    final confirmed = await showModalBottomSheet<bool>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            ListTile(
-              leading: const Icon(Icons.logout_rounded),
-              title: const Text('Sign out'),
-              onTap: () => Navigator.of(sheetContext).pop(true),
-            ),
-            ListTile(
-              leading: const Icon(Icons.close_rounded),
-              title: const Text('Cancel'),
-              onTap: () => Navigator.of(sheetContext).pop(false),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
+  Future<void> _openAccount() async {
+    final result = await Navigator.of(context).push<AccountScreenResult>(
+      MaterialPageRoute(builder: (_) => AccountScreen(api: widget.api)),
     );
-    if (confirmed == true) {
-      await widget.onSignOut();
+    if (result == null || !mounted) return;
+    if (result == AccountScreenResult.deleted) {
+      // Show before the gate swaps this screen out; the root
+      // ScaffoldMessenger keeps the snackbar alive across the swap.
+      showAppSnackBar(context, 'Account deleted', success: true);
     }
+    await widget.onSignOut();
   }
 
   @override
@@ -99,9 +84,9 @@ class _TripListScreenState extends State<TripListScreen> {
         centerTitle: false,
         actions: [
           IconButton(
-            icon: const Icon(Icons.logout_rounded),
-            tooltip: 'Sign out',
-            onPressed: _confirmSignOut,
+            icon: const Icon(Icons.account_circle_rounded),
+            tooltip: 'Account',
+            onPressed: _openAccount,
           ),
         ],
       ),

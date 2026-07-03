@@ -479,6 +479,35 @@ class Settlement {
   );
 }
 
+/// `GET /profile` → `{ profile: UserProfile }`.
+class UserProfile {
+  final String userId;
+  final String? displayName;
+  final String? email;
+  final PaymentMethods? paymentMethods;
+  final bool emailDigestOptIn;
+
+  const UserProfile({
+    required this.userId,
+    this.displayName,
+    this.email,
+    this.paymentMethods,
+    this.emailDigestOptIn = false,
+  });
+
+  factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
+    userId: _reqString(json['userId']),
+    displayName: json['displayName'] as String?,
+    email: json['email'] as String?,
+    paymentMethods: json['paymentMethods'] is Map<String, dynamic>
+        ? PaymentMethods.fromJson(
+            json['paymentMethods'] as Map<String, dynamic>,
+          )
+        : null,
+    emailDigestOptIn: json['emailDigestOptIn'] == true,
+  );
+}
+
 class BalanceRow {
   final String memberId;
   final String displayName;

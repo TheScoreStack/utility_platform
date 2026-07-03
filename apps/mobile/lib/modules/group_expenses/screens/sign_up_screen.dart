@@ -1,85 +1,97 @@
-import 'package:amplify_flutter/amplify_flutter.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/auth_messages.dart';
 import '../../../core/auth_service.dart';
-import 'forgot_password_screen.dart';
-import 'sign_up_screen.dart';
+import 'confirm_code_screen.dart';
 
-/// Email + password sign-in against the shared Cognito user pool, with links
-/// into the sign-up and forgot-password flows.
-class SignInScreen extends StatefulWidget {
-  final VoidCallback onSignedIn;
-
-  const SignInScreen({super.key, required this.onSignedIn});
+/// Create-account flow: name, email, password + confirm (live-validated
+/// against the Cognito policy), then the shared confirmation-code screen.
+/// On confirm success the user is signed in automatically; this screen pops
+/// with `true` so the caller can route into the app.
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
 
   @override
-  State<SignInScreen> createState() => _SignInScreenState();
+  State<SignUpScreen> createState() => _SignUpScreenState();
 }
 
-class _SignInScreenState extends State<SignInScreen> {
+class _SignUpScreenState extends State<SignUpScreen> {
+  final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _loading = false;
+  final _confirmController = TextEditingController();
+  bool _working = false;
   bool _obscurePassword = true;
   String? _error;
 
   @override
   void dispose() {
+    _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmController.dispose();
     super.dispose();
   }
 
+  String? get _blockedReason {
+    if (_nameController.text.trim().isEmpty) return 'Enter your name';
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) return 'Enter your email';
+    final requirement = passwordRequirementError(_passwordController.text);
+    if (requirement != null) return 'Password: $requirement';
+    if (_confirmController.text != _passwordController.text) {
+      return 'Passwords don’t match';
+    }
+    return null;
+  }
+
   Future<void> _submit() async {
+    if (_working || _blockedReason != null) return;
     final email = _emailController.text.trim();
     final password = _passwordController.text;
-    if (email.isEmpty || password.isEmpty) {
-      setState(() => _error = 'Enter your email and password.');
-      return;
-    }
+    final name = _nameController.text.trim();
 
     setState(() {
-      _loading = true;
+      _working = true;
       _error = null;
     });
     try {
-      await AuthService.instance.signIn(email, password);
+      await AuthService.instance.signUp(
+        email: email,
+        password: password,
+        name: name,
+      );
       if (!mounted) return;
-      widget.onSignedIn();
-    } on AuthException catch (error) {
-      setState(() => _error = AuthService.describeError(error));
-    } on AuthFlowException catch (error) {
-      setState(() => _error = error.message);
-    } catch (error) {
-      setState(() => _error = 'Sign-in failed. Please try again.');
-    } finally {
-      if (mounted) {
-        setState(() => _loading = false);
+      setState(() => _working = false);
+
+      final confirmed = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(
+          builder: (_) => ConfirmCodeScreen(
+            title: 'Confirm your account',
+            email: email,
+            collectNewPassword: false,
+            onSubmit: (code, _) async {
+              await AuthService.instance.confirmSignUp(
+                email: email,
+                code: code,
+              );
+              // Auto sign-in with the captured credentials.
+              await AuthService.instance.signIn(email, password);
+            },
+            onResend: () => AuthService.instance.resendSignUpCode(email),
+          ),
+        ),
+      );
+      if (confirmed == true && mounted) {
+        Navigator.of(context).pop(true);
       }
-    }
-  }
-
-  Future<void> _openSignUp() async {
-    final signedIn = await Navigator.of(
-      context,
-    ).push<bool>(MaterialPageRoute(builder: (_) => const SignUpScreen()));
-    if (signedIn == true && mounted) {
-      widget.onSignedIn();
-    }
-  }
-
-  Future<void> _openForgotPassword() async {
-    final email = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (_) =>
-            ForgotPasswordScreen(initialEmail: _emailController.text.trim()),
-      ),
-    );
-    if (email != null && mounted) {
-      _emailController.text = email;
-      _passwordController.clear();
-      showAppSnackBar(context, 'Password updated — sign in', success: true);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _working = false;
+        _error = AuthService.describeError(error);
+      });
     }
   }
 
@@ -108,9 +120,14 @@ class _SignInScreenState extends State<SignInScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final blockedReason = _blockedReason;
+    final password = _passwordController.text;
+    final passwordError = passwordRequirementError(password);
+    final showHintAsWarning = password.isNotEmpty && passwordError != null;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Group Expenses'),
+        title: const Text('Create account'),
         centerTitle: false,
         backgroundColor: Colors.transparent,
       ),
@@ -138,42 +155,55 @@ class _SignInScreenState extends State<SignInScreen> {
                           radius: 32,
                           backgroundColor: Colors.white10,
                           child: Icon(
-                            Icons.currency_exchange_rounded,
+                            Icons.person_add_alt_1_rounded,
                             size: 30,
                             color: Color(0xFFA5B4FC),
                           ),
                         ),
                         const SizedBox(height: 20),
                         Text(
-                          'Sign in to your trips',
+                          'Create your account',
                           textAlign: TextAlign.center,
                           style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Use the same account as the web app.',
+                          'Works on mobile and the web app.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.white70),
                         ),
-                        const SizedBox(height: 28),
+                        const SizedBox(height: 24),
+                        TextField(
+                          controller: _nameController,
+                          enabled: !_working,
+                          textCapitalization: TextCapitalization.words,
+                          textInputAction: TextInputAction.next,
+                          onChanged: (_) => setState(() {}),
+                          decoration: _fieldDecoration(
+                            label: 'Name',
+                            icon: Icons.badge_outlined,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                         TextField(
                           controller: _emailController,
-                          enabled: !_loading,
+                          enabled: !_working,
                           keyboardType: TextInputType.emailAddress,
                           autocorrect: false,
                           textInputAction: TextInputAction.next,
+                          onChanged: (_) => setState(() {}),
                           decoration: _fieldDecoration(
                             label: 'Email',
                             icon: Icons.mail_outline,
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 12),
                         TextField(
                           controller: _passwordController,
-                          enabled: !_loading,
+                          enabled: !_working,
                           obscureText: _obscurePassword,
-                          textInputAction: TextInputAction.done,
-                          onSubmitted: (_) => _submit(),
+                          textInputAction: TextInputAction.next,
+                          onChanged: (_) => setState(() {}),
                           decoration: _fieldDecoration(
                             label: 'Password',
                             icon: Icons.lock_outline,
@@ -190,21 +220,33 @@ class _SignInScreenState extends State<SignInScreen> {
                             ),
                           ),
                         ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: TextButton(
-                            onPressed: _loading ? null : _openForgotPassword,
-                            style: TextButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                            ),
-                            child: const Text(
-                              'Forgot password?',
-                              style: TextStyle(fontSize: 13),
-                            ),
+                        const SizedBox(height: 6),
+                        Text(
+                          showHintAsWarning
+                              ? passwordError
+                              : kPasswordRequirementsHint,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: showHintAsWarning
+                                ? AppColors.warning
+                                : Colors.white54,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        TextField(
+                          controller: _confirmController,
+                          enabled: !_working,
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          onChanged: (_) => setState(() {}),
+                          onSubmitted: (_) => _submit(),
+                          decoration: _fieldDecoration(
+                            label: 'Confirm password',
+                            icon: Icons.lock_outline,
                           ),
                         ),
                         if (_error != null) ...[
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
                           Text(
                             _error!,
                             style: const TextStyle(
@@ -213,13 +255,15 @@ class _SignInScreenState extends State<SignInScreen> {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 20),
                         FilledButton(
-                          onPressed: _loading ? null : _submit,
+                          onPressed: _working || blockedReason != null
+                              ? null
+                              : _submit,
                           style: FilledButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
-                          child: _loading
+                          child: _working
                               ? const SizedBox(
                                   width: 20,
                                   height: 20,
@@ -227,30 +271,7 @@ class _SignInScreenState extends State<SignInScreen> {
                                     strokeWidth: 2,
                                   ),
                                 )
-                              : const Text('Sign in'),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Text(
-                              'New here?',
-                              style: TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                              ),
-                            ),
-                            TextButton(
-                              onPressed: _loading ? null : _openSignUp,
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                              ),
-                              child: const Text(
-                                'Create account',
-                                style: TextStyle(fontSize: 13),
-                              ),
-                            ),
-                          ],
+                              : Text(blockedReason ?? 'Create account'),
                         ),
                       ],
                     ),

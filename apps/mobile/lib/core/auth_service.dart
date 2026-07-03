@@ -1,9 +1,13 @@
 import 'dart:convert';
 
 import 'package:amplify_auth_cognito/amplify_auth_cognito.dart';
-import 'package:amplify_flutter/amplify_flutter.dart';
+// amplify_flutter also exports an `ApiException`; ours (api_client.dart) is
+// the one auth flows care about, so hide theirs.
+import 'package:amplify_flutter/amplify_flutter.dart' hide ApiException;
 
 import '../app_config.dart';
+import 'api_client.dart';
+import 'auth_messages.dart';
 
 /// Sign-in completed a step but did not produce a session (e.g. the account
 /// still needs confirmation or a new password). Handled like [AuthException].
@@ -85,6 +89,103 @@ class AuthService {
   }
 
   Future<void> signOut() => Amplify.Auth.signOut();
+
+  /// Registers a new account. The postConfirmation Lambda reads the `name`
+  /// standard attribute for the display name (falling back to the email
+  /// prefix), so it is sent alongside `email`.
+  Future<void> signUp({
+    required String email,
+    required String password,
+    required String name,
+  }) {
+    return _friendly(() async {
+      await Amplify.Auth.signUp(
+        username: email,
+        password: password,
+        options: SignUpOptions(
+          userAttributes: {
+            AuthUserAttributeKey.email: email,
+            AuthUserAttributeKey.name: name,
+          },
+        ),
+      );
+    });
+  }
+
+  Future<void> confirmSignUp({required String email, required String code}) {
+    return _friendly(() async {
+      await Amplify.Auth.confirmSignUp(username: email, confirmationCode: code);
+    });
+  }
+
+  Future<void> resendSignUpCode(String email) {
+    return _friendly(() async {
+      await Amplify.Auth.resendSignUpCode(username: email);
+    });
+  }
+
+  Future<void> resetPassword(String email) {
+    return _friendly(() async {
+      await Amplify.Auth.resetPassword(username: email);
+    });
+  }
+
+  Future<void> confirmResetPassword({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) {
+    return _friendly(() async {
+      await Amplify.Auth.confirmResetPassword(
+        username: email,
+        newPassword: newPassword,
+        confirmationCode: code,
+      );
+    });
+  }
+
+  Future<void> updatePassword({
+    required String oldPassword,
+    required String newPassword,
+  }) {
+    return _friendly(() async {
+      await Amplify.Auth.updatePassword(
+        oldPassword: oldPassword,
+        newPassword: newPassword,
+      );
+    });
+  }
+
+  /// Deletes the account: platform data first (DELETE /profile — idempotent;
+  /// shared trip history intentionally survives so balances stay coherent),
+  /// then the Cognito user. If the Cognito step fails, rerunning the whole
+  /// pair is safe.
+  Future<void> deleteAccount(ApiClient api) async {
+    await api.delete('/profile');
+    await _friendly(() => Amplify.Auth.deleteUser());
+  }
+
+  /// Runs [action], rethrowing Amplify failures as [AuthFlowException] with a
+  /// friendly message (see auth_messages.dart for the mapping).
+  Future<void> _friendly(Future<void> Function() action) async {
+    try {
+      await action();
+    } on AuthException catch (error) {
+      final mapped = friendlyAuthMessageFor(error.runtimeType.toString());
+      throw AuthFlowException(mapped ?? error.message);
+    }
+  }
+
+  /// Friendly message for any error thrown by this service or Amplify.
+  static String describeError(Object error) {
+    if (error is AuthFlowException) return error.message;
+    if (error is AuthException) {
+      return friendlyAuthMessageFor(error.runtimeType.toString()) ??
+          error.message;
+    }
+    if (error is ApiException) return error.message;
+    return 'Something went wrong. Please try again.';
+  }
 
   /// Resolves the Cognito ID token (preferred) or access token for API calls.
   Future<String?> getToken() async {
