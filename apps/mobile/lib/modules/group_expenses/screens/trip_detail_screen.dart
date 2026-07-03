@@ -631,8 +631,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       child: Scaffold(
         floatingActionButton: FloatingActionButton.extended(
           onPressed: _startAddFlow,
-          icon: const Icon(Icons.photo_camera_rounded),
-          label: const Text('Scan receipt'),
+          icon: const Icon(Icons.add_rounded),
+          label: const Text('Add expense'),
         ),
         body: NestedScrollView(
           headerSliverBuilder: (context, innerBoxIsScrolled) => [
