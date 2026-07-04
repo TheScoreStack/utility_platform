@@ -257,29 +257,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
   Future<void> _openInvite() async {
     final summary = _summary;
     if (summary == null) return;
-    final isOwner = summary.trip.ownerId == summary.currentUserId;
 
     try {
-      // GET returns the existing invite (any member); POST creates/rotates
-      // one but is owner-only, so only fall back to it for the owner.
+      // Fetching the invite auto-creates it server-side on first use, so
+      // every member always has a shareable link — no setup step.
       final data =
           await widget.api.get('/trips/${widget.tripId}/invite')
               as Map<String, dynamic>;
-      var invite = data['invite'] as Map<String, dynamic>?;
-      if (invite == null) {
-        if (!isOwner) {
-          if (!mounted) return;
-          showAppSnackBar(
-            context,
-            'No invite link yet — ask the trip owner to create one.',
-          );
-          return;
-        }
-        final created =
-            await widget.api.post('/trips/${widget.tripId}/invite')
-                as Map<String, dynamic>;
-        invite = created['invite'] as Map<String, dynamic>?;
-      }
+      final invite = data['invite'] as Map<String, dynamic>?;
       final inviteId = invite?['inviteId'] as String?;
       if (inviteId == null || inviteId.isEmpty) {
         throw const ApiException('Invite link is unavailable', 500);

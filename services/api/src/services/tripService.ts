@@ -538,14 +538,28 @@ export class TripService {
     await getTripStore().unarchiveTrip(tripId);
   }
 
-  async getTripInvite(tripId: string, auth: AuthContext): Promise<TripInvite | null> {
+  async getTripInvite(tripId: string, auth: AuthContext): Promise<TripInvite> {
     await ensureCurrentUserProfile(auth);
     const details = await getTripStore().getTripDetails(tripId);
     const isMember = details.members.some((m) => m.memberId === auth.userId);
     if (!isMember) {
       throw new ForbiddenError("You do not have access to this trip");
     }
-    return getTripStore().getTripInvite(tripId);
+    // Every trip has a shareable link by construction: fetching it creates
+    // it on first use, for any member. Rotation/revocation stays owner-only
+    // so one member can't invalidate a link others already shared.
+    const existing = await getTripStore().getTripInvite(tripId);
+    if (existing) {
+      return existing;
+    }
+    const invite: TripInvite = {
+      tripId,
+      inviteId: `inv_${nanoid(14)}`,
+      createdBy: auth.userId,
+      createdAt: isoNow()
+    };
+    await getTripStore().createInvite(invite);
+    return invite;
   }
 
   async createOrRotateInvite(tripId: string, auth: AuthContext): Promise<TripInvite> {
