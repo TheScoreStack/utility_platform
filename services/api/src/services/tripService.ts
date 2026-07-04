@@ -891,7 +891,11 @@ export class TripService {
       attachedReceipt = details.receipts.find(
         (item) => item.receiptId === parsed.data.receiptId
       );
-      if (!attachedReceipt) {
+      // Someone else's draft receipt is invisible — treat it as missing.
+      if (
+        !attachedReceipt ||
+        (attachedReceipt.draft && attachedReceipt.createdBy !== auth.userId)
+      ) {
         throw new ValidationError("Receipt not found on this trip");
       }
     }
@@ -959,6 +963,16 @@ export class TripService {
     };
 
     await getTripStore().saveExpense(expense);
+
+    // Scanned receipts upload as drafts before the user decides whether to
+    // publish; creating a published expense reveals its receipt.
+    if (!expense.draft && attachedReceipt?.draft) {
+      await getTripStore().updateReceiptExtraction(
+        tripId,
+        attachedReceipt.receiptId,
+        { draft: false, updatedAt: isoNow() }
+      );
+    }
 
     const response: Expense = { ...expense };
     if (
@@ -1458,7 +1472,8 @@ export class TripService {
     const receipt = details.receipts.find(
       (item) => item.receiptId === receiptId
     );
-    if (!receipt) {
+    // Draft receipts are invisible to everyone but their uploader.
+    if (!receipt || (receipt.draft && receipt.createdBy !== auth.userId)) {
       throw new ValidationError("Receipt not found");
     }
     if (!receipt.storageKey) {
@@ -1467,6 +1482,31 @@ export class TripService {
 
     const url = await generateReceiptDownloadUrl(receipt.storageKey);
     return { url };
+  }
+
+  /** Returns the receipt record itself — used by the mobile scan flow to
+   *  poll for the async Textract extraction after a presigned upload. */
+  async getReceipt(
+    tripId: string,
+    receiptId: string,
+    auth: AuthContext
+  ): Promise<{ receipt: Receipt }> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const isMember = details.members.some(
+      (member) => member.memberId === auth.userId
+    );
+    if (!isMember) {
+      throw new ForbiddenError("Not authorized");
+    }
+
+    const receipt = details.receipts.find(
+      (item) => item.receiptId === receiptId
+    );
+    if (!receipt || (receipt.draft && receipt.createdBy !== auth.userId)) {
+      throw new ValidationError("Receipt not found");
+    }
+    return { receipt };
   }
 
   async listExpenseComments(

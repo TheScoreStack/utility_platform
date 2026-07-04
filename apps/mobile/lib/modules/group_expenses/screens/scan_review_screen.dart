@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -70,11 +68,10 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   String? _receiptDate;
   String? _vendor;
 
-  /// Set once the receipt bytes have been uploaded, so a failed expense save
-  /// can be retried without re-uploading. [_uploadedReceiptWasDraft] tracks
-  /// the visibility mode the upload was presigned with.
+  /// Set once the receipt bytes have been uploaded (which now happens up
+  /// front, before analysis). Receipts always upload as drafts; the expense
+  /// save decides their visibility server-side.
   String? _uploadedReceiptId;
-  bool _uploadedReceiptWasDraft = false;
 
   List<TripMember> get _members => widget.summary.members;
 
@@ -101,25 +98,39 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     super.dispose();
   }
 
+  /// Uploads the photo once via a presigned URL (no API payload cap), then
+  /// polls for the async Textract extraction. The same uploaded receipt is
+  /// attached at save time — the photo never crosses the network twice.
   Future<void> _analyze() async {
     setState(() {
       _phase = _Phase.analyzing;
       _analyzeError = null;
     });
     try {
-      final data =
-          await widget.api.post(
-                '/trips/${widget.summary.trip.tripId}/receipts/analyze',
-                {
+      final tripId = widget.summary.trip.tripId;
+      if (_uploadedReceiptId == null) {
+        final presign =
+            await widget.api.post('/trips/$tripId/receipts', {
                   'fileName': widget.fileName ?? 'receipt.jpg',
                   'contentType': 'image/jpeg',
-                  'data': base64Encode(widget.imageBytes!),
-                },
-              )
-              as Map<String, dynamic>;
-      final extraction = TextractExtraction.fromJson(
-        (data['extraction'] as Map<String, dynamic>?) ?? const {},
-      );
+                  // Hidden from other members until the expense decides
+                  // visibility (publish reveals it server-side).
+                  'draft': true,
+                })
+                as Map<String, dynamic>;
+        final receipt = Receipt.fromJson(presign);
+        if (receipt.uploadUrl.isEmpty || receipt.receiptId.isEmpty) {
+          throw const ApiException('Receipt upload could not be prepared', 500);
+        }
+        await widget.api.putBytes(
+          receipt.uploadUrl,
+          widget.imageBytes!,
+          contentType: 'image/jpeg',
+        );
+        _uploadedReceiptId = receipt.receiptId;
+      }
+
+      final extraction = await _pollExtraction(tripId, _uploadedReceiptId!);
       if (!mounted) return;
       _seedFromExtraction(extraction);
       setState(() => _phase = _Phase.review);
@@ -136,6 +147,32 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
         _analyzeError = 'Could not read the receipt.';
       });
     }
+  }
+
+  Future<TextractExtraction> _pollExtraction(
+    String tripId,
+    String receiptId,
+  ) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      final data =
+          await widget.api.get('/trips/$tripId/receipts/$receiptId/record')
+              as Map<String, dynamic>;
+      final receipt = Receipt.fromJson(
+        (data['receipt'] as Map<String, dynamic>?) ?? const {},
+      );
+      if (receipt.status == 'COMPLETED') {
+        return receipt.extractedData ?? const TextractExtraction();
+      }
+      if (receipt.status == 'FAILED') {
+        throw const ApiException('Could not read the receipt.', 422);
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 1200));
+    }
+    throw const ApiException(
+      'Reading the receipt took too long. Try again.',
+      408,
+    );
   }
 
   void _seedFromExtraction(TextractExtraction extraction) {
@@ -325,17 +362,17 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     final tripId = widget.summary.trip.tripId;
     final result = _computeResult();
 
-    // Re-presign if a previous attempt uploaded with a different draft mode:
-    // the receipt's visibility is fixed at creation. Manual mode has no
+    // The photo normally uploads up front during analysis; this covers the
+    // analyze-failed → save-anyway path. Receipts always upload as drafts —
+    // the expense save controls visibility server-side. Manual mode has no
     // photo, so there is nothing to upload.
-    if (!_isManual &&
-        (_uploadedReceiptId == null || _uploadedReceiptWasDraft != draft)) {
+    if (!_isManual && _uploadedReceiptId == null) {
       onProgress('Uploading receipt…');
       final presign =
           await widget.api.post('/trips/$tripId/receipts', {
                 'fileName': widget.fileName ?? 'receipt.jpg',
                 'contentType': 'image/jpeg',
-                if (draft) 'draft': true,
+                'draft': true,
               })
               as Map<String, dynamic>;
       final receipt = Receipt.fromJson(presign);
@@ -348,7 +385,6 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
         contentType: 'image/jpeg',
       );
       _uploadedReceiptId = receipt.receiptId;
-      _uploadedReceiptWasDraft = draft;
     }
 
     onProgress(draft ? 'Saving draft…' : 'Saving…');

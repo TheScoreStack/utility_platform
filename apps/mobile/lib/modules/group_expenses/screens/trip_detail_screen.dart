@@ -190,8 +190,10 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     try {
       picked = await _picker.pickImage(
         source: source,
-        imageQuality: 85,
-        maxWidth: 2000,
+        // Receipt OCR reads fine at 1600px; larger camera photos risk the
+        // ~6MB API Gateway/Lambda payload cap once base64-encoded (413s).
+        imageQuality: 78,
+        maxWidth: 1600,
       );
     } catch (_) {
       if (!mounted) return;

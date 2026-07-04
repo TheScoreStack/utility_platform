@@ -421,6 +421,15 @@ export const handler = async (
         return ok({ extraction }, origin);
       }
 
+      const receiptRecordMatch = remainder.match(
+        /^\/receipts\/([^/]+)\/record$/
+      );
+      if (receiptRecordMatch && method === "GET") {
+        const receiptId = decodeURIComponent(receiptRecordMatch[1]);
+        const receipt = await tripService.getReceipt(tripId, receiptId, auth);
+        return ok(receipt, origin);
+      }
+
       const receiptMatch = remainder.match(/^\/receipts\/([^/]+)$/);
       if (receiptMatch && method === "GET") {
         const receiptId = decodeURIComponent(receiptMatch[1]);
