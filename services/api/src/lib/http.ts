@@ -23,19 +23,25 @@ export const json = (
 
 export const handleError = (
   error: unknown,
-  origin = "*"
+  origin = "*",
+  context?: string
 ): APIGatewayProxyStructuredResultV2 => {
+  // 4xx responses are client-visible but were previously invisible in logs,
+  // which made field issues undiagnosable. Log them with their route.
   if (error instanceof ValidationError) {
+    console.warn("Request rejected (400)", { context, message: error.message });
     return json(400, { message: error.message }, origin);
   }
   if (error instanceof ForbiddenError) {
+    console.warn("Request rejected (403)", { context, message: error.message });
     return json(403, { message: error.message }, origin);
   }
   if (error instanceof NotFoundError) {
+    console.warn("Request rejected (404)", { context, message: error.message });
     return json(404, { message: error.message }, origin);
   }
 
-  console.error("Unhandled error", error);
+  console.error("Unhandled error", { context, error });
   return json(500, { message: "Internal server error" }, origin);
 };
 

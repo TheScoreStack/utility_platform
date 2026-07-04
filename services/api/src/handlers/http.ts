@@ -477,6 +477,10 @@ export const handler = async (
 
     return json(404, { message: "Not Found" }, origin);
   } catch (error) {
-    return handleError(error, origin);
+    return handleError(
+      error,
+      origin,
+      `${event.requestContext.http.method} ${event.requestContext.http.path ?? event.rawPath}`
+    );
   }
 };
