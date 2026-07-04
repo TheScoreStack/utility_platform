@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'core/app_theme.dart';
-import 'modules/module_registry.dart';
-import 'screens/module_hub.dart';
+import 'screens/root_gate.dart';
 
 void main() {
   runApp(const UtilityApp());
@@ -74,7 +73,7 @@ class UtilityApp extends StatelessWidget {
         ),
         dividerTheme: const DividerThemeData(color: Colors.white10),
       ),
-      home: ModuleHub(modules: registeredModules),
+      home: const RootGate(),
     );
   }
 }
