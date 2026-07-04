@@ -22,19 +22,21 @@ class JoinTripResult {
 Future<JoinTripResult?> showJoinTripSheet({
   required BuildContext context,
   required ApiClient api,
+  String? initialInput,
 }) {
   return showModalBottomSheet<JoinTripResult>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => _JoinTripSheet(api: api),
+    builder: (_) => _JoinTripSheet(api: api, initialInput: initialInput),
   );
 }
 
 class _JoinTripSheet extends StatefulWidget {
   final ApiClient api;
+  final String? initialInput;
 
-  const _JoinTripSheet({required this.api});
+  const _JoinTripSheet({required this.api, this.initialInput});
 
   @override
   State<_JoinTripSheet> createState() => _JoinTripSheetState();
@@ -52,7 +54,14 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
   @override
   void initState() {
     super.initState();
-    _prefillFromClipboard();
+    final initial = widget.initialInput;
+    if (initial != null && initial.isNotEmpty) {
+      // Arrived via a universal link — look it up straight away.
+      _linkController.text = initial;
+      _lookup();
+    } else {
+      _prefillFromClipboard();
+    }
   }
 
   @override

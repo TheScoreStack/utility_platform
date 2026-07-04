@@ -8,7 +8,11 @@ import 'screens/trip_list_screen.dart';
 /// Module entry point. Authentication is handled by the app-level RootGate
 /// before the hub is reachable, so this goes straight to the trips.
 class GroupExpensesScreen extends StatefulWidget {
-  const GroupExpensesScreen({super.key});
+  /// When set (universal link), the trips screen opens the join sheet with
+  /// this invite prefilled.
+  final String? initialInviteId;
+
+  const GroupExpensesScreen({super.key, this.initialInviteId});
 
   @override
   State<GroupExpensesScreen> createState() => _GroupExpensesScreenState();
@@ -29,6 +33,10 @@ class _GroupExpensesScreenState extends State<GroupExpensesScreen> {
   @override
   Widget build(BuildContext context) {
     // Sign-out pops back to the RootGate's sign-in via the auth hub event.
-    return TripListScreen(api: _api, onSignOut: AuthService.instance.signOut);
+    return TripListScreen(
+      api: _api,
+      onSignOut: AuthService.instance.signOut,
+      initialInviteId: widget.initialInviteId,
+    );
   }
 }

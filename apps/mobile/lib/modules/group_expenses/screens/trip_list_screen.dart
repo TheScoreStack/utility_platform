@@ -16,7 +16,16 @@ class TripListScreen extends StatefulWidget {
   final ApiClient api;
   final Future<void> Function() onSignOut;
 
-  const TripListScreen({super.key, required this.api, required this.onSignOut});
+  /// When set (arriving via a universal invite link), the join sheet opens
+  /// immediately with this invite prefilled.
+  final String? initialInviteId;
+
+  const TripListScreen({
+    super.key,
+    required this.api,
+    required this.onSignOut,
+    this.initialInviteId,
+  });
 
   @override
   State<TripListScreen> createState() => _TripListScreenState();
@@ -31,6 +40,12 @@ class _TripListScreenState extends State<TripListScreen> {
   void initState() {
     super.initState();
     _load();
+    final inviteId = widget.initialInviteId;
+    if (inviteId != null && inviteId.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _joinTrip(initialInput: inviteId);
+      });
+    }
   }
 
   Future<void> _load() async {
@@ -107,8 +122,12 @@ class _TripListScreenState extends State<TripListScreen> {
     );
   }
 
-  Future<void> _joinTrip() async {
-    final result = await showJoinTripSheet(context: context, api: widget.api);
+  Future<void> _joinTrip({String? initialInput}) async {
+    final result = await showJoinTripSheet(
+      context: context,
+      api: widget.api,
+      initialInput: initialInput,
+    );
     if (result == null || !mounted || result.tripId.isEmpty) return;
 
     HapticFeedback.mediumImpact();

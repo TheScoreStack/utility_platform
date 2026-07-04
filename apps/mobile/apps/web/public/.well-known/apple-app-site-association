@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["67TM2U826P.com.thestackcore.app"],
+        "components": [
+          {
+            "/": "/group-expenses/join/*",
+            "comment": "Trip invite links open the Stack Core app"
+          }
+        ]
+      }
+    ]
+  }
+}
