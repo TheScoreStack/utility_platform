@@ -3,6 +3,7 @@
 // always matches what gets stored.
 export {
   buildItemizedAllocations as computeItemizedAllocations,
+  splitTotalIntoUnits,
   type ItemizedAllocationDetail,
   type ItemizedAllocationInput,
   type ItemizedAllocationResult,

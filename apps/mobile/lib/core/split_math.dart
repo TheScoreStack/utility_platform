@@ -203,3 +203,21 @@ ItemizedAllocationResult buildItemizedAllocations({
         (itemsSubtotalCents + (memberOrder.isNotEmpty ? extrasCents : 0)) / 100,
   );
 }
+
+/// Splits a printed quantity line ("4 Breakfast Hash  68.00") into
+/// per-unit amounts that sum exactly to the line total — the first rows
+/// absorb any leftover cents.
+List<double> splitTotalIntoUnits(double total, int quantity) {
+  if (quantity <= 1) return [total];
+  final totalCents = (total * 100).round();
+  final base = totalCents ~/ quantity;
+  var remainder = totalCents - base * quantity;
+  return List.generate(quantity, (_) {
+    var cents = base;
+    if (remainder > 0) {
+      cents += 1;
+      remainder -= 1;
+    }
+    return cents / 100;
+  });
+}

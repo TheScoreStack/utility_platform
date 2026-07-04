@@ -142,3 +142,26 @@ export const buildItemizedAllocations = (
       (itemsSubtotalCents + (memberOrder.length ? extrasCents : 0)) / 100
   };
 };
+
+/**
+ * Splits a printed quantity line ("4 Breakfast Hash  68.00") into per-unit
+ * amounts that sum exactly to the line total — the first units absorb any
+ * leftover cents.
+ */
+export const splitTotalIntoUnits = (
+  total: number,
+  quantity: number
+): number[] => {
+  if (quantity <= 1) return [total];
+  const totalCents = Math.round(total * 100);
+  const base = Math.floor(totalCents / quantity);
+  let remainder = totalCents - base * quantity;
+  return Array.from({ length: quantity }, () => {
+    let cents = base;
+    if (remainder > 0) {
+      cents += 1;
+      remainder -= 1;
+    }
+    return cents / 100;
+  });
+};

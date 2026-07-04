@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildItemizedAllocations } from "./splitMath.js";
+import { buildItemizedAllocations, splitTotalIntoUnits } from "./splitMath.js";
 
 const sum = (allocations: { amount: number }[]) =>
   Math.round(allocations.reduce((total, a) => total + a.amount, 0) * 100) / 100;
@@ -141,5 +141,21 @@ describe("buildItemizedAllocations", () => {
       { memberId: "a", amount: 5 },
       { memberId: "b", amount: 5 }
     ]);
+  });
+});
+
+describe("splitTotalIntoUnits", () => {
+  it("splits an even quantity line into equal units", () => {
+    expect(splitTotalIntoUnits(68, 4)).toEqual([17, 17, 17, 17]);
+  });
+
+  it("gives leftover cents to the first units and sums exactly", () => {
+    const units = splitTotalIntoUnits(10, 3);
+    expect(units).toEqual([3.34, 3.33, 3.33]);
+    expect(sum(units.map((amount) => ({ amount })))).toBe(10);
+  });
+
+  it("returns the total untouched for quantity 1", () => {
+    expect(splitTotalIntoUnits(16, 1)).toEqual([16]);
   });
 });

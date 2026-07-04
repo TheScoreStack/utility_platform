@@ -1,11 +1,12 @@
 import {
   buildItemizedAllocations as buildDetailedItemizedAllocations,
   roundCents,
+  splitTotalIntoUnits,
   type ItemizedAllocationInput,
   type ItemizedLineItem
 } from "@utility-platform/shared";
 
-export { roundCents };
+export { roundCents, splitTotalIntoUnits };
 export type { ItemizedAllocationInput, ItemizedLineItem };
 
 export interface ItemizedAllocationResult {

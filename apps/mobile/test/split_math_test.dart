@@ -165,4 +165,20 @@ void main() {
       expect(byMember['b'], 5);
     });
   });
+
+  group('splitTotalIntoUnits', () {
+    test('splits an even quantity line into equal units', () {
+      expect(splitTotalIntoUnits(68, 4), [17.0, 17.0, 17.0, 17.0]);
+    });
+
+    test('gives leftover cents to the first units and sums exactly', () {
+      final units = splitTotalIntoUnits(10, 3);
+      expect(units, [3.34, 3.33, 3.33]);
+      expect(units.reduce((a, b) => a + b), closeTo(10, 0.0001));
+    });
+
+    test('returns the total untouched for quantity 1', () {
+      expect(splitTotalIntoUnits(16, 1), [16.0]);
+    });
+  });
 }

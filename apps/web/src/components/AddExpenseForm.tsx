@@ -4,7 +4,7 @@ import { api } from "../lib/api";
 import { EXPENSE_CATEGORIES, resolveExpenseCategory } from "../lib/expenseCategories";
 import { getInitials, seedAvatar } from "../lib/avatarPalette";
 import { CURRENCY_OPTIONS } from "../lib/fx";
-import { computeItemizedAllocations } from "../lib/itemSplit";
+import { computeItemizedAllocations, splitTotalIntoUnits } from "../lib/itemSplit";
 import type {
   ExtrasSplitMode,
   TripMember,
@@ -701,14 +701,38 @@ const AddExpenseForm = ({
           ? sharedWith
           : members.map((member) => member.memberId);
         setItemRows(
-          usableItems.map((item, index) => ({
-            key: nextItemKey(),
-            description: item.description?.trim() || `Item ${index + 1}`,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalInput: (item.total ?? 0).toFixed(2),
-            assignedMemberIds: [...defaultAssigned]
-          }))
+          usableItems.flatMap((item, index) => {
+            const description =
+              item.description?.trim() || `Item ${index + 1}`;
+            const quantity = Math.round(item.quantity ?? 1);
+            // A printed line like "4 Breakfast Hash  68.00" is almost always
+            // four people's dishes — expand it into per-unit rows so each
+            // can be assigned separately.
+            const expandable =
+              quantity > 1 &&
+              quantity <= 20 &&
+              Math.abs((item.quantity ?? 1) - quantity) < 0.001;
+            if (expandable) {
+              return splitTotalIntoUnits(item.total ?? 0, quantity).map(
+                (unitAmount) => ({
+                  key: nextItemKey(),
+                  description,
+                  totalInput: unitAmount.toFixed(2),
+                  assignedMemberIds: [...defaultAssigned]
+                })
+              );
+            }
+            return [
+              {
+                key: nextItemKey(),
+                description,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                totalInput: (item.total ?? 0).toFixed(2),
+                assignedMemberIds: [...defaultAssigned]
+              }
+            ];
+          })
         );
         setSplitMode("items");
       }

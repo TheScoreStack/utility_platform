@@ -151,14 +151,36 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     _items.clear();
     for (final parsed in extraction.lineItems) {
       if ((parsed.description ?? '').isEmpty && parsed.total == null) continue;
-      _items.add(
-        EditableReceiptItem(
-          description: parsed.description ?? '',
-          amount: parsed.total,
-          // Every parsed item starts assigned to everyone on the trip.
-          assignedMemberIds: allMemberIds,
-        ),
-      );
+      final quantity = parsed.quantity?.round() ?? 1;
+      final total = parsed.total;
+      // A printed line like "4 Breakfast Hash  68.00" is almost always four
+      // people's dishes — expand it into per-unit rows so each can be
+      // assigned separately. Rows stay editable for the shared-item case.
+      final expandable =
+          total != null &&
+          quantity > 1 &&
+          quantity <= 20 &&
+          (parsed.quantity! - quantity).abs() < 0.001;
+      if (expandable) {
+        for (final unitAmount in splitTotalIntoUnits(total, quantity)) {
+          _items.add(
+            EditableReceiptItem(
+              description: parsed.description ?? '',
+              amount: unitAmount,
+              // Every parsed item starts assigned to everyone on the trip.
+              assignedMemberIds: allMemberIds,
+            ),
+          );
+        }
+      } else {
+        _items.add(
+          EditableReceiptItem(
+            description: parsed.description ?? '',
+            amount: total,
+            assignedMemberIds: allMemberIds,
+          ),
+        );
+      }
     }
 
     final tax = extraction.tax;
