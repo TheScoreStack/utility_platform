@@ -6,6 +6,7 @@ import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/formatters.dart';
 import '../../../models/models.dart';
+import '../widgets/join_trip_sheet.dart';
 import '../widgets/new_trip_sheet.dart';
 import 'account_screen.dart';
 import 'trip_detail_screen.dart';
@@ -84,6 +85,11 @@ class _TripListScreenState extends State<TripListScreen> {
         centerTitle: false,
         actions: [
           IconButton(
+            icon: const Icon(Icons.group_add_rounded),
+            tooltip: 'Join a trip',
+            onPressed: _joinTrip,
+          ),
+          IconButton(
             icon: const Icon(Icons.account_circle_rounded),
             tooltip: 'Account',
             onPressed: _openAccount,
@@ -99,6 +105,31 @@ class _TripListScreenState extends State<TripListScreen> {
             ),
       body: _buildBody(),
     );
+  }
+
+  Future<void> _joinTrip() async {
+    final result = await showJoinTripSheet(context: context, api: widget.api);
+    if (result == null || !mounted || result.tripId.isEmpty) return;
+
+    HapticFeedback.mediumImpact();
+    showAppSnackBar(
+      context,
+      result.alreadyMember
+          ? 'Opening "${result.tripName}"'
+          : 'Joined "${result.tripName}"',
+      success: true,
+    );
+    _load();
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripDetailScreen(
+          api: widget.api,
+          tripId: result.tripId,
+          tripName: result.tripName,
+        ),
+      ),
+    );
+    if (mounted) _load();
   }
 
   Future<void> _createTrip() async {
@@ -139,7 +170,8 @@ class _TripListScreenState extends State<TripListScreen> {
                 Icon(Icons.luggage_rounded, size: 48, color: Colors.white24),
                 SizedBox(height: 16),
                 Text(
-                  'No trips yet.\nTap "New trip" below to get started.',
+                  'No trips yet.\nTap "New trip" below to get started, or '
+                  'join one with an invite link from the toolbar.',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: Colors.white70),
                 ),
