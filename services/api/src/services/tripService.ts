@@ -28,6 +28,7 @@ import { convertCurrency } from "../lib/fx.js";
 import type { AuthContext } from "../auth.js";
 import { generateReceiptUpload, generateReceiptDownloadUrl } from "./uploadService.js";
 import { analyzeReceiptBytes } from "./textractService.js";
+import { notifyUsersSafely } from "./pushService.js";
 
 let tripStoreInstance: TripStore | null = null;
 let userStoreInstance: UserStore | null = null;
@@ -336,6 +337,43 @@ const canModifyExpense = (
   (expense.createdBy
     ? expense.createdBy === userId
     : expense.paidByMemberId === userId);
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  CAD: "CA$",
+  AUD: "A$",
+  JPY: "¥",
+  MXN: "MX$"
+};
+
+const formatMoney = (amount: number, currency: string): string =>
+  `${CURRENCY_SYMBOLS[currency] ?? `${currency} `}${amount.toFixed(2)}`;
+
+const firstName = (name: string): string =>
+  name.trim().split(/\s+/)[0] || name;
+
+/** Real (non-placeholder) members who should hear about someone else's
+ *  action — the actor is excluded. */
+const pushRecipients = (
+  members: TripMember[],
+  excludeUserId: string
+): string[] =>
+  members
+    .filter(
+      (member) => !member.placeholder && member.memberId !== excludeUserId
+    )
+    .map((member) => member.memberId);
+
+const memberFirstName = (
+  members: TripMember[],
+  memberId: string
+): string =>
+  firstName(
+    members.find((member) => member.memberId === memberId)?.displayName ??
+      "Someone"
+  );
 
 /** Edit/delete rights on a settlement: either participant (it's their
  *  money), whoever recorded it, or the trip owner as moderator. */
@@ -722,6 +760,20 @@ export class TripService {
     if (claimMemberId) {
       await this.claimPlaceholder(details.trip.tripId, claimMemberId, auth);
     }
+    if (!alreadyMember) {
+      const claimedName = claimMemberId
+        ? details.members.find((m) => m.memberId === claimMemberId)
+            ?.displayName
+        : undefined;
+      await notifyUsersSafely(pushRecipients(details.members, auth.userId), {
+        title: details.trip.name,
+        body: claimedName
+          ? `${firstName(getDisplayName(profile))} joined and claimed ` +
+            `${firstName(claimedName)}'s spot`
+          : `${firstName(getDisplayName(profile))} joined the trip`,
+        data: { tripId: details.trip.tripId }
+      });
+    }
     return { tripId: details.trip.tripId };
   }
 
@@ -1065,7 +1117,7 @@ export class TripService {
       throw new ValidationError(parsed.error.message);
     }
 
-    await ensureCurrentUserProfile(auth);
+    const actorProfile = await ensureCurrentUserProfile(auth);
     const details = await getTripStore().getTripDetails(tripId);
     const isMember = details.members.some(
       (member) => member.memberId === auth.userId
@@ -1157,6 +1209,17 @@ export class TripService {
 
     await getTripStore().saveExpense(expense);
 
+    if (!expense.draft) {
+      await notifyUsersSafely(pushRecipients(details.members, auth.userId), {
+        title: details.trip.name,
+        body:
+          `${firstName(getDisplayName(actorProfile))} added ` +
+          `${expense.description} · ` +
+          formatMoney(expense.total, expense.currency),
+        data: { tripId }
+      });
+    }
+
     // Scanned receipts upload as drafts before the user decides whether to
     // publish; creating a published expense reveals its receipt.
     if (!expense.draft && attachedReceipt?.draft) {
@@ -1199,7 +1262,7 @@ export class TripService {
       throw new ValidationError(parsed.error.message);
     }
 
-    await ensureCurrentUserProfile(auth);
+    const actorProfile = await ensureCurrentUserProfile(auth);
     const details = await getTripStore().getTripDetails(tripId);
     const isMember = details.members.some(
       (member) => member.memberId === auth.userId
@@ -1328,6 +1391,20 @@ export class TripService {
       await getTripStore().updateReceiptExtraction(tripId, publishedReceiptId, {
         draft: false,
         updatedAt: isoNow()
+      });
+    }
+
+    if (isPublishing) {
+      await notifyUsersSafely(pushRecipients(details.members, auth.userId), {
+        title: details.trip.name,
+        body:
+          `${firstName(getDisplayName(actorProfile))} added ` +
+          `${parsed.data.description ?? expense.description} · ` +
+          formatMoney(
+            parsed.data.total ?? expense.total,
+            parsed.data.currency ?? expense.currency
+          ),
+        data: { tripId }
       });
     }
   }
@@ -1650,6 +1727,28 @@ export class TripService {
     };
 
     await getTripStore().saveSettlement(settlement);
+
+    const settlementRecipients = [
+      settlement.fromMemberId,
+      settlement.toMemberId
+    ].filter((memberId) =>
+      details.members.some(
+        (member) =>
+          member.memberId === memberId &&
+          !member.placeholder &&
+          memberId !== auth.userId
+      )
+    );
+    await notifyUsersSafely(settlementRecipients, {
+      title: details.trip.name,
+      body:
+        `${memberFirstName(details.members, settlement.fromMemberId)} paid ` +
+        `${memberFirstName(details.members, settlement.toMemberId)} · ` +
+        `${formatMoney(settlement.amount, settlement.currency)} — ` +
+        "confirm when it lands",
+      data: { tripId }
+    });
+
     return settlement;
   }
 
@@ -1687,6 +1786,20 @@ export class TripService {
         settlementId,
         isoNow()
       );
+      const otherParty = [settlement.fromMemberId, settlement.toMemberId]
+        .filter((memberId) => memberId !== auth.userId)
+        .filter((memberId) =>
+          details.members.some(
+            (member) => member.memberId === memberId && !member.placeholder
+          )
+        );
+      await notifyUsersSafely(otherParty, {
+        title: details.trip.name,
+        body:
+          `${memberFirstName(details.members, auth.userId)} confirmed the ` +
+          `${formatMoney(settlement.amount, settlement.currency)} payment ✓`,
+        data: { tripId }
+      });
     } else {
       await getTripStore().markSettlementConfirmation(tripId, settlementId);
     }

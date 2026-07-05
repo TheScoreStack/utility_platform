@@ -13,6 +13,7 @@
     "@aws-sdk/client-dynamodb": "^3.516.0",
     "@aws-sdk/client-s3": "^3.516.0",
     "@aws-sdk/client-ses": "^3.1057.0",
+    "@aws-sdk/client-sns": "^3.1079.0",
     "@aws-sdk/client-textract": "^3.516.0",
     "@aws-sdk/lib-dynamodb": "^3.516.0",
     "@aws-sdk/s3-request-presigner": "^3.516.0",

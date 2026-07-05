@@ -4,6 +4,8 @@ export interface AppConfig {
   receiptBucket: string;
   textractOutputBucket?: string;
   signedUrlExpirySeconds: number;
+  /** SNS platform application for APNs pushes; unset = pushes disabled. */
+  pushPlatformAppArn?: string;
 }
 
 const required = (value: string | undefined, name: string): string => {
@@ -27,7 +29,8 @@ const buildConfig = (): AppConfig => {
     textractOutputBucket: process.env.TEXTRACT_OUTPUT_BUCKET,
     signedUrlExpirySeconds: process.env.SIGNED_URL_EXPIRY_SECONDS
       ? Number(process.env.SIGNED_URL_EXPIRY_SECONDS)
-      : 900
+      : 900,
+    pushPlatformAppArn: process.env.PUSH_PLATFORM_APP_ARN || undefined
   };
 };
 

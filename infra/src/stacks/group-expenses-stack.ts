@@ -190,6 +190,11 @@ export class GroupExpensesStack extends Stack {
       }
     };
 
+    // APNs pushes go through an SNS platform application created out-of-band
+    // (needs the Apple signing key). Until the ARN is provided, push code
+    // no-ops and the app behaves exactly as before.
+    const pushPlatformAppArn = process.env.PUSH_PLATFORM_APP_ARN;
+
     const httpLambda = new NodejsFunction(this, "HttpHandler", {
       ...sharedFunctionProps,
       entry: path.join(stackDir, "../../../services/api/src/handlers/http.ts"),
@@ -199,9 +204,30 @@ export class GroupExpensesStack extends Stack {
         TABLE_NAME: table.tableName,
         RECEIPT_BUCKET: receiptBucket.bucketName,
         SIGNED_URL_EXPIRY_SECONDS: "900",
-        AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+        AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1",
+        ...(pushPlatformAppArn
+          ? { PUSH_PLATFORM_APP_ARN: pushPlatformAppArn }
+          : {})
       }
     });
+
+    if (pushPlatformAppArn) {
+      httpLambda.addToRolePolicy(
+        new PolicyStatement({
+          actions: [
+            "sns:CreatePlatformEndpoint",
+            "sns:Publish",
+            "sns:DeleteEndpoint",
+            "sns:GetEndpointAttributes",
+            "sns:SetEndpointAttributes"
+          ],
+          resources: [
+            pushPlatformAppArn,
+            `${pushPlatformAppArn.replace(":app/", ":endpoint/")}/*`
+          ]
+        })
+      );
+    }
 
     const textractLambda = new NodejsFunction(this, "TextractProcessor", {
       ...sharedFunctionProps,

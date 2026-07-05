@@ -1,6 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from "aws-lambda";
 import { TripService } from "../services/tripService.js";
 import { UserService } from "../services/userService.js";
+import { pushService } from "../services/pushService.js";
 import { HarmonyLedgerService } from "../services/harmonyLedgerService.js";
 import { StackTimeService } from "../services/stackTimeService.js";
 import { getAuthContext } from "../auth.js";
@@ -91,6 +92,20 @@ export const handler = async (
 
     if (path === "/profile" && method === "DELETE") {
       await userService.deleteAccount(auth);
+      return noContent(origin);
+    }
+
+    if (path === "/devices" && method === "POST") {
+      const body = parseBody(event);
+      await pushService.registerDevice(body, auth);
+      return created({ ok: true }, origin);
+    }
+    const deviceMatch = path.match(/^\/devices\/([^/]+)$/);
+    if (deviceMatch && method === "DELETE") {
+      await pushService.unregisterDevice(
+        decodeURIComponent(deviceMatch[1]),
+        auth
+      );
       return noContent(origin);
     }
 

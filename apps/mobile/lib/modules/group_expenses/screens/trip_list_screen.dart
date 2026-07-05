@@ -6,6 +6,7 @@ import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/formatters.dart';
 import '../../../models/models.dart';
+import '../../../core/push_service.dart';
 import '../widgets/join_trip_sheet.dart';
 import '../widgets/new_trip_sheet.dart';
 import '../widgets/payment_methods_sheet.dart';
@@ -48,13 +49,18 @@ class _TripListScreenState extends State<TripListScreen> {
     _load();
     final inviteId = widget.initialInviteId;
     if (inviteId != null && inviteId.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _joinTrip(initialInput: inviteId);
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        await _joinTrip(initialInput: inviteId);
+        if (mounted) await PushService.instance.register(widget.api);
       });
     } else {
       // Don't compete with the join sheet when arriving via an invite link.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _maybePromptPaymentSetup();
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
+        if (!mounted) return;
+        // One prompt at a time: payment setup first, then notifications.
+        await _maybePromptPaymentSetup();
+        if (mounted) await PushService.instance.register(widget.api);
       });
     }
   }
@@ -125,6 +131,8 @@ class _TripListScreenState extends State<TripListScreen> {
       // ScaffoldMessenger keeps the snackbar alive across the swap.
       showAppSnackBar(context, 'Account deleted', success: true);
     }
+    // Stop pushes to this device before the session goes away.
+    await PushService.instance.unregister(widget.api);
     await widget.onSignOut();
   }
 
