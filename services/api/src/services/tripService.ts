@@ -1009,8 +1009,11 @@ export class TripService {
     await ensureCurrentUserProfile(auth);
     const details = await getTripStore().getTripDetails(tripId);
     const isOwner = details.trip.ownerId === auth.userId;
-    if (!isOwner) {
-      throw new ForbiddenError("Only trip owners can remove members");
+    // Owners can remove anyone; anyone can remove themselves (leave trip).
+    // The involvement guards below still apply — nobody vanishes while
+    // they're part of the money math.
+    if (!isOwner && memberId !== auth.userId) {
+      throw new ForbiddenError("Only trip owners can remove other members");
     }
 
     if (memberId === details.trip.ownerId) {

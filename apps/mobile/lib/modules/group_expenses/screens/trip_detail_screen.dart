@@ -12,7 +12,9 @@ import '../widgets/animated_amount.dart';
 import '../widgets/member_avatar.dart';
 import '../widgets/quick_expense_sheet.dart';
 import '../widgets/settle_up_view.dart';
+import 'members_screen.dart';
 import 'receipt_viewer_screen.dart';
+import 'recently_deleted_screen.dart';
 import 'scan_review_screen.dart';
 
 /// One trip: collapsing gradient header (name, dates, your balance, members),
@@ -400,6 +402,69 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       if (!mounted) return;
       showAppSnackBar(context, 'Could not add $displayName.', error: true);
     }
+  }
+
+  // --------------------------------------------------------- trip management
+
+  Future<void> _openMembers() async {
+    final summary = _summary;
+    if (summary == null) return;
+    final result = await Navigator.of(context).push<MembersScreenResult>(
+      MaterialPageRoute(
+        builder: (_) => MembersScreen(api: widget.api, summary: summary),
+      ),
+    );
+    if (!mounted) return;
+    if (result == MembersScreenResult.left) {
+      // You're no longer on this trip — back to the trip list.
+      Navigator.of(context).pop();
+      return;
+    }
+    await _load();
+    if (result == MembersScreenResult.invite && mounted) {
+      await _openInvite();
+    }
+  }
+
+  Future<void> _openRecentlyDeleted() async {
+    final summary = _summary;
+    if (summary == null) return;
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) =>
+            RecentlyDeletedScreen(api: widget.api, summary: summary),
+      ),
+    );
+    if (mounted) await _load();
+  }
+
+  Future<void> _openTripSettings() async {
+    final summary = _summary;
+    if (summary == null) return;
+    final result = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _TripSettingsSheet(api: widget.api, trip: summary.trip),
+    );
+    if (!mounted || result == null) return;
+    if (result == 'archived') {
+      showAppSnackBar(
+        context,
+        'Trip archived — balances are frozen',
+        success: true,
+      );
+      Navigator.of(context).pop();
+      return;
+    }
+    HapticFeedback.mediumImpact();
+    await _load();
+    if (!mounted) return;
+    showAppSnackBar(
+      context,
+      result == 'unarchived' ? 'Trip unarchived' : 'Trip updated',
+      success: true,
+    );
   }
 
   // ------------------------------------------------------------------ drafts
@@ -912,6 +977,46 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   icon: const Icon(Icons.person_add_alt_1_rounded),
                   tooltip: 'Invite',
                   onPressed: _openInvite,
+                ),
+                PopupMenuButton<String>(
+                  tooltip: 'Trip options',
+                  onSelected: (value) {
+                    switch (value) {
+                      case 'members':
+                        _openMembers();
+                      case 'deleted':
+                        _openRecentlyDeleted();
+                      case 'settings':
+                        _openTripSettings();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem(
+                      value: 'members',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.group_rounded, size: 20),
+                        title: Text('Members'),
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'deleted',
+                      child: ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.delete_outline_rounded, size: 20),
+                        title: Text('Recently deleted'),
+                      ),
+                    ),
+                    if (summary.trip.ownerId == summary.currentUserId)
+                      const PopupMenuItem(
+                        value: 'settings',
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(Icons.tune_rounded, size: 20),
+                          title: Text('Trip settings'),
+                        ),
+                      ),
+                  ],
                 ),
               ],
               flexibleSpace: FlexibleSpaceBar(
@@ -1770,6 +1875,178 @@ class _AddPeopleSectionState extends State<_AddPeopleSection> {
           ),
         ],
       ],
+    );
+  }
+}
+
+/// Owner-only trip settings: rename and archive/unarchive.
+class _TripSettingsSheet extends StatefulWidget {
+  final ApiClient api;
+  final Trip trip;
+
+  const _TripSettingsSheet({required this.api, required this.trip});
+
+  @override
+  State<_TripSettingsSheet> createState() => _TripSettingsSheetState();
+}
+
+class _TripSettingsSheetState extends State<_TripSettingsSheet> {
+  late final TextEditingController _nameController = TextEditingController(
+    text: widget.trip.name,
+  );
+  bool _working = false;
+  String? _error;
+
+  bool get _archived => widget.trip.archivedAt != null;
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _saveName() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty || _working) return;
+    setState(() {
+      _working = true;
+      _error = null;
+    });
+    try {
+      await widget.api.patch('/trips/${widget.trip.tripId}', {'name': name});
+      if (!mounted) return;
+      Navigator.of(context).pop('saved');
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _working = false;
+        _error = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _working = false;
+        _error = 'Could not update the trip.';
+      });
+    }
+  }
+
+  Future<void> _toggleArchive() async {
+    if (_working) return;
+    setState(() {
+      _working = true;
+      _error = null;
+    });
+    try {
+      await widget.api.post(
+        '/trips/${widget.trip.tripId}/${_archived ? 'unarchive' : 'archive'}',
+        const {},
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop(_archived ? 'unarchived' : 'archived');
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _working = false;
+        _error = error.message;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _working = false;
+        _error = 'Could not update the trip.';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 8,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Trip settings',
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _nameController,
+              enabled: !_working,
+              textCapitalization: TextCapitalization.words,
+              onChanged: (_) => setState(() {}),
+              onSubmitted: (_) => _saveName(),
+              decoration: const InputDecoration(
+                labelText: 'Trip name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed:
+                  _working ||
+                      _nameController.text.trim().isEmpty ||
+                      _nameController.text.trim() == widget.trip.name
+                  ? null
+                  : _saveName,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: _working
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Save name'),
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+            Text(
+              _archived
+                  ? 'This trip is archived — unarchive to keep adding '
+                        'expenses.'
+                  : 'Done settling up? Archiving hides the trip from active '
+                        'lists and stops recurring expenses.',
+              style: const TextStyle(fontSize: 13, color: Colors.white70),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _working ? null : _toggleArchive,
+              icon: Icon(
+                _archived
+                    ? Icons.unarchive_rounded
+                    : Icons.archive_outlined,
+                size: 18,
+              ),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                foregroundColor: AppColors.warning,
+                side: BorderSide(
+                  color: AppColors.warning.withValues(alpha: 0.45),
+                ),
+              ),
+              label: Text(_archived ? 'Unarchive trip' : 'Archive trip'),
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                _error!,
+                style: const TextStyle(color: AppColors.danger, fontSize: 13),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
