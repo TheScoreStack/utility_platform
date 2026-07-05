@@ -191,9 +191,12 @@ export class GroupExpensesStack extends Stack {
     };
 
     // APNs pushes go through an SNS platform application created out-of-band
-    // (needs the Apple signing key). Until the ARN is provided, push code
-    // no-ops and the app behaves exactly as before.
-    const pushPlatformAppArn = process.env.PUSH_PLATFORM_APP_ARN;
+    // (needs the Apple signing key, which never touches this repo). The ARN
+    // itself is not sensitive. Unset the env var AND this default to turn
+    // pushes off entirely.
+    const pushPlatformAppArn =
+      process.env.PUSH_PLATFORM_APP_ARN ??
+      "arn:aws:sns:us-east-1:972890651266:app/APNS/stackcore-apns";
 
     const httpLambda = new NodejsFunction(this, "HttpHandler", {
       ...sharedFunctionProps,
