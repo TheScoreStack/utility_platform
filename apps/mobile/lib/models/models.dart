@@ -121,6 +121,9 @@ class TripMember {
   final String createdAt;
   final PaymentMethods? paymentMethods;
 
+  /// True for members added by name only, before they have an account.
+  final bool placeholder;
+
   const TripMember({
     required this.tripId,
     required this.memberId,
@@ -129,6 +132,7 @@ class TripMember {
     required this.addedBy,
     required this.createdAt,
     this.paymentMethods,
+    this.placeholder = false,
   });
 
   factory TripMember.fromJson(Map<String, dynamic> json) => TripMember(
@@ -143,6 +147,7 @@ class TripMember {
             json['paymentMethods'] as Map<String, dynamic>,
           )
         : null,
+    placeholder: json['placeholder'] == true,
   );
 
   Map<String, dynamic> toJson() => _withoutNulls({

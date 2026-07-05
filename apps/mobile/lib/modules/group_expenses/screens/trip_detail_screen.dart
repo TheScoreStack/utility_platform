@@ -329,6 +329,22 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   ),
                   label: const Text('Copy link'),
                 ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 12),
+                const Text(
+                  'No account yet? Add them by name — they can claim their '
+                  'spot from this link later, keeping everything assigned '
+                  'to them.',
+                  style: TextStyle(fontSize: 13, color: Colors.white70),
+                ),
+                const SizedBox(height: 10),
+                _AddByNameField(
+                  onSubmit: (name) async {
+                    Navigator.of(sheetContext).pop();
+                    await _addPlaceholderMember(name);
+                  },
+                ),
               ],
             ),
           ),
@@ -340,6 +356,28 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     } catch (_) {
       if (!mounted) return;
       showAppSnackBar(context, 'Could not load the invite link.', error: true);
+    }
+  }
+
+  /// Adds a member by name only (no account) so splits can include them
+  /// immediately; they claim the spot later via the invite link.
+  Future<void> _addPlaceholderMember(String name) async {
+    try {
+      await widget.api.post('/trips/${widget.tripId}/members', {
+        'members': [
+          {'name': name},
+        ],
+      });
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      showAppSnackBar(context, 'Added $name to the trip', success: true);
+      await _load();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not add $name.', error: true);
     }
   }
 
@@ -1233,6 +1271,58 @@ class _ErrorState extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Name field + Add button used in the invite sheet for placeholder members.
+class _AddByNameField extends StatefulWidget {
+  final Future<void> Function(String name) onSubmit;
+
+  const _AddByNameField({required this.onSubmit});
+
+  @override
+  State<_AddByNameField> createState() => _AddByNameFieldState();
+}
+
+class _AddByNameFieldState extends State<_AddByNameField> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final name = _controller.text.trim();
+    if (name.isEmpty) return;
+    widget.onSubmit(name);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _controller,
+            textCapitalization: TextCapitalization.words,
+            onSubmitted: (_) => _submit(),
+            onChanged: (_) => setState(() {}),
+            decoration: const InputDecoration(
+              hintText: 'e.g. Sarah',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        FilledButton.tonal(
+          onPressed: _controller.text.trim().isEmpty ? null : _submit,
+          child: const Text('Add'),
+        ),
+      ],
     );
   }
 }

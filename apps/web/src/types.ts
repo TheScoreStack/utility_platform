@@ -60,6 +60,8 @@ export interface InvitePreview {
   tripName: string;
   memberCount: number;
   alreadyMember: boolean;
+  /** Unclaimed placeholder members the joiner might be. */
+  placeholders?: Array<{ memberId: string; displayName: string }>;
 }
 
 export interface HarmonyLedgerTotals {

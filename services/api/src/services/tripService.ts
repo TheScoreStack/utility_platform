@@ -18,6 +18,10 @@ import {
 } from "../types.js";
 import { ValidationError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { buildItemizedAllocations } from "../lib/splitMath.js";
+import {
+  rewriteExpenseMember,
+  rewriteSettlementMember
+} from "../lib/memberMerge.js";
 import { convertCurrency } from "../lib/fx.js";
 import type { AuthContext } from "../auth.js";
 import { generateReceiptUpload, generateReceiptDownloadUrl } from "./uploadService.js";
@@ -75,12 +79,26 @@ const updateTripSchema = z
 const addMembersSchema = z.object({
   members: z
     .array(
-      z.object({
-        userId: z.string().min(1)
-      })
+      z
+        .object({
+          userId: z.string().min(1).optional(),
+          // Placeholder member: added by name before they have an account.
+          name: z.string().trim().min(1).max(60).optional()
+        })
+        .refine((member) => Boolean(member.userId) !== Boolean(member.name), {
+          message: "Each member needs either a userId or a name"
+        })
     )
     .min(1)
 });
+
+const redeemInviteSchema = z
+  .object({
+    // Claim one of the trip's placeholder members while joining.
+    claimMemberId: z.string().min(1).optional()
+  })
+  .nullable()
+  .optional();
 
 const lineItemSchema = z.object({
   lineItemId: z.string().optional(),
@@ -601,6 +619,7 @@ export class TripService {
     tripName: string;
     memberCount: number;
     alreadyMember: boolean;
+    placeholders: Array<{ memberId: string; displayName: string }>;
   }> {
     await ensureCurrentUserProfile(auth);
     const invite = await getTripStore().getInviteById(inviteId);
@@ -612,14 +631,28 @@ export class TripService {
       tripId: details.trip.tripId,
       tripName: details.trip.name,
       memberCount: details.members.length,
-      alreadyMember: details.members.some((m) => m.memberId === auth.userId)
+      alreadyMember: details.members.some((m) => m.memberId === auth.userId),
+      // Unclaimed placeholder members the joiner might be ("Are you Sarah?").
+      placeholders: details.members
+        .filter((member) => member.placeholder)
+        .map((member) => ({
+          memberId: member.memberId,
+          displayName: member.displayName
+        }))
     };
   }
 
   async redeemInvite(
     inviteId: string,
+    body: unknown,
     auth: AuthContext
   ): Promise<{ tripId: string }> {
+    const parsed = redeemInviteSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+    const claimMemberId = parsed.data?.claimMemberId;
+
     const profile = await ensureCurrentUserProfile(auth);
     const invite = await getTripStore().getInviteById(inviteId);
     if (!invite) {
@@ -629,19 +662,74 @@ export class TripService {
     const alreadyMember = details.members.some(
       (m) => m.memberId === auth.userId
     );
-    if (alreadyMember) {
-      return { tripId: details.trip.tripId };
+    if (!alreadyMember) {
+      const newMember: TripMember = {
+        tripId: details.trip.tripId,
+        memberId: auth.userId,
+        displayName: getDisplayName(profile),
+        email: profile.email,
+        addedBy: invite.createdBy,
+        createdAt: isoNow()
+      };
+      await getTripStore().addMembers(details.trip, [newMember]);
     }
-    const newMember: TripMember = {
-      tripId: details.trip.tripId,
-      memberId: auth.userId,
-      displayName: getDisplayName(profile),
-      email: profile.email,
-      addedBy: invite.createdBy,
-      createdAt: isoNow()
-    };
-    await getTripStore().addMembers(details.trip, [newMember]);
+    if (claimMemberId) {
+      await this.claimPlaceholder(details.trip.tripId, claimMemberId, auth);
+    }
     return { tripId: details.trip.tripId };
+  }
+
+  /**
+   * Merges a placeholder member into the calling user: every expense share,
+   * allocation, item assignment, and settlement that referenced the
+   * placeholder is rewritten to the caller, and the placeholder member
+   * record is removed. The caller inherits the placeholder's entire balance.
+   */
+  async claimPlaceholder(
+    tripId: string,
+    memberId: string,
+    auth: AuthContext
+  ): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const isMember = details.members.some(
+      (member) => member.memberId === auth.userId
+    );
+    if (!isMember) {
+      throw new ForbiddenError("You are not part of this trip");
+    }
+    const target = details.members.find(
+      (member) => member.memberId === memberId
+    );
+    if (!target || !target.placeholder) {
+      throw new ValidationError("That member can no longer be claimed");
+    }
+
+    const allExpenses = [
+      ...details.expenses,
+      ...details.draftExpenses,
+      ...details.deletedExpenses
+    ];
+    const changedExpenses = allExpenses
+      .map((expense) => rewriteExpenseMember(expense, memberId, auth.userId))
+      .filter((expense): expense is Expense => expense !== null);
+
+    const allSettlements = [
+      ...details.settlements,
+      ...details.deletedSettlements
+    ];
+    const changedSettlements = allSettlements
+      .map((settlement) =>
+        rewriteSettlementMember(settlement, memberId, auth.userId)
+      )
+      .filter((settlement): settlement is Settlement => settlement !== null);
+
+    await getTripStore().applyMemberMerge(
+      tripId,
+      changedExpenses,
+      changedSettlements,
+      memberId
+    );
   }
 
   async getTripSummary(tripId: string, auth: AuthContext): Promise<TripSummary> {
@@ -776,49 +864,81 @@ export class TripService {
     await ensureCurrentUserProfile(auth);
     const details = await getTripStore().getTripDetails(tripId);
     const isOwner = details.trip.ownerId === auth.userId;
-    if (!isOwner) {
+    const isMember = details.members.some(
+      (member) => member.memberId === auth.userId
+    );
+
+    const userEntries = parsed.data.members.filter((member) => member.userId);
+    const nameEntries = parsed.data.members.filter((member) => member.name);
+
+    // Real-account adds stay owner-only; placeholders (added by name, no
+    // account yet) can be created by any member — that's the at-the-table
+    // "add Sarah so we can split now" move.
+    if (userEntries.length && !isOwner) {
       throw new ForbiddenError("Only trip owners can add members");
+    }
+    if (nameEntries.length && !isMember) {
+      throw new ForbiddenError("You are not part of this trip");
     }
 
     const existingMemberIds = new Set(
       details.members.map((member) => member.memberId)
     );
+    const now = isoNow();
+    const newMembers: TripMember[] = [];
 
-    const requestedMemberIds = Array.from(
-      new Set(
-        parsed.data.members
-          .map((member) => member.userId)
-          .filter((userId) => userId !== auth.userId)
-      )
-    );
+    if (userEntries.length) {
+      const requestedMemberIds = Array.from(
+        new Set(
+          userEntries
+            .map((member) => member.userId as string)
+            .filter((userId) => userId !== auth.userId)
+        )
+      );
+      const filteredIds = requestedMemberIds.filter(
+        (userId) => !existingMemberIds.has(userId)
+      );
+      if (!filteredIds.length && !nameEntries.length) {
+        throw new ValidationError(
+          "All selected members are already in the trip"
+        );
+      }
 
-    const filteredIds = requestedMemberIds.filter(
-      (userId) => !existingMemberIds.has(userId)
-    );
+      const profiles = await getUserStore().getUsersByIds(filteredIds);
+      if (profiles.length !== filteredIds.length) {
+        const foundIds = new Set(profiles.map((profile) => profile.userId));
+        const missing = filteredIds.filter((id) => !foundIds.has(id));
+        throw new ValidationError(
+          `Some members do not exist: ${missing.join(", ")}`
+        );
+      }
 
-    if (!filteredIds.length) {
-      throw new ValidationError("All selected members are already in the trip");
-    }
-
-    const profiles = await getUserStore().getUsersByIds(filteredIds);
-
-    if (profiles.length !== filteredIds.length) {
-      const foundIds = new Set(profiles.map((profile) => profile.userId));
-      const missing = filteredIds.filter((id) => !foundIds.has(id));
-      throw new ValidationError(
-        `Some members do not exist: ${missing.join(", ")}`
+      newMembers.push(
+        ...profiles.map((profile) => ({
+          tripId,
+          memberId: profile.userId,
+          displayName: getDisplayName(profile),
+          email: profile.email,
+          addedBy: auth.userId,
+          createdAt: now
+        }))
       );
     }
 
-    const now = isoNow();
-    const newMembers: TripMember[] = profiles.map((profile) => ({
-      tripId,
-      memberId: profile.userId,
-      displayName: getDisplayName(profile),
-      email: profile.email,
-      addedBy: auth.userId,
-      createdAt: now
-    }));
+    for (const entry of nameEntries) {
+      newMembers.push({
+        tripId,
+        memberId: `pm_${nanoid(10)}`,
+        displayName: (entry.name as string).trim(),
+        addedBy: auth.userId,
+        createdAt: now,
+        placeholder: true
+      });
+    }
+
+    if (!newMembers.length) {
+      throw new ValidationError("No members to add");
+    }
 
     await getTripStore().addMembers(details.trip, newMembers);
 

@@ -51,6 +51,10 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
   String? _previewInviteId;
   Map<String, dynamic>? _preview;
 
+  /// Empty string = joining as a brand-new member; otherwise the
+  /// placeholder memberId being claimed.
+  String _claimMemberId = '';
+
   @override
   void initState() {
     super.initState();
@@ -172,7 +176,9 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
     });
     try {
       final result =
-          await widget.api.post('/invites/$inviteId/redeem', {})
+          await widget.api.post('/invites/$inviteId/redeem', {
+                if (_claimMemberId.isNotEmpty) 'claimMemberId': _claimMemberId,
+              })
               as Map<String, dynamic>;
       if (!mounted) return;
       Navigator.of(context).pop(
@@ -284,6 +290,46 @@ class _JoinTripSheetState extends State<_JoinTripSheet> {
                     ],
                   ),
                 ),
+                if (!alreadyMember &&
+                    (preview['placeholders'] as List?)?.isNotEmpty == true) ...[
+                  const SizedBox(height: 14),
+                  const Text(
+                    'Someone already added these people by name — are you one '
+                    'of them? Claiming keeps everything assigned to you.',
+                    style: TextStyle(fontSize: 13, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('I’m new here'),
+                        selected: _claimMemberId.isEmpty,
+                        onSelected: (_) {
+                          HapticFeedback.selectionClick();
+                          setState(() => _claimMemberId = '');
+                        },
+                      ),
+                      ...((preview['placeholders'] as List)
+                          .whereType<Map<String, dynamic>>()
+                          .map((placeholder) {
+                            final memberId =
+                                (placeholder['memberId'] as String?) ?? '';
+                            final name =
+                                (placeholder['displayName'] as String?) ?? '?';
+                            return ChoiceChip(
+                              label: Text('I’m $name'),
+                              selected: _claimMemberId == memberId,
+                              onSelected: (_) {
+                                HapticFeedback.selectionClick();
+                                setState(() => _claimMemberId = memberId);
+                              },
+                            );
+                          })),
+                    ],
+                  ),
+                ],
               ],
               if (_error != null) ...[
                 const SizedBox(height: 10),

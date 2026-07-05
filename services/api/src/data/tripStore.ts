@@ -217,6 +217,7 @@ export class TripStore {
       email: item.email,
       addedBy: item.addedBy,
       createdAt: item.createdAt,
+      placeholder: item.placeholder === true ? true : undefined,
       paymentMethods:
         item.paymentMethods ??
         (item.venmo || item.paypal || item.zelle
@@ -708,6 +709,62 @@ export class TripStore {
         ExpressionAttributeValues: values
       })
     );
+  }
+
+  /**
+   * Applies a placeholder-member claim: rewritten expenses and settlements
+   * are written back and the placeholder's member record is removed, in
+   * transactional chunks so balances flip over as close to atomically as
+   * DynamoDB allows.
+   */
+  async applyMemberMerge(
+    tripId: string,
+    expenses: Expense[],
+    settlements: Settlement[],
+    placeholderMemberId: string
+  ): Promise<void> {
+    const transactItems: object[] = [
+      ...expenses.map((expense) => ({
+        Put: {
+          TableName: this.tableName,
+          Item: {
+            entityType: "Expense",
+            PK: keys.tripPk(tripId),
+            SK: keys.expenseSk(expense.expenseId),
+            ...expense
+          }
+        }
+      })),
+      ...settlements.map((settlement) => ({
+        Put: {
+          TableName: this.tableName,
+          Item: {
+            entityType: "Settlement",
+            PK: keys.tripPk(tripId),
+            SK: keys.settlementSk(settlement.settlementId),
+            ...settlement
+          }
+        }
+      })),
+      {
+        Delete: {
+          TableName: this.tableName,
+          Key: {
+            PK: keys.tripPk(tripId),
+            SK: keys.memberSk(placeholderMemberId)
+          }
+        }
+      }
+    ];
+
+    const chunkSize = 25;
+    for (let i = 0; i < transactItems.length; i += chunkSize) {
+      await this.docClient.send(
+        new TransactWriteCommand({
+          TransactItems: transactItems.slice(i, i + chunkSize)
+        })
+      );
+    }
   }
 
   async saveSettlement(settlement: Settlement): Promise<void> {

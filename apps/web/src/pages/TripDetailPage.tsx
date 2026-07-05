@@ -424,7 +424,7 @@ const TripDetailPage = () => {
   });
 
   const addMemberMutation = useMutation({
-    mutationFn: (payload: { members: { userId: string }[] }) =>
+    mutationFn: (payload: { members: { userId?: string; name?: string }[] }) =>
       api.post(`/trips/${tripId}/members`, payload),
     onMutate: () => {
       setMemberFeedback(null);
@@ -902,6 +902,7 @@ const TripDetailPage = () => {
           searchMessage={memberSearchMessage}
           feedbackMessage={memberFeedback}
           onAddMember={(userId) => addMemberMutation.mutate({ members: [{ userId }] })}
+          onAddPlaceholder={(name) => addMemberMutation.mutate({ members: [{ name }] })}
           addLoading={addMemberMutation.isPending}
           canManageMembers={canManageMembers}
           ownerId={trip.ownerId}

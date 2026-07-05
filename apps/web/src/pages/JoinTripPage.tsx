@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
@@ -8,6 +8,8 @@ const JoinTripPage = () => {
   const { inviteId } = useParams<{ inviteId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // "" = joining as a brand-new member; otherwise a placeholder memberId.
+  const [claimMemberId, setClaimMemberId] = useState("");
 
   const preview = useQuery({
     queryKey: ["invite-preview", inviteId],
@@ -17,7 +19,10 @@ const JoinTripPage = () => {
   });
 
   const redeem = useMutation({
-    mutationFn: () => api.post<{ tripId: string }>(`/invites/${inviteId}/redeem`, {}),
+    mutationFn: () =>
+      api.post<{ tripId: string }>(`/invites/${inviteId}/redeem`, {
+        claimMemberId: claimMemberId || undefined
+      }),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["trips"] });
       navigate(`/group-expenses/trips/${result.tripId}`);
@@ -85,6 +90,37 @@ const JoinTripPage = () => {
         {data.memberCount} {data.memberCount === 1 ? "person is" : "people are"} already on this tab.
         Joining adds you so expenses can include you.
       </p>
+      {(data.placeholders?.length ?? 0) > 0 && (
+        <div style={{ marginTop: "1rem", textAlign: "left" }}>
+          <p className="join-card__sub" style={{ marginBottom: "0.5rem" }}>
+            Someone already added these people by name — are you one of them?
+            Claiming keeps everything assigned to you so far.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+            <button
+              type="button"
+              className={claimMemberId === "" ? "primary" : "secondary"}
+              style={{ paddingInline: "0.85rem" }}
+              onClick={() => setClaimMemberId("")}
+            >
+              I&rsquo;m new here
+            </button>
+            {data.placeholders?.map((placeholder) => (
+              <button
+                key={placeholder.memberId}
+                type="button"
+                className={
+                  claimMemberId === placeholder.memberId ? "primary" : "secondary"
+                }
+                style={{ paddingInline: "0.85rem" }}
+                onClick={() => setClaimMemberId(placeholder.memberId)}
+              >
+                I&rsquo;m {placeholder.displayName}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       {redeem.isError && (
         <p className="join-card__error">
           {redeem.error instanceof ApiError

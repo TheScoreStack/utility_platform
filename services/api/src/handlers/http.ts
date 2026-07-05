@@ -342,6 +342,13 @@ export const handler = async (
         await tripService.updatePaymentMethods(tripId, body, auth);
         return noContent(origin);
       }
+      const memberClaimMatch = remainder.match(/^\/members\/([^/]+)\/claim$/);
+      if (memberClaimMatch && method === "POST") {
+        const memberId = decodeURIComponent(memberClaimMatch[1]);
+        await tripService.claimPlaceholder(tripId, memberId, auth);
+        return noContent(origin);
+      }
+
       const memberMatch = remainder.match(/^\/members\/([^/]+)$/);
       if (memberMatch && method === "DELETE") {
         const memberId = decodeURIComponent(memberMatch[1]);
@@ -479,7 +486,8 @@ export const handler = async (
         return ok(preview, origin);
       }
       if (action === "redeem" && method === "POST") {
-        const result = await tripService.redeemInvite(inviteId, auth);
+        const body = parseBody(event);
+        const result = await tripService.redeemInvite(inviteId, body, auth);
         return ok(result, origin);
       }
     }

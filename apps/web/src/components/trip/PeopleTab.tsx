@@ -127,6 +127,7 @@ interface PeopleTabProps {
   searchMessage: string | null;
   feedbackMessage: string | null;
   onAddMember: (userId: string) => void;
+  onAddPlaceholder: (name: string) => void;
   addLoading: boolean;
   canManageMembers: boolean;
   ownerId: string;
@@ -155,6 +156,7 @@ export const PeopleTab = ({
   searchMessage,
   feedbackMessage,
   onAddMember,
+  onAddPlaceholder,
   addLoading,
   canManageMembers,
   ownerId,
@@ -180,6 +182,7 @@ export const PeopleTab = ({
   );
 
   const [methodDraft, setMethodDraft] = useState<PaymentMethods>({});
+  const [placeholderName, setPlaceholderName] = useState("");
 
   useEffect(() => {
     if (!editableMemberId) {
@@ -269,6 +272,18 @@ export const PeopleTab = ({
                           {isOwner && (
                             <span className="ppl-member__tag ppl-member__tag--owner">
                               Owner
+                            </span>
+                          )}
+                          {member.placeholder && (
+                            <span
+                              className="ppl-member__tag"
+                              title="Added by name — they'll claim this spot when they join from the invite link"
+                              style={{
+                                background: "rgba(250,204,21,0.15)",
+                                color: "#fde68a"
+                              }}
+                            >
+                              Hasn&rsquo;t joined yet
                             </span>
                           )}
                         </div>
@@ -405,6 +420,46 @@ export const PeopleTab = ({
                 })}
               </div>
             )}
+
+            <div
+              style={{
+                marginTop: "1rem",
+                paddingTop: "1rem",
+                borderTop: "1px solid rgba(148,163,184,0.12)"
+              }}
+            >
+              <p className="ppl-panel__sub" style={{ marginBottom: "0.5rem" }}>
+                No account yet? Add them by name — they can claim their spot
+                later from the invite link, keeping everything assigned to them.
+              </p>
+              <form
+                style={{ display: "flex", gap: "0.5rem" }}
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const name = placeholderName.trim();
+                  if (!name) return;
+                  onAddPlaceholder(name);
+                  setPlaceholderName("");
+                }}
+              >
+                <input
+                  className="ppl-search__input"
+                  style={{ flex: 1 }}
+                  value={placeholderName}
+                  onChange={(event) => setPlaceholderName(event.target.value)}
+                  placeholder="e.g. Sarah"
+                  maxLength={60}
+                />
+                <button
+                  type="submit"
+                  className="secondary"
+                  disabled={addLoading || !placeholderName.trim()}
+                  style={{ paddingInline: "0.85rem" }}
+                >
+                  Add
+                </button>
+              </form>
+            </div>
           </section>
 
           <section className="ppl-panel ov-rise ov-rise-3">

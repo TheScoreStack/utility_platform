@@ -23,6 +23,9 @@ export interface TripMember {
   addedBy: string;
   createdAt: string;
   paymentMethods?: PaymentMethods;
+  /** True for members added by name only, before they have an account.
+   *  Claimed (merged into a real user) when they redeem the trip invite. */
+  placeholder?: boolean;
 }
 
 export interface PaymentMethods {
