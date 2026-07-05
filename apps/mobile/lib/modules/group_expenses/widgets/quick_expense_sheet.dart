@@ -35,6 +35,7 @@ Future<QuickExpenseResult?> showQuickExpenseSheet({
   required ApiClient api,
   required TripSummary summary,
   Expense? initialExpense,
+  bool duplicate = false,
 }) {
   return showModalBottomSheet<QuickExpenseResult>(
     context: context,
@@ -44,6 +45,7 @@ Future<QuickExpenseResult?> showQuickExpenseSheet({
       api: api,
       summary: summary,
       initialExpense: initialExpense,
+      duplicate: duplicate,
     ),
   );
 }
@@ -53,10 +55,15 @@ class _QuickExpenseSheet extends StatefulWidget {
   final TripSummary summary;
   final Expense? initialExpense;
 
+  /// With [initialExpense], saves a NEW expense seeded from it instead of
+  /// editing in place.
+  final bool duplicate;
+
   const _QuickExpenseSheet({
     required this.api,
     required this.summary,
     this.initialExpense,
+    this.duplicate = false,
   });
 
   @override
@@ -80,7 +87,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
 
   String get _currency => widget.summary.trip.currency;
 
-  bool get _isEditing => widget.initialExpense != null;
+  bool get _isEditing => widget.initialExpense != null && !widget.duplicate;
 
   @override
   void initState() {

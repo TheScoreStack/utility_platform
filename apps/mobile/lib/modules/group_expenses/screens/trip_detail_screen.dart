@@ -715,6 +715,16 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 title: const Text('View receipt'),
                 onTap: () => Navigator.of(sheetContext).pop('receipt'),
               ),
+            // Anyone can duplicate — it creates their own new expense.
+            ListTile(
+              leading: const Icon(Icons.copy_all_rounded),
+              title: const Text('Duplicate expense'),
+              subtitle: const Text(
+                'Start a new expense with the same details.',
+                style: TextStyle(fontSize: 12, color: Colors.white54),
+              ),
+              onTap: () => Navigator.of(sheetContext).pop('duplicate'),
+            ),
             if (canModify) ...[
               ListTile(
                 leading: const Icon(Icons.edit_rounded),
@@ -750,10 +760,58 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     if (action == null || !mounted) return;
     if (action == 'receipt') {
       await _openReceipt(expense);
+    } else if (action == 'duplicate') {
+      await _duplicateExpense(expense);
     } else if (action == 'edit') {
       await _editExpense(expense);
     } else if (action == 'delete') {
       await _deleteExpense(expense);
+    }
+  }
+
+  /// Opens the right editor seeded from [expense] and saves a NEW expense —
+  /// the mobile counterpart of web's "Repeat".
+  Future<void> _duplicateExpense(Expense expense) async {
+    final summary = _summary;
+    if (summary == null) return;
+
+    if (expense.lineItems?.isNotEmpty ?? false) {
+      final result = await Navigator.of(context).push<ScanSaveResult>(
+        MaterialPageRoute(
+          builder: (_) => ScanReviewScreen(
+            api: widget.api,
+            summary: summary,
+            initialExpense: expense,
+            duplicate: true,
+          ),
+        ),
+      );
+      if (result == null || !mounted) return;
+      await _load();
+      if (!mounted) return;
+      _showSavedSnackBar(
+        total: result.total,
+        currency: result.currency,
+        peopleCount: result.peopleCount,
+        draft: result.draft,
+      );
+    } else {
+      final result = await showQuickExpenseSheet(
+        context: context,
+        api: widget.api,
+        summary: summary,
+        initialExpense: expense,
+        duplicate: true,
+      );
+      if (result == null || !mounted) return;
+      await _load();
+      if (!mounted) return;
+      _showSavedSnackBar(
+        total: result.total,
+        currency: result.currency,
+        peopleCount: result.peopleCount,
+        draft: result.draft,
+      );
     }
   }
 

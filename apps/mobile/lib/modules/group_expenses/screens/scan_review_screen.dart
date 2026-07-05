@@ -47,6 +47,10 @@ class ScanReviewScreen extends StatefulWidget {
   final String? fileName;
   final Expense? initialExpense;
 
+  /// With [initialExpense], saves a NEW expense seeded from it instead of
+  /// editing in place. The original's receipt is not carried over.
+  final bool duplicate;
+
   const ScanReviewScreen({
     super.key,
     required this.api,
@@ -54,6 +58,7 @@ class ScanReviewScreen extends StatefulWidget {
     this.imageBytes,
     this.fileName,
     this.initialExpense,
+    this.duplicate = false,
   });
 
   @override
@@ -66,7 +71,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
 
   bool get _isManual => widget.imageBytes == null;
 
-  bool get _isEditing => widget.initialExpense != null;
+  bool get _isEditing => widget.initialExpense != null && !widget.duplicate;
 
   final _descriptionController = TextEditingController();
   final _taxController = TextEditingController();
@@ -88,7 +93,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   @override
   void initState() {
     super.initState();
-    if (_isEditing) {
+    if (widget.initialExpense != null) {
       _seedFromExpense(widget.initialExpense!);
     } else if (_isManual) {
       _startManually();
@@ -97,11 +102,12 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     }
   }
 
-  /// Seeds the review form from an existing expense (edit mode).
+  /// Seeds the review form from an existing expense (edit or duplicate).
   void _seedFromExpense(Expense expense) {
     _vendor = expense.vendor;
     _descriptionController.text = expense.description;
-    _uploadedReceiptId = expense.receiptId;
+    // A receipt belongs to the original expense — duplicates start clean.
+    _uploadedReceiptId = _isEditing ? expense.receiptId : null;
     _extrasSplitMode = expense.extrasSplitMode ?? 'proportional';
     if ((expense.tax ?? 0) > 0) {
       _taxController.text = expense.tax!.toStringAsFixed(2);

@@ -1,8 +1,33 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
 import '../../../models/models.dart';
+
+/// Turns whatever the user typed or pasted (an @username, a full profile
+/// link, a paypal.me URL) into the bare handle we store.
+String? normalizePaymentHandle(String method, String raw) {
+  var value = raw.trim();
+  if (value.isEmpty) return null;
+  if (method == 'venmo' || method == 'paypal') {
+    value = value.replaceFirst(RegExp(r'^https?://', caseSensitive: false), '');
+    if (method == 'venmo') {
+      value = value.replaceFirst(
+        RegExp(r'^(www\.)?(account\.)?venmo\.com/(u/)?', caseSensitive: false),
+        '',
+      );
+      value = value.replaceFirst(RegExp(r'^@'), '');
+    } else {
+      value = value.replaceFirst(
+        RegExp(r'^(www\.)?paypal\.(com|me)/(paypalme/)?', caseSensitive: false),
+        '',
+      );
+    }
+    value = value.split('?').first.split('/').first.trim();
+  }
+  return value.isEmpty ? null : value;
+}
 
 /// Bottom sheet for editing payment handles + preferred method. Returns true
 /// when saved. With [setupMode] it reads as the first-run "get paid back"
@@ -74,12 +99,31 @@ class _PaymentMethodsSheetState extends State<_PaymentMethodsSheet> {
     return trimmed.isEmpty ? null : trimmed;
   }
 
-  bool _hasHandle(String method) => switch (method) {
-    'venmo' => _valueOf(_venmoController) != null,
-    'paypal' => _valueOf(_paypalController) != null,
-    'zelle' => _valueOf(_zelleController) != null,
-    _ => false,
+  String? _normalized(String method) => switch (method) {
+    'venmo' => normalizePaymentHandle('venmo', _venmoController.text),
+    'paypal' => normalizePaymentHandle('paypal', _paypalController.text),
+    _ => _valueOf(_zelleController),
   };
+
+  /// Opens the payment app/site — to your profile when the handle is filled
+  /// (so you can verify it's really you), or to the app's account page so
+  /// you can look your handle up.
+  Future<void> _openHelper(String method) async {
+    final handle = _normalized(method);
+    final url = switch (method) {
+      'venmo' =>
+        handle == null
+            ? 'https://account.venmo.com/'
+            : 'https://venmo.com/${Uri.encodeComponent(handle)}',
+      _ =>
+        handle == null
+            ? 'https://www.paypal.me/'
+            : 'https://paypal.me/${Uri.encodeComponent(handle)}',
+    };
+    await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+  }
+
+  bool _hasHandle(String method) => _normalized(method) != null;
 
   List<String> get _filledMethods => ['venmo', 'paypal', 'zelle']
       .where(_hasHandle)
@@ -102,10 +146,11 @@ class _PaymentMethodsSheetState extends State<_PaymentMethodsSheet> {
 
     try {
       // Empty fields are sent as null, which clears the stored handle.
+      // Pasted profile links are stored as bare handles.
       await widget.api.patch('/profile', {
-        'venmo': _valueOf(_venmoController),
-        'paypal': _valueOf(_paypalController),
-        'zelle': _valueOf(_zelleController),
+        'venmo': _normalized('venmo'),
+        'paypal': _normalized('paypal'),
+        'zelle': _normalized('zelle'),
         'primary': primary,
       });
       if (!mounted) return;
@@ -160,10 +205,22 @@ class _PaymentMethodsSheetState extends State<_PaymentMethodsSheet> {
                 enabled: !_working,
                 autocorrect: false,
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Venmo',
                   hintText: '@username',
-                  border: OutlineInputBorder(),
+                  helperText: 'Type @username or paste your profile link',
+                  helperStyle: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white38,
+                  ),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: _working ? null : () => _openHelper('venmo'),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    tooltip: _hasHandle('venmo')
+                        ? 'Preview your Venmo link'
+                        : 'Open Venmo to find your @username',
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -172,10 +229,23 @@ class _PaymentMethodsSheetState extends State<_PaymentMethodsSheet> {
                 enabled: !_working,
                 autocorrect: false,
                 onChanged: (_) => setState(() {}),
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'PayPal',
-                  hintText: 'paypal.me handle',
-                  border: OutlineInputBorder(),
+                  hintText: 'yourname',
+                  helperText:
+                      'Your paypal.me name — paste the link if you have it',
+                  helperStyle: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white38,
+                  ),
+                  border: const OutlineInputBorder(),
+                  suffixIcon: IconButton(
+                    onPressed: _working ? null : () => _openHelper('paypal'),
+                    icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                    tooltip: _hasHandle('paypal')
+                        ? 'Preview your PayPal.Me link'
+                        : 'Open PayPal.Me to find or create yours',
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
@@ -188,6 +258,8 @@ class _PaymentMethodsSheetState extends State<_PaymentMethodsSheet> {
                 decoration: const InputDecoration(
                   labelText: 'Zelle',
                   hintText: 'Email or phone number',
+                  helperText: 'The email or phone tied to Zelle at your bank',
+                  helperStyle: TextStyle(fontSize: 11, color: Colors.white38),
                   border: OutlineInputBorder(),
                 ),
               ),
