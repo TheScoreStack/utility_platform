@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/expense_categories.dart';
 import '../../../core/formatters.dart';
 import '../../../core/split_math.dart';
 import '../../../models/models.dart';
@@ -83,6 +84,9 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
   /// the expense. Only offered when creating (not editing).
   String _cadence = 'none';
 
+  /// Canonical category id, or null for uncategorized.
+  String? _categoryId;
+
   List<TripMember> get _members => widget.summary.members;
 
   String get _currency => widget.summary.trip.currency;
@@ -97,6 +101,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
     if (initial != null) {
       _amountController.text = initial.total.toStringAsFixed(2);
       _descriptionController.text = initial.description;
+      _categoryId = resolveExpenseCategory(initial.category)?.id;
       _payerId = memberIds.contains(initial.paidByMemberId)
           ? initial.paidByMemberId
           : _members.first.memberId;
@@ -151,6 +156,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
     try {
       final payload = {
         'description': description.isEmpty ? 'Expense' : description,
+        if (_categoryId != null) 'category': _categoryId,
         'total': total,
         'currency': _currency,
         'paidByMemberId': _payerId,
@@ -285,6 +291,36 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
                   labelText: 'What was it for?',
                   isDense: true,
                   border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 34,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: expenseCategories
+                      .map(
+                        (category) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text('${category.icon} ${category.label}'),
+                            selected: _categoryId == category.id,
+                            visualDensity: VisualDensity.compact,
+                            onSelected: _saving
+                                ? null
+                                : (_) {
+                                    HapticFeedback.selectionClick();
+                                    setState(
+                                      () => _categoryId =
+                                          _categoryId == category.id
+                                          ? null
+                                          : category.id,
+                                    );
+                                  },
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ),
               ),
               const SizedBox(height: 14),

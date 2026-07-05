@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/expense_categories.dart';
 import '../../../core/formatters.dart';
 import '../../../core/split_math.dart';
 import '../../../models/models.dart';
@@ -81,6 +82,9 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   String? _receiptDate;
   String? _vendor;
 
+  /// Canonical category id, or null for uncategorized.
+  String? _categoryId;
+
   /// Set once the receipt bytes have been uploaded (which now happens up
   /// front, before analysis). Receipts always upload as drafts; the expense
   /// save decides their visibility server-side.
@@ -106,6 +110,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   void _seedFromExpense(Expense expense) {
     _vendor = expense.vendor;
     _descriptionController.text = expense.description;
+    _categoryId = resolveExpenseCategory(expense.category)?.id;
     // A receipt belongs to the original expense — duplicates start clean.
     _uploadedReceiptId = _isEditing ? expense.receiptId : null;
     _extrasSplitMode = expense.extrasSplitMode ?? 'proportional';
@@ -368,6 +373,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       'description': description.isEmpty
           ? (_isManual ? 'Expense' : 'Receipt')
           : description,
+      if (_categoryId != null) 'category': _categoryId,
       if (_vendor != null && _vendor!.isNotEmpty) 'vendor': _vendor,
       'total': result.grandTotal,
       'currency': _currency,
@@ -682,6 +688,34 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                         ),
                     ],
                   ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 34,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: expenseCategories
+                      .map(
+                        (category) => Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: ChoiceChip(
+                            label: Text('${category.icon} ${category.label}'),
+                            selected: _categoryId == category.id,
+                            visualDensity: VisualDensity.compact,
+                            onSelected: (_) {
+                              HapticFeedback.selectionClick();
+                              setState(
+                                () => _categoryId =
+                                    _categoryId == category.id
+                                    ? null
+                                    : category.id,
+                              );
+                            },
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ),
               ),
               const SizedBox(height: 16),

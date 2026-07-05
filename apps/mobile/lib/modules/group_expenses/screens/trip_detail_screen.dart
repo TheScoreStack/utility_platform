@@ -6,9 +6,11 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
+import '../../../core/expense_categories.dart';
 import '../../../core/formatters.dart';
 import '../../../models/models.dart';
 import '../widgets/animated_amount.dart';
+import '../widgets/expense_comments_sheet.dart';
 import '../widgets/member_avatar.dart';
 import '../widgets/quick_expense_sheet.dart';
 import '../widgets/settle_up_view.dart';
@@ -402,6 +404,17 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       if (!mounted) return;
       showAppSnackBar(context, 'Could not add $displayName.', error: true);
     }
+  }
+
+  Future<void> _showComments(Expense expense) async {
+    final summary = _summary;
+    if (summary == null) return;
+    await showExpenseCommentsSheet(
+      context: context,
+      api: widget.api,
+      summary: summary,
+      expense: expense,
+    );
   }
 
   // --------------------------------------------------------- trip management
@@ -1042,6 +1055,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 onRefresh: _load,
                 onExpenseLongPress: _showExpenseActions,
                 onReceiptTap: _openReceipt,
+                onCommentsTap: _showComments,
                 onDraftPublish: _confirmPublishDraft,
                 onDraftLongPress: _showDraftActions,
                 onRecurringTap: _showRecurringActions,
@@ -1149,11 +1163,12 @@ class _TripHeader extends StatelessWidget {
   }
 }
 
-class _ExpensesTab extends StatelessWidget {
+class _ExpensesTab extends StatefulWidget {
   final TripSummary summary;
   final Future<void> Function() onRefresh;
   final Future<void> Function(Expense) onExpenseLongPress;
   final Future<void> Function(Expense) onReceiptTap;
+  final Future<void> Function(Expense) onCommentsTap;
   final Future<void> Function(Expense) onDraftPublish;
   final Future<void> Function(Expense) onDraftLongPress;
   final Future<void> Function(RecurringExpense) onRecurringTap;
@@ -1163,10 +1178,84 @@ class _ExpensesTab extends StatelessWidget {
     required this.onRefresh,
     required this.onExpenseLongPress,
     required this.onReceiptTap,
+    required this.onCommentsTap,
     required this.onDraftPublish,
     required this.onDraftLongPress,
     required this.onRecurringTap,
   });
+
+  @override
+  State<_ExpensesTab> createState() => _ExpensesTabState();
+}
+
+class _ExpensesTabState extends State<_ExpensesTab> {
+  final _searchController = TextEditingController();
+
+  /// Normalized category key filter; empty = all.
+  String _categoryFilter = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  TripSummary get summary => widget.summary;
+
+  Future<void> Function() get onRefresh => widget.onRefresh;
+
+  Future<void> Function(Expense) get onExpenseLongPress =>
+      widget.onExpenseLongPress;
+
+  Future<void> Function(Expense) get onReceiptTap => widget.onReceiptTap;
+
+  Future<void> Function(Expense) get onDraftPublish => widget.onDraftPublish;
+
+  Future<void> Function(Expense) get onDraftLongPress =>
+      widget.onDraftLongPress;
+
+  Future<void> Function(RecurringExpense) get onRecurringTap =>
+      widget.onRecurringTap;
+
+  List<Expense> _applyFilters(
+    List<Expense> expenses,
+    Map<String, TripMember> membersById,
+  ) {
+    final query = _searchController.text.trim().toLowerCase();
+    return expenses.where((expense) {
+      if (_categoryFilter.isNotEmpty &&
+          normalizeCategoryKey(expense.category) != _categoryFilter) {
+        return false;
+      }
+      if (query.isEmpty) return true;
+      final payer =
+          membersById[expense.paidByMemberId]?.displayName.toLowerCase() ?? '';
+      return expense.description.toLowerCase().contains(query) ||
+          (expense.vendor ?? '').toLowerCase().contains(query) ||
+          payer.contains(query);
+    }).toList();
+  }
+
+  /// Categories actually present, in catalog order, with any custom strings
+  /// appended — only worth showing once there are two or more.
+  List<(String, String)> _categoryChips(List<Expense> expenses) {
+    final present = <String>{
+      for (final expense in expenses)
+        if (normalizeCategoryKey(expense.category).isNotEmpty)
+          normalizeCategoryKey(expense.category),
+    };
+    final chips = <(String, String)>[];
+    for (final category in expenseCategories) {
+      if (present.remove(category.id) |
+          present.remove(category.label.toLowerCase())) {
+        chips.add((category.id, '${category.icon} ${category.label}'));
+      }
+    }
+    for (final custom in present) {
+      chips.add((custom, custom));
+    }
+    return chips.length >= 2 ? chips : const [];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1174,11 +1263,15 @@ class _ExpensesTab extends StatelessWidget {
       for (final member in summary.members) member.memberId: member,
     };
     final drafts = summary.draftExpenses;
-    final expenses = summary.expenses;
+    final allExpenses = summary.expenses;
+    final expenses = _applyFilters(allExpenses, membersById);
+    final categoryChips = _categoryChips(allExpenses);
+    final filtering =
+        _searchController.text.trim().isNotEmpty || _categoryFilter.isNotEmpty;
 
     return RefreshIndicator(
       onRefresh: onRefresh,
-      child: drafts.isEmpty && expenses.isEmpty
+      child: drafts.isEmpty && allExpenses.isEmpty
           ? ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: const [
@@ -1309,12 +1402,81 @@ class _ExpensesTab extends StatelessWidget {
                   ),
                   const SizedBox(height: 16),
                 ],
+                // Search + category filters appear once the list is big
+                // enough that scrolling stops being enough.
+                if (allExpenses.length >= 4 || filtering) ...[
+                  TextField(
+                    controller: _searchController,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Search expenses',
+                      isDense: true,
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              onPressed: () =>
+                                  setState(() => _searchController.clear()),
+                              icon: const Icon(Icons.close_rounded, size: 18),
+                            )
+                          : null,
+                    ),
+                  ),
+                  if (categoryChips.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      height: 34,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: ChoiceChip(
+                              label: const Text('All'),
+                              selected: _categoryFilter.isEmpty,
+                              visualDensity: VisualDensity.compact,
+                              onSelected: (_) =>
+                                  setState(() => _categoryFilter = ''),
+                            ),
+                          ),
+                          ...categoryChips.map(
+                            (chip) => Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: ChoiceChip(
+                                label: Text(chip.$2),
+                                selected: _categoryFilter == chip.$1,
+                                visualDensity: VisualDensity.compact,
+                                onSelected: (_) => setState(
+                                  () => _categoryFilter =
+                                      _categoryFilter == chip.$1
+                                      ? ''
+                                      : chip.$1,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 12),
+                ],
+                if (expenses.isEmpty && filtering)
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 32),
+                    child: Text(
+                      'No expenses match.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.white54),
+                    ),
+                  ),
                 ...expenses.map(
                   (expense) => _ExpenseCard(
                     expense: expense,
                     membersById: membersById,
                     onLongPress: () => onExpenseLongPress(expense),
                     onReceiptTap: () => onReceiptTap(expense),
+                    onCommentsTap: () => widget.onCommentsTap(expense),
                   ),
                 ),
               ],
@@ -1431,12 +1593,14 @@ class _ExpenseCard extends StatefulWidget {
   final Map<String, TripMember> membersById;
   final VoidCallback onLongPress;
   final VoidCallback onReceiptTap;
+  final VoidCallback onCommentsTap;
 
   const _ExpenseCard({
     required this.expense,
     required this.membersById,
     required this.onLongPress,
     required this.onReceiptTap,
+    required this.onCommentsTap,
   });
 
   @override
@@ -1507,32 +1671,41 @@ class _ExpenseCardState extends State<_ExpenseCard> {
                   ),
                 ],
               ),
-              if ((expense.tax ?? 0) > 0 ||
-                  (expense.tip ?? 0) > 0 ||
-                  expense.receiptId != null) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    if (expense.receiptId != null)
-                      _SmallChip(
-                        label: 'Receipt',
-                        icon: Icons.receipt_long_rounded,
-                        accent: true,
-                        onTap: widget.onReceiptTap,
-                      ),
-                    if ((expense.tax ?? 0) > 0)
-                      _SmallChip(
-                        label: 'Tax ${formatCurrency(expense.tax!, currency)}',
-                      ),
-                    if ((expense.tip ?? 0) > 0)
-                      _SmallChip(
-                        label: 'Tip ${formatCurrency(expense.tip!, currency)}',
-                      ),
-                  ],
-                ),
-              ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  if (resolveExpenseCategory(expense.category) != null)
+                    _SmallChip(
+                      label:
+                          '${resolveExpenseCategory(expense.category)!.icon} '
+                          '${resolveExpenseCategory(expense.category)!.label}',
+                    )
+                  else if ((expense.category ?? '').trim().isNotEmpty)
+                    _SmallChip(label: expense.category!.trim()),
+                  if (expense.receiptId != null)
+                    _SmallChip(
+                      label: 'Receipt',
+                      icon: Icons.receipt_long_rounded,
+                      accent: true,
+                      onTap: widget.onReceiptTap,
+                    ),
+                  if ((expense.tax ?? 0) > 0)
+                    _SmallChip(
+                      label: 'Tax ${formatCurrency(expense.tax!, currency)}',
+                    ),
+                  if ((expense.tip ?? 0) > 0)
+                    _SmallChip(
+                      label: 'Tip ${formatCurrency(expense.tip!, currency)}',
+                    ),
+                  _SmallChip(
+                    label: 'Comments',
+                    icon: Icons.mode_comment_outlined,
+                    onTap: widget.onCommentsTap,
+                  ),
+                ],
+              ),
               if (hasItems) ...[
                 const SizedBox(height: 8),
                 Row(

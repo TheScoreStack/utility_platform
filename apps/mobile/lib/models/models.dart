@@ -569,6 +569,36 @@ class BalanceRow {
 }
 
 /// `GET /trips/:id` response (see `tripService.getTripSummary`).
+class ExpenseComment {
+  final String tripId;
+  final String expenseId;
+  final String commentId;
+  final String authorId;
+  final String? authorName;
+  final String body;
+  final String createdAt;
+
+  const ExpenseComment({
+    required this.tripId,
+    required this.expenseId,
+    required this.commentId,
+    required this.authorId,
+    this.authorName,
+    required this.body,
+    required this.createdAt,
+  });
+
+  factory ExpenseComment.fromJson(Map<String, dynamic> json) => ExpenseComment(
+    tripId: _reqString(json['tripId']),
+    expenseId: _reqString(json['expenseId']),
+    commentId: _reqString(json['commentId']),
+    authorId: _reqString(json['authorId']),
+    authorName: json['authorName'] as String?,
+    body: _reqString(json['body']),
+    createdAt: _reqString(json['createdAt']),
+  );
+}
+
 /// Template that materializes an evenly split expense on a schedule.
 class RecurringExpense {
   final String tripId;
