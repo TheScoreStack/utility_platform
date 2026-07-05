@@ -782,6 +782,73 @@ export class TripStore {
     );
   }
 
+  async updateSettlement(
+    tripId: string,
+    settlementId: string,
+    updates: {
+      fromMemberId?: string;
+      toMemberId?: string;
+      amount?: number;
+      note?: string;
+      clearConfirmation?: boolean;
+    }
+  ): Promise<void> {
+    const sets: string[] = [];
+    const removes: string[] = [];
+    const names: Record<string, string> = {};
+    const values: Record<string, unknown> = {};
+
+    const setField = (field: string, value: unknown) => {
+      names[`#${field}`] = field;
+      sets.push(`#${field} = :${field}`);
+      values[`:${field}`] = value;
+    };
+
+    if (updates.fromMemberId !== undefined) {
+      setField("fromMemberId", updates.fromMemberId);
+    }
+    if (updates.toMemberId !== undefined) {
+      setField("toMemberId", updates.toMemberId);
+    }
+    if (updates.amount !== undefined) setField("amount", updates.amount);
+    if (updates.note !== undefined) {
+      if (updates.note === "") {
+        names["#note"] = "note";
+        removes.push("#note");
+      } else {
+        setField("note", updates.note);
+      }
+    }
+    if (updates.clearConfirmation) {
+      names["#confirmedAt"] = "confirmedAt";
+      removes.push("#confirmedAt");
+    }
+    if (!sets.length && !removes.length) return;
+
+    const expression = [
+      sets.length ? `SET ${sets.join(", ")}` : "",
+      removes.length ? `REMOVE ${removes.join(", ")}` : ""
+    ]
+      .filter(Boolean)
+      .join(" ");
+
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.settlementSk(settlementId)
+        },
+        UpdateExpression: expression,
+        ExpressionAttributeNames: names,
+        ...(Object.keys(values).length
+          ? { ExpressionAttributeValues: values }
+          : {}),
+        ConditionExpression: "attribute_exists(PK)"
+      })
+    );
+  }
+
   async softDeleteSettlement(
     tripId: string,
     settlementId: string,

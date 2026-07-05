@@ -467,7 +467,17 @@ export const handler = async (
       if (settlementMatch && method === "PATCH") {
         const settlementId = decodeURIComponent(settlementMatch[1]);
         const body = parseBody(event);
-        await tripService.confirmSettlement(tripId, settlementId, body, auth);
+        // Same route serves two updates: {confirmed} toggles confirmation,
+        // anything else edits the settlement's fields.
+        if (
+          body &&
+          typeof body === "object" &&
+          "confirmed" in (body as Record<string, unknown>)
+        ) {
+          await tripService.confirmSettlement(tripId, settlementId, body, auth);
+        } else {
+          await tripService.updateSettlement(tripId, settlementId, body, auth);
+        }
         return noContent(origin);
       }
       if (settlementMatch && method === "DELETE") {

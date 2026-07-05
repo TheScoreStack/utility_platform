@@ -35,6 +35,16 @@ class SettleUpView extends StatelessWidget {
   String _name(String memberId) =>
       firstName(_member(memberId)?.displayName ?? 'Someone');
 
+  /// Mirrors the server rule: participants, whoever recorded it, or the
+  /// trip owner can edit/delete a settlement.
+  bool _canModify(Settlement settlement) {
+    final userId = summary.currentUserId;
+    return settlement.fromMemberId == userId ||
+        settlement.toMemberId == userId ||
+        settlement.createdBy == userId ||
+        summary.trip.ownerId == userId;
+  }
+
   Future<void> _recordSettlement(
     BuildContext context,
     SettlementSuggestion suggestion,
@@ -53,6 +63,108 @@ class SettleUpView extends StatelessWidget {
       HapticFeedback.mediumImpact();
       showAppSnackBar(context, 'Settlement recorded', success: true);
       await onRefresh();
+    }
+  }
+
+  Future<void> _showSettlementActions(
+    BuildContext context,
+    Settlement settlement,
+  ) async {
+    HapticFeedback.selectionClick();
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              title: Text(
+                '${_name(settlement.fromMemberId)} → '
+                '${_name(settlement.toMemberId)}',
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                formatCurrency(settlement.amount, settlement.currency),
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ),
+            const Divider(height: 1),
+            ListTile(
+              leading: const Icon(Icons.edit_rounded),
+              title: const Text('Edit payment'),
+              subtitle: settlement.confirmedAt != null
+                  ? const Text(
+                      'Changing the amount resets the confirmation.',
+                      style: TextStyle(fontSize: 12, color: Colors.white54),
+                    )
+                  : null,
+              onTap: () => Navigator.of(sheetContext).pop('edit'),
+            ),
+            ListTile(
+              leading: const Icon(
+                Icons.delete_outline_rounded,
+                color: AppColors.danger,
+              ),
+              title: const Text(
+                'Delete settlement',
+                style: TextStyle(color: AppColors.danger),
+              ),
+              onTap: () => Navigator.of(sheetContext).pop('delete'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action == null || !context.mounted) return;
+    if (action == 'edit') {
+      await _editSettlement(context, settlement);
+    } else if (action == 'delete') {
+      await _deleteSettlement(context, settlement);
+    }
+  }
+
+  Future<void> _editSettlement(
+    BuildContext context,
+    Settlement settlement,
+  ) async {
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (_) => _RecordSettlementSheet(
+        api: api,
+        summary: summary,
+        initial: settlement,
+      ),
+    );
+    if (saved == true && context.mounted) {
+      HapticFeedback.mediumImpact();
+      showAppSnackBar(context, 'Settlement updated', success: true);
+      await onRefresh();
+    }
+  }
+
+  Future<void> _deleteSettlement(
+    BuildContext context,
+    Settlement settlement,
+  ) async {
+    try {
+      await api.delete(
+        '/trips/${summary.trip.tripId}/settlements/${settlement.settlementId}',
+      );
+      if (!context.mounted) return;
+      HapticFeedback.lightImpact();
+      showAppSnackBar(context, 'Settlement deleted', success: true);
+      await onRefresh();
+    } on ApiException catch (error) {
+      if (!context.mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!context.mounted) return;
+      showAppSnackBar(context, 'Could not delete the settlement.', error: true);
     }
   }
 
@@ -315,6 +427,9 @@ class SettleUpView extends StatelessWidget {
                   onConfirm: () => _confirmSettlement(context, settlement),
                   onPay: (method, handle) =>
                       _openPaymentLink(context, method, handle, settlement),
+                  onMore: _canModify(settlement)
+                      ? () => _showSettlementActions(context, settlement)
+                      : null,
                 ),
               ),
               const SizedBox(height: 12),
@@ -324,36 +439,51 @@ class SettleUpView extends StatelessWidget {
             Text('History', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             ...confirmed.map(
-              (settlement) => Padding(
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.check_circle_rounded,
-                      size: 18,
-                      color: AppColors.positive,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        '${_name(settlement.fromMemberId)} paid '
-                        '${_name(settlement.toMemberId)}'
-                        '${settlement.note != null && settlement.note!.isNotEmpty ? ' · ${settlement.note}' : ''}',
-                        style: const TextStyle(
-                          fontSize: 13,
-                          color: Colors.white70,
+              (settlement) => InkWell(
+                // Only those allowed to edit/delete get the tap target.
+                onTap: _canModify(settlement)
+                    ? () => _showSettlementActions(context, settlement)
+                    : null,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 18,
+                        color: AppColors.positive,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          '${_name(settlement.fromMemberId)} paid '
+                          '${_name(settlement.toMemberId)}'
+                          '${settlement.note != null && settlement.note!.isNotEmpty ? ' · ${settlement.note}' : ''}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: Colors.white70,
+                          ),
                         ),
                       ),
-                    ),
-                    Text(
-                      formatCurrency(settlement.amount, settlement.currency),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        fontFeatures: kTabularFigures,
+                      Text(
+                        formatCurrency(settlement.amount, settlement.currency),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          fontFeatures: kTabularFigures,
+                        ),
                       ),
-                    ),
-                  ],
+                      if (_canModify(settlement)) ...[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.more_horiz_rounded,
+                          size: 16,
+                          color: Colors.white38,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -372,6 +502,9 @@ class _PendingSettlementCard extends StatelessWidget {
   final VoidCallback onConfirm;
   final void Function(String method, String handle) onPay;
 
+  /// Opens edit/delete actions; null when the viewer isn't allowed.
+  final VoidCallback? onMore;
+
   const _PendingSettlementCard({
     required this.settlement,
     required this.summary,
@@ -379,6 +512,7 @@ class _PendingSettlementCard extends StatelessWidget {
     required this.memberOf,
     required this.onConfirm,
     required this.onPay,
+    this.onMore,
   });
 
   @override
@@ -451,6 +585,18 @@ class _PendingSettlementCard extends StatelessWidget {
                     fontFeatures: kTabularFigures,
                   ),
                 ),
+                if (onMore != null)
+                  IconButton(
+                    onPressed: onMore,
+                    icon: const Icon(
+                      Icons.more_horiz_rounded,
+                      size: 18,
+                      color: Colors.white54,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    tooltip: 'Edit or delete',
+                  ),
               ],
             ),
             if (settlement.note != null && settlement.note!.isNotEmpty) ...[
@@ -490,16 +636,20 @@ class _PendingSettlementCard extends StatelessWidget {
   }
 }
 
+/// Records a new settlement from a [suggestion], or — with [initial] — edits
+/// an existing one via PATCH (amount + note; participants stay fixed).
 class _RecordSettlementSheet extends StatefulWidget {
   final ApiClient api;
   final TripSummary summary;
-  final SettlementSuggestion suggestion;
+  final SettlementSuggestion? suggestion;
+  final Settlement? initial;
 
   const _RecordSettlementSheet({
     required this.api,
     required this.summary,
-    required this.suggestion,
-  });
+    this.suggestion,
+    this.initial,
+  }) : assert(suggestion != null || initial != null);
 
   @override
   State<_RecordSettlementSheet> createState() => _RecordSettlementSheetState();
@@ -507,16 +657,25 @@ class _RecordSettlementSheet extends StatefulWidget {
 
 class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
   late final TextEditingController _amountController;
-  final _noteController = TextEditingController();
+  late final TextEditingController _noteController;
   bool _saving = false;
   String? _error;
+
+  bool get _isEditing => widget.initial != null;
+
+  String get _fromMemberId =>
+      widget.initial?.fromMemberId ?? widget.suggestion!.from;
+
+  String get _toMemberId => widget.initial?.toMemberId ?? widget.suggestion!.to;
 
   @override
   void initState() {
     super.initState();
+    final amount = widget.initial?.amount ?? widget.suggestion!.amount;
     _amountController = TextEditingController(
-      text: widget.suggestion.amount.toStringAsFixed(2),
+      text: amount.toStringAsFixed(2),
     );
+    _noteController = TextEditingController(text: widget.initial?.note ?? '');
   }
 
   @override
@@ -548,14 +707,22 @@ class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
       _error = null;
     });
     try {
-      await widget.api
-          .post('/trips/${widget.summary.trip.tripId}/settlements', {
-            'fromMemberId': widget.suggestion.from,
-            'toMemberId': widget.suggestion.to,
-            'amount': (amount * 100).roundToDouble() / 100,
-            'currency': widget.summary.trip.currency,
-            if (note.isNotEmpty) 'note': note,
-          });
+      final tripId = widget.summary.trip.tripId;
+      if (_isEditing) {
+        // Note is always sent — an empty string clears it server-side.
+        await widget.api.patch(
+          '/trips/$tripId/settlements/${widget.initial!.settlementId}',
+          {'amount': (amount * 100).roundToDouble() / 100, 'note': note},
+        );
+      } else {
+        await widget.api.post('/trips/$tripId/settlements', {
+          'fromMemberId': _fromMemberId,
+          'toMemberId': _toMemberId,
+          'amount': (amount * 100).roundToDouble() / 100,
+          'currency': widget.summary.trip.currency,
+          if (note.isNotEmpty) 'note': note,
+        });
+      }
       if (!mounted) return;
       Navigator.of(context).pop(true);
     } on ApiException catch (error) {
@@ -588,15 +755,22 @@ class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Record a payment',
+              _isEditing ? 'Edit payment' : 'Record a payment',
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
             Text(
-              '${_name(widget.suggestion.from)} pays '
-              '${_name(widget.suggestion.to)}',
+              '${_name(_fromMemberId)} pays ${_name(_toMemberId)}',
               style: const TextStyle(fontSize: 13, color: Colors.white70),
             ),
+            if (_isEditing && widget.initial!.confirmedAt != null) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'This payment was confirmed — changing the amount resets it '
+                'to pending.',
+                style: TextStyle(fontSize: 12, color: AppColors.warning),
+              ),
+            ],
             const SizedBox(height: 16),
             TextField(
               controller: _amountController,
@@ -646,7 +820,7 @@ class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
                       height: 20,
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
-                  : const Text('Record payment'),
+                  : Text(_isEditing ? 'Save changes' : 'Record payment'),
             ),
           ],
         ),

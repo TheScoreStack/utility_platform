@@ -28,7 +28,14 @@ interface SettlementsTabProps {
   onDelete: (settlementId: string, label: string) => Promise<void>;
   deletePending: boolean;
   deletingSettlementId?: string;
+  onUpdate: (
+    settlementId: string,
+    amount: number,
+    note: string
+  ) => Promise<unknown>;
+  updatePending: boolean;
   currentUserId?: string;
+  ownerId: string;
   paymentMethodsByMember: Record<string, PaymentMethods>;
   prefill?: SettlementPrefill | null;
   onPrefillConsumed?: () => void;
@@ -99,7 +106,10 @@ export const SettlementsTab = ({
   onDelete,
   deletePending,
   deletingSettlementId,
+  onUpdate,
+  updatePending,
   currentUserId,
+  ownerId,
   paymentMethodsByMember,
   prefill,
   onPrefillConsumed,
@@ -119,6 +129,34 @@ export const SettlementsTab = ({
       }),
     [currency]
   );
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editNote, setEditNote] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const startEditing = (settlement: Settlement) => {
+    setEditingId(settlement.settlementId);
+    setEditAmount(settlement.amount.toFixed(2));
+    setEditNote(settlement.note ?? "");
+    setEditError(null);
+  };
+
+  const saveEdit = async (settlementId: string) => {
+    const amount = Number.parseFloat(editAmount.replace(",", "."));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setEditError("Enter an amount greater than zero.");
+      return;
+    }
+    try {
+      await onUpdate(settlementId, Math.round(amount * 100) / 100, editNote.trim());
+      setEditingId(null);
+    } catch (error) {
+      setEditError(
+        error instanceof Error ? error.message : "Could not save the changes."
+      );
+    }
+  };
 
   return (
     <div className="grid-two">
@@ -168,6 +206,18 @@ export const SettlementsTab = ({
                 : [];
               const showPayPanel =
                 !confirmed && isFromUser && payableMethods.length > 0;
+
+              // Mirrors the server rules: participants, whoever recorded it,
+              // or the trip owner can edit/delete; confirming is for the
+              // participants or the owner.
+              const isOwner = currentUserId === ownerId;
+              const canModify =
+                isFromUser ||
+                isToUser ||
+                isOwner ||
+                currentUserId === settlement.createdBy;
+              const canConfirm = isFromUser || isToUser || isOwner;
+              const isEditing = editingId === settlement.settlementId;
 
               const confirmLabel = isFromUser
                 ? "I paid this"
@@ -262,39 +312,104 @@ export const SettlementsTab = ({
                     </div>
                   )}
 
-                  <div className="stl-row__actions">
-                    {!confirmed && (
+                  {isEditing ? (
+                    <div
+                      className="stl-row__actions"
+                      style={{ flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}
+                    >
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={editAmount}
+                        onChange={(event) => setEditAmount(event.target.value)}
+                        aria-label="Amount"
+                        style={{ width: "6.5rem" }}
+                      />
+                      <input
+                        type="text"
+                        value={editNote}
+                        onChange={(event) => setEditNote(event.target.value)}
+                        placeholder="Note (optional)"
+                        aria-label="Note"
+                        style={{ flex: "1 1 10rem", minWidth: "8rem" }}
+                      />
                       <button
                         type="button"
-                        className={`stl-confirm ${confirmModifier}`}
-                        disabled={confirmPending}
-                        onClick={() => onConfirm(settlement.settlementId, true)}
+                        className="primary"
+                        disabled={updatePending}
+                        onClick={() => {
+                          void saveEdit(settlement.settlementId);
+                        }}
                       >
-                        {confirmLabel}
+                        {updatePending ? "Saving…" : "Save"}
                       </button>
-                    )}
-                    {confirmed && (
                       <button
                         type="button"
                         className="secondary"
-                        disabled={confirmPending}
-                        onClick={() => onConfirm(settlement.settlementId, false)}
+                        disabled={updatePending}
+                        onClick={() => setEditingId(null)}
                       >
-                        Mark pending
+                        Cancel
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={deletePending && deletingSettlementId === settlement.settlementId}
-                      title="Move to Recently deleted (undoable for now)"
-                      onClick={() => {
-                        onDelete(settlement.settlementId, `${fromName} → ${toName}`).catch(() => {});
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
+                      {confirmed && (
+                        <span className="muted" style={{ fontSize: "0.8rem", width: "100%" }}>
+                          Changing the amount resets the confirmation — it will
+                          need to be confirmed again.
+                        </span>
+                      )}
+                      {editError && (
+                        <span style={{ color: "#fca5a5", fontSize: "0.8rem", width: "100%" }}>
+                          {editError}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="stl-row__actions">
+                      {!confirmed && canConfirm && (
+                        <button
+                          type="button"
+                          className={`stl-confirm ${confirmModifier}`}
+                          disabled={confirmPending}
+                          onClick={() => onConfirm(settlement.settlementId, true)}
+                        >
+                          {confirmLabel}
+                        </button>
+                      )}
+                      {confirmed && canConfirm && (
+                        <button
+                          type="button"
+                          className="secondary"
+                          disabled={confirmPending}
+                          onClick={() => onConfirm(settlement.settlementId, false)}
+                        >
+                          Mark pending
+                        </button>
+                      )}
+                      {canModify && (
+                        <>
+                          <button
+                            type="button"
+                            className="secondary"
+                            title="Change the amount or note"
+                            onClick={() => startEditing(settlement)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={deletePending && deletingSettlementId === settlement.settlementId}
+                            title="Move to Recently deleted (undoable for now)"
+                            onClick={() => {
+                              onDelete(settlement.settlementId, `${fromName} → ${toName}`).catch(() => {});
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}

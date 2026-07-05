@@ -423,6 +423,21 @@ const TripDetailPage = () => {
     }
   });
 
+  const updateSettlementMutation = useMutation({
+    mutationFn: (payload: {
+      settlementId: string;
+      amount: number;
+      note: string;
+    }) =>
+      api.patch<void>(`/trips/${tripId}/settlements/${payload.settlementId}`, {
+        amount: payload.amount,
+        note: payload.note
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+    }
+  });
+
   const addMemberMutation = useMutation({
     mutationFn: (payload: { members: { userId?: string; name?: string }[] }) =>
       api.post(`/trips/${tripId}/members`, payload),
@@ -870,7 +885,12 @@ const TripDetailPage = () => {
           }
           deletePending={deleteSettlementMutation.isPending}
           deletingSettlementId={deleteSettlementMutation.variables?.settlementId}
+          onUpdate={(settlementId, amount, note) =>
+            updateSettlementMutation.mutateAsync({ settlementId, amount, note })
+          }
+          updatePending={updateSettlementMutation.isPending}
           currentUserId={effectiveCurrentUserId}
+          ownerId={trip.ownerId}
           paymentMethodsByMember={paymentMethodsByMember}
           prefill={settlementPrefill}
           onPrefillConsumed={() => setSettlementPrefill(null)}

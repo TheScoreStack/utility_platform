@@ -190,6 +190,14 @@ const confirmSettlementSchema = z.object({
   confirmed: z.boolean()
 });
 
+const updateSettlementSchema = z.object({
+  fromMemberId: z.string().min(1).optional(),
+  toMemberId: z.string().min(1).optional(),
+  amount: z.number().positive().optional(),
+  // Empty string clears the note.
+  note: z.string().max(500).optional()
+});
+
 const paymentMethodField = z.union([z.string().trim().min(1), z.null()]).optional();
 
 const paymentMethodsSchema = z
@@ -315,6 +323,18 @@ const canModifyExpense = (
   (expense.createdBy
     ? expense.createdBy === userId
     : expense.paidByMemberId === userId);
+
+/** Edit/delete rights on a settlement: either participant (it's their
+ *  money), whoever recorded it, or the trip owner as moderator. */
+const canModifySettlement = (
+  settlement: Pick<Settlement, "fromMemberId" | "toMemberId" | "createdBy">,
+  ownerId: string,
+  userId: string
+): boolean =>
+  settlement.fromMemberId === userId ||
+  settlement.toMemberId === userId ||
+  settlement.createdBy === userId ||
+  ownerId === userId;
 
 const resolveRemainderTarget = (
   memberIds: string[],
@@ -1499,6 +1519,64 @@ export class TripService {
     }
   }
 
+  async updateSettlement(
+    tripId: string,
+    settlementId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<void> {
+    const parsed = updateSettlementSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const settlement = details.settlements.find(
+      (item) => item.settlementId === settlementId
+    );
+    if (!settlement) {
+      throw new ValidationError("Settlement not found");
+    }
+    if (!canModifySettlement(settlement, details.trip.ownerId, auth.userId)) {
+      throw new ForbiddenError(
+        "Only the people involved in this settlement (or the trip owner) can edit it"
+      );
+    }
+
+    const fromMemberId = parsed.data.fromMemberId ?? settlement.fromMemberId;
+    const toMemberId = parsed.data.toMemberId ?? settlement.toMemberId;
+    if (parsed.data.fromMemberId) {
+      ensureMember(details.members, fromMemberId);
+    }
+    if (parsed.data.toMemberId) {
+      ensureMember(details.members, toMemberId);
+    }
+    if (fromMemberId === toMemberId) {
+      throw new ValidationError(
+        "Settlement participants must be different members"
+      );
+    }
+
+    const amountChanged =
+      parsed.data.amount !== undefined &&
+      parsed.data.amount !== settlement.amount;
+    const participantsChanged =
+      fromMemberId !== settlement.fromMemberId ||
+      toMemberId !== settlement.toMemberId;
+
+    await getTripStore().updateSettlement(tripId, settlementId, {
+      fromMemberId: parsed.data.fromMemberId,
+      toMemberId: parsed.data.toMemberId,
+      amount: parsed.data.amount,
+      note: parsed.data.note,
+      // A confirmation applies to what was approved — a different amount or
+      // different participants needs confirming again.
+      clearConfirmation:
+        Boolean(settlement.confirmedAt) && (amountChanged || participantsChanged)
+    });
+  }
+
   async deleteSettlement(
     tripId: string,
     settlementId: string,
@@ -1513,12 +1591,10 @@ export class TripService {
       throw new ValidationError("Settlement not found");
     }
 
-    const canDelete =
-      settlement.fromMemberId === auth.userId ||
-      settlement.toMemberId === auth.userId ||
-      details.trip.ownerId === auth.userId;
-    if (!canDelete) {
-      throw new ForbiddenError("Not authorized to delete this settlement");
+    if (!canModifySettlement(settlement, details.trip.ownerId, auth.userId)) {
+      throw new ForbiddenError(
+        "Only the people involved in this settlement (or the trip owner) can delete it"
+      );
     }
 
     await getTripStore().softDeleteSettlement(tripId, settlementId, auth.userId);
