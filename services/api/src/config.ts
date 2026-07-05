@@ -4,8 +4,10 @@ export interface AppConfig {
   receiptBucket: string;
   textractOutputBucket?: string;
   signedUrlExpirySeconds: number;
-  /** SNS platform application for APNs pushes; unset = pushes disabled. */
+  /** SNS platform application for APNs pushes; unset = iOS pushes off. */
   pushPlatformAppArn?: string;
+  /** SNS platform application for FCM pushes; unset = Android pushes off. */
+  pushPlatformAppArnAndroid?: string;
 }
 
 const required = (value: string | undefined, name: string): string => {
@@ -30,7 +32,9 @@ const buildConfig = (): AppConfig => {
     signedUrlExpirySeconds: process.env.SIGNED_URL_EXPIRY_SECONDS
       ? Number(process.env.SIGNED_URL_EXPIRY_SECONDS)
       : 900,
-    pushPlatformAppArn: process.env.PUSH_PLATFORM_APP_ARN || undefined
+    pushPlatformAppArn: process.env.PUSH_PLATFORM_APP_ARN || undefined,
+    pushPlatformAppArnAndroid:
+      process.env.PUSH_PLATFORM_APP_ARN_ANDROID || undefined
   };
 };
 

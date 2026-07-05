@@ -20,5 +20,31 @@ class AppConfig {
     defaultValue: 'dbfdh3ss23c78dv4pr1vapl23',
   );
 
+  // Firebase Android app config (FCM pushes). These are public client
+  // values from the Firebase console — same category as the pool ids above.
+  // All four empty = Android push registration quietly skips itself.
+  static const String firebaseAndroidApiKey = String.fromEnvironment(
+    'FIREBASE_ANDROID_API_KEY',
+    defaultValue: '',
+  );
+  static const String firebaseAndroidAppId = String.fromEnvironment(
+    'FIREBASE_ANDROID_APP_ID',
+    defaultValue: '',
+  );
+  static const String firebaseMessagingSenderId = String.fromEnvironment(
+    'FIREBASE_MESSAGING_SENDER_ID',
+    defaultValue: '',
+  );
+  static const String firebaseProjectId = String.fromEnvironment(
+    'FIREBASE_PROJECT_ID',
+    defaultValue: '',
+  );
+
+  static bool get firebaseAndroidConfigured =>
+      firebaseAndroidApiKey.isNotEmpty &&
+      firebaseAndroidAppId.isNotEmpty &&
+      firebaseMessagingSenderId.isNotEmpty &&
+      firebaseProjectId.isNotEmpty;
+
   const AppConfig._();
 }

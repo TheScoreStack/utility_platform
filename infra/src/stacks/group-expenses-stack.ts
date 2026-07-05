@@ -197,6 +197,10 @@ export class GroupExpensesStack extends Stack {
     const pushPlatformAppArn =
       process.env.PUSH_PLATFORM_APP_ARN ??
       "arn:aws:sns:us-east-1:972890651266:app/APNS/stackcore-apns";
+    // Android counterpart (FCM). Defaulted here once the platform app is
+    // created the same way; empty string keeps Android pushes off.
+    const pushPlatformAppArnAndroid =
+      process.env.PUSH_PLATFORM_APP_ARN_ANDROID ?? "";
 
     const httpLambda = new NodejsFunction(this, "HttpHandler", {
       ...sharedFunctionProps,
@@ -210,11 +214,17 @@ export class GroupExpensesStack extends Stack {
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1",
         ...(pushPlatformAppArn
           ? { PUSH_PLATFORM_APP_ARN: pushPlatformAppArn }
+          : {}),
+        ...(pushPlatformAppArnAndroid
+          ? { PUSH_PLATFORM_APP_ARN_ANDROID: pushPlatformAppArnAndroid }
           : {})
       }
     });
 
-    if (pushPlatformAppArn) {
+    const pushAppArns = [pushPlatformAppArn, pushPlatformAppArnAndroid].filter(
+      Boolean
+    );
+    if (pushAppArns.length) {
       httpLambda.addToRolePolicy(
         new PolicyStatement({
           actions: [
@@ -224,10 +234,10 @@ export class GroupExpensesStack extends Stack {
             "sns:GetEndpointAttributes",
             "sns:SetEndpointAttributes"
           ],
-          resources: [
-            pushPlatformAppArn,
-            `${pushPlatformAppArn.replace(":app/", ":endpoint/")}/*`
-          ]
+          resources: pushAppArns.flatMap((arn) => [
+            arn,
+            `${arn.replace(":app/", ":endpoint/")}/*`
+          ])
         })
       );
     }

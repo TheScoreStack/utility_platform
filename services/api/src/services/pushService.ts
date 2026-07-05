@@ -11,8 +11,13 @@ import { ValidationError } from "../lib/errors.js";
 import type { AuthContext } from "../auth.js";
 
 const registerSchema = z.object({
-  token: z.string().regex(/^[0-9a-fA-F]{32,512}$/, "Invalid device token"),
-  platform: z.literal("ios").default("ios")
+  // APNs tokens are hex; FCM tokens are base64url-ish with colons.
+  token: z
+    .string()
+    .min(16)
+    .max(512)
+    .regex(/^[0-9a-zA-Z:_-]+$/, "Invalid device token"),
+  platform: z.enum(["ios", "android"]).default("ios")
 });
 
 export interface PushMessage {
@@ -29,11 +34,20 @@ export interface PushMessage {
  */
 export class PushService {
   private readonly deviceStore = new DeviceStore();
-  private readonly platformAppArn = loadConfig().pushPlatformAppArn;
   private snsClient: SNSClient | null = null;
 
+  private platformArnFor(platform: "ios" | "android"): string | undefined {
+    const config = loadConfig();
+    return platform === "ios"
+      ? config.pushPlatformAppArn
+      : config.pushPlatformAppArnAndroid;
+  }
+
   get enabled(): boolean {
-    return Boolean(this.platformAppArn);
+    const config = loadConfig();
+    return Boolean(
+      config.pushPlatformAppArn || config.pushPlatformAppArnAndroid
+    );
   }
 
   private get sns(): SNSClient {
@@ -46,12 +60,18 @@ export class PushService {
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
     }
-    if (!this.enabled) return;
+    const platformAppArn = this.platformArnFor(parsed.data.platform);
+    if (!platformAppArn) return;
 
-    const token = parsed.data.token.toLowerCase();
+    // APNs tokens are case-insensitive hex — normalize those; FCM tokens
+    // are case-sensitive and must be stored verbatim.
+    const token =
+      parsed.data.platform === "ios"
+        ? parsed.data.token.toLowerCase()
+        : parsed.data.token;
     const { EndpointArn } = await this.sns.send(
       new CreatePlatformEndpointCommand({
-        PlatformApplicationArn: this.platformAppArn,
+        PlatformApplicationArn: platformAppArn,
         Token: token,
         CustomUserData: auth.userId
       })
@@ -71,7 +91,7 @@ export class PushService {
   async unregisterDevice(token: string, auth: AuthContext): Promise<void> {
     const devices = await this.deviceStore.listDevices(auth.userId);
     const device = devices.find(
-      (item) => item.token === token.toLowerCase()
+      (item) => item.token === token || item.token === token.toLowerCase()
     );
     if (!device) return;
     await this.deviceStore.deleteDevice(auth.userId, device.token);
@@ -96,10 +116,17 @@ export class PushService {
       },
       ...(message.data ?? {})
     });
+    // FCM v1 shape: `notification` renders in the tray automatically when
+    // the app is backgrounded; `data` rides along for deep links.
+    const fcmPayload = JSON.stringify({
+      notification: { title: message.title, body: message.body },
+      data: message.data ?? {}
+    });
     const snsMessage = JSON.stringify({
       default: message.body,
       APNS: apnsPayload,
-      APNS_SANDBOX: apnsPayload
+      APNS_SANDBOX: apnsPayload,
+      GCM: fcmPayload
     });
 
     const targets = (
