@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -273,16 +275,26 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
       // Same join route as the web app (App.tsx: /group-expenses/join/:id).
       final joinUrl = '$_appBaseUrl/group-expenses/join/$inviteId';
+      final existingMemberIds = summary.members
+          .map((member) => member.memberId)
+          .toSet();
       await showModalBottomSheet<void>(
         context: context,
         showDragHandle: true,
+        isScrollControlled: true,
         builder: (sheetContext) => SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+            padding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              MediaQuery.of(sheetContext).viewInsets.bottom + 16,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
                 Text(
                   'Invite to ${summary.trip.name}',
                   style: Theme.of(sheetContext).textTheme.titleMedium,
@@ -329,23 +341,34 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                   ),
                   label: const Text('Copy link'),
                 ),
-                const SizedBox(height: 16),
-                const Divider(height: 1),
-                const SizedBox(height: 12),
-                const Text(
-                  'No account yet? Add them by name — they can claim their '
-                  'spot from this link later, keeping everything assigned '
-                  'to them.',
-                  style: TextStyle(fontSize: 13, color: Colors.white70),
-                ),
-                const SizedBox(height: 10),
-                _AddByNameField(
-                  onSubmit: (name) async {
-                    Navigator.of(sheetContext).pop();
-                    await _addPlaceholderMember(name);
-                  },
-                ),
-              ],
+                  const SizedBox(height: 16),
+                  const Divider(height: 1),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Add people directly',
+                    style: Theme.of(sheetContext).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Search for someone already on Stack Core, or add anyone '
+                    'by name — they can claim their spot from the link later.',
+                    style: TextStyle(fontSize: 13, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 10),
+                  _AddPeopleSection(
+                    api: widget.api,
+                    existingMemberIds: existingMemberIds,
+                    onAddUser: (userId, name) async {
+                      Navigator.of(sheetContext).pop();
+                      await _addMember({'userId': userId}, name);
+                    },
+                    onAddPlaceholder: (name) async {
+                      Navigator.of(sheetContext).pop();
+                      await _addMember({'name': name}, name);
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -359,25 +382,23 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
 
-  /// Adds a member by name only (no account) so splits can include them
-  /// immediately; they claim the spot later via the invite link.
-  Future<void> _addPlaceholderMember(String name) async {
+  /// Adds a member — `{'userId': …}` for someone already on the app, or
+  /// `{'name': …}` for a placeholder they can claim later via the invite link.
+  Future<void> _addMember(Map<String, dynamic> entry, String displayName) async {
     try {
       await widget.api.post('/trips/${widget.tripId}/members', {
-        'members': [
-          {'name': name},
-        ],
+        'members': [entry],
       });
       if (!mounted) return;
       HapticFeedback.mediumImpact();
-      showAppSnackBar(context, 'Added $name to the trip', success: true);
+      showAppSnackBar(context, 'Added $displayName to the trip', success: true);
       await _load();
     } on ApiException catch (error) {
       if (!mounted) return;
       showAppSnackBar(context, error.message, error: true);
     } catch (_) {
       if (!mounted) return;
-      showAppSnackBar(context, 'Could not add $name.', error: true);
+      showAppSnackBar(context, 'Could not add $displayName.', error: true);
     }
   }
 
@@ -479,6 +500,11 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 onTap: () => Navigator.of(sheetContext).pop('receipt'),
               ),
             ListTile(
+              leading: const Icon(Icons.edit_rounded),
+              title: const Text('Edit draft'),
+              onTap: () => Navigator.of(sheetContext).pop('edit'),
+            ),
+            ListTile(
               leading: const Icon(Icons.publish_rounded),
               title: const Text('Publish to the group'),
               onTap: () => Navigator.of(sheetContext).pop('publish'),
@@ -506,6 +532,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     if (action == null || !mounted) return;
     if (action == 'receipt') {
       await _openReceipt(draft);
+    } else if (action == 'edit') {
+      await _editExpense(draft);
     } else if (action == 'publish') {
       await _confirmPublishDraft(draft);
     } else if (action == 'delete') {
@@ -531,6 +559,18 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
       if (!mounted) return;
       showAppSnackBar(context, 'Could not delete the draft.', error: true);
     }
+  }
+
+  /// Mirrors the server's ownership rule: the person who entered the expense
+  /// (payer for legacy expenses without `createdBy`) or the trip owner.
+  bool _canModifyExpense(Expense expense) {
+    final summary = _summary;
+    if (summary == null) return false;
+    final userId = summary.currentUserId;
+    if (summary.trip.ownerId == userId) return true;
+    return expense.createdBy != null
+        ? expense.createdBy == userId
+        : expense.paidByMemberId == userId;
   }
 
   // ----------------------------------------------------------- expense menu
@@ -561,6 +601,14 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   Future<void> _showExpenseActions(Expense expense) async {
     HapticFeedback.selectionClick();
+    final canModify = _canModifyExpense(expense);
+    final enteredBy = _summary?.members
+        .where(
+          (member) =>
+              member.memberId == (expense.createdBy ?? expense.paidByMemberId),
+        )
+        .map((member) => member.displayName)
+        .firstOrNull;
     final action = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
@@ -586,17 +634,33 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 title: const Text('View receipt'),
                 onTap: () => Navigator.of(sheetContext).pop('receipt'),
               ),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_outline_rounded,
-                color: AppColors.danger,
+            if (canModify) ...[
+              ListTile(
+                leading: const Icon(Icons.edit_rounded),
+                title: const Text('Edit expense'),
+                onTap: () => Navigator.of(sheetContext).pop('edit'),
               ),
-              title: const Text(
-                'Delete expense',
-                style: TextStyle(color: AppColors.danger),
+              ListTile(
+                leading: const Icon(
+                  Icons.delete_outline_rounded,
+                  color: AppColors.danger,
+                ),
+                title: const Text(
+                  'Delete expense',
+                  style: TextStyle(color: AppColors.danger),
+                ),
+                onTap: () => Navigator.of(sheetContext).pop('delete'),
               ),
-              onTap: () => Navigator.of(sheetContext).pop('delete'),
-            ),
+            ] else
+              ListTile(
+                leading: const Icon(Icons.lock_outline_rounded,
+                    color: Colors.white38),
+                title: Text(
+                  'Only ${enteredBy ?? 'the person who added this'} or the '
+                  'trip owner can edit or delete it.',
+                  style: const TextStyle(fontSize: 13, color: Colors.white54),
+                ),
+              ),
             const SizedBox(height: 8),
           ],
         ),
@@ -605,9 +669,45 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     if (action == null || !mounted) return;
     if (action == 'receipt') {
       await _openReceipt(expense);
+    } else if (action == 'edit') {
+      await _editExpense(expense);
     } else if (action == 'delete') {
       await _deleteExpense(expense);
     }
+  }
+
+  /// Routes to the right editor: the itemized review screen when the expense
+  /// has line items, otherwise the quick (even-split) sheet.
+  Future<void> _editExpense(Expense expense) async {
+    final summary = _summary;
+    if (summary == null) return;
+
+    final saved = (expense.lineItems?.isNotEmpty ?? false)
+        ? await Navigator.of(context).push<ScanSaveResult>(
+            MaterialPageRoute(
+              builder: (_) => ScanReviewScreen(
+                api: widget.api,
+                summary: summary,
+                initialExpense: expense,
+              ),
+            ),
+          )
+        : await showQuickExpenseSheet(
+            context: context,
+            api: widget.api,
+            summary: summary,
+            initialExpense: expense,
+          );
+    if (saved == null || !mounted) return;
+
+    HapticFeedback.mediumImpact();
+    await _load();
+    if (!mounted) return;
+    showAppSnackBar(
+      context,
+      'Updated "${expense.description}"',
+      success: true,
+    );
   }
 
   Future<void> _deleteExpense(Expense expense) async {
@@ -1275,53 +1375,181 @@ class _ErrorState extends StatelessWidget {
   }
 }
 
-/// Name field + Add button used in the invite sheet for placeholder members.
-class _AddByNameField extends StatefulWidget {
-  final Future<void> Function(String name) onSubmit;
+/// Search-and-add used in the invite sheet: matches existing Stack Core
+/// accounts by name or email, with an add-by-name fallback for people who
+/// don't have an account yet.
+class _AddPeopleSection extends StatefulWidget {
+  final ApiClient api;
+  final Set<String> existingMemberIds;
+  final Future<void> Function(String userId, String name) onAddUser;
+  final Future<void> Function(String name) onAddPlaceholder;
 
-  const _AddByNameField({required this.onSubmit});
+  const _AddPeopleSection({
+    required this.api,
+    required this.existingMemberIds,
+    required this.onAddUser,
+    required this.onAddPlaceholder,
+  });
 
   @override
-  State<_AddByNameField> createState() => _AddByNameFieldState();
+  State<_AddPeopleSection> createState() => _AddPeopleSectionState();
 }
 
-class _AddByNameFieldState extends State<_AddByNameField> {
+class _AddPeopleSectionState extends State<_AddPeopleSection> {
   final _controller = TextEditingController();
+  Timer? _debounce;
+  bool _searching = false;
+  List<Map<String, dynamic>> _results = const [];
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  void _submit() {
-    final name = _controller.text.trim();
-    if (name.isEmpty) return;
-    widget.onSubmit(name);
+  void _onChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 400), _search);
+    setState(() {});
+  }
+
+  Future<void> _search() async {
+    final query = _controller.text.trim();
+    if (query.length < 2) {
+      setState(() {
+        _results = const [];
+        _searching = false;
+      });
+      return;
+    }
+    setState(() => _searching = true);
+    try {
+      final data =
+          await widget.api.get('/users?query=${Uri.encodeQueryComponent(query)}')
+              as Map<String, dynamic>;
+      if (!mounted || _controller.text.trim() != query) return;
+      setState(() {
+        _results = ((data['users'] as List?) ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .toList();
+        _searching = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      // Search is best-effort; the add-by-name fallback below still works.
+      setState(() {
+        _results = const [];
+        _searching = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final query = _controller.text.trim();
+    final showPlaceholderAdd = query.length >= 2 && !query.contains('@');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Expanded(
-          child: TextField(
-            controller: _controller,
-            textCapitalization: TextCapitalization.words,
-            onSubmitted: (_) => _submit(),
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              hintText: 'e.g. Sarah',
-              isDense: true,
-              border: OutlineInputBorder(),
-            ),
+        TextField(
+          controller: _controller,
+          autocorrect: false,
+          onChanged: _onChanged,
+          decoration: InputDecoration(
+            hintText: 'Name or email',
+            isDense: true,
+            border: const OutlineInputBorder(),
+            prefixIcon: const Icon(Icons.search_rounded, size: 20),
+            suffixIcon: _searching
+                ? const Padding(
+                    padding: EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  )
+                : null,
           ),
         ),
-        const SizedBox(width: 8),
-        FilledButton.tonal(
-          onPressed: _controller.text.trim().isEmpty ? null : _submit,
-          child: const Text('Add'),
-        ),
+        ..._results.map((user) {
+          final userId = (user['userId'] as String?) ?? '';
+          final name =
+              (user['displayName'] as String?) ??
+              (user['email'] as String?) ??
+              userId;
+          final email = user['email'] as String?;
+          final alreadyIn = widget.existingMemberIds.contains(userId);
+          return Padding(
+            padding: const EdgeInsets.only(top: 10),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.white12,
+                  child: Text(
+                    name.isEmpty ? '?' : name[0].toUpperCase(),
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                      if (email != null && email.isNotEmpty)
+                        Text(
+                          email,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white54,
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                alreadyIn
+                    ? const Text(
+                        'In trip',
+                        style: TextStyle(fontSize: 13, color: Colors.white38),
+                      )
+                    : FilledButton.tonal(
+                        onPressed: () => widget.onAddUser(userId, name),
+                        style: FilledButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        child: const Text('Add'),
+                      ),
+              ],
+            ),
+          );
+        }),
+        if (!_searching && query.length >= 2 && _results.isEmpty) ...[
+          const SizedBox(height: 10),
+          const Text(
+            'No one on Stack Core matches that yet.',
+            style: TextStyle(fontSize: 13, color: Colors.white54),
+          ),
+        ],
+        if (showPlaceholderAdd) ...[
+          const SizedBox(height: 10),
+          OutlinedButton.icon(
+            onPressed: () => widget.onAddPlaceholder(query),
+            icon: const Icon(Icons.person_add_alt_rounded, size: 18),
+            label: Text('Add “$query” without an account'),
+          ),
+        ],
       ],
     );
   }

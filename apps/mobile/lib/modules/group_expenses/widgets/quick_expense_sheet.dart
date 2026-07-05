@@ -27,24 +27,37 @@ class QuickExpenseResult {
 /// Compact bottom-sheet form for a manual, evenly split expense: big amount
 /// field, description, payer, member chips. POSTs with `splitEvenly: true`
 /// plus cent-exact allocations matching the server's even-split math.
+///
+/// With [initialExpense] it edits in place via PATCH, re-splitting evenly
+/// across the selected members. Draft/published status is left untouched.
 Future<QuickExpenseResult?> showQuickExpenseSheet({
   required BuildContext context,
   required ApiClient api,
   required TripSummary summary,
+  Expense? initialExpense,
 }) {
   return showModalBottomSheet<QuickExpenseResult>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (_) => _QuickExpenseSheet(api: api, summary: summary),
+    builder: (_) => _QuickExpenseSheet(
+      api: api,
+      summary: summary,
+      initialExpense: initialExpense,
+    ),
   );
 }
 
 class _QuickExpenseSheet extends StatefulWidget {
   final ApiClient api;
   final TripSummary summary;
+  final Expense? initialExpense;
 
-  const _QuickExpenseSheet({required this.api, required this.summary});
+  const _QuickExpenseSheet({
+    required this.api,
+    required this.summary,
+    this.initialExpense,
+  });
 
   @override
   State<_QuickExpenseSheet> createState() => _QuickExpenseSheetState();
@@ -63,14 +76,29 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
 
   String get _currency => widget.summary.trip.currency;
 
+  bool get _isEditing => widget.initialExpense != null;
+
   @override
   void initState() {
     super.initState();
     final memberIds = _members.map((member) => member.memberId).toSet();
-    _payerId = memberIds.contains(widget.summary.currentUserId)
-        ? widget.summary.currentUserId
-        : _members.first.memberId;
-    _selectedMemberIds = {...memberIds};
+    final initial = widget.initialExpense;
+    if (initial != null) {
+      _amountController.text = initial.total.toStringAsFixed(2);
+      _descriptionController.text = initial.description;
+      _payerId = memberIds.contains(initial.paidByMemberId)
+          ? initial.paidByMemberId
+          : _members.first.memberId;
+      final shared = initial.sharedWithMemberIds
+          .where(memberIds.contains)
+          .toSet();
+      _selectedMemberIds = shared.isEmpty ? {...memberIds} : shared;
+    } else {
+      _payerId = memberIds.contains(widget.summary.currentUserId)
+          ? widget.summary.currentUserId
+          : _members.first.memberId;
+      _selectedMemberIds = {...memberIds};
+    }
   }
 
   @override
@@ -110,7 +138,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
       _error = null;
     });
     try {
-      await widget.api.post('/trips/${widget.summary.trip.tripId}/expenses', {
+      final payload = {
         'description': description.isEmpty ? 'Expense' : description,
         'total': total,
         'currency': _currency,
@@ -121,7 +149,18 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
             .map((a) => {'memberId': a.memberId, 'amount': a.amount})
             .toList(),
         if (draft) 'draft': true,
-      });
+      };
+      final tripId = widget.summary.trip.tripId;
+      if (_isEditing) {
+        // PATCH keeps draft/published status as-is; publishing stays a
+        // separate explicit action.
+        await widget.api.patch(
+          '/trips/$tripId/expenses/${widget.initialExpense!.expenseId}',
+          payload,
+        );
+      } else {
+        await widget.api.post('/trips/$tripId/expenses', payload);
+      }
       if (!mounted) return;
       HapticFeedback.mediumImpact();
       Navigator.of(context).pop(
@@ -129,7 +168,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
           total: total,
           peopleCount: memberIds.length,
           currency: _currency,
-          draft: draft,
+          draft: _isEditing ? widget.initialExpense!.draft : draft,
         ),
       );
     } on ApiException catch (error) {
@@ -168,7 +207,11 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Quick expense',
+                _isEditing
+                    ? (widget.initialExpense!.draft
+                          ? 'Edit draft'
+                          : 'Edit expense')
+                    : 'Quick expense',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 4),
@@ -319,34 +362,39 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
                         height: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : Text(blockedReason ?? 'Save expense'),
+                    : Text(
+                        blockedReason ??
+                            (_isEditing ? 'Save changes' : 'Save expense'),
+                      ),
               ),
-              const SizedBox(height: 8),
-              OutlinedButton(
-                onPressed: blockedReason == null && !_saving
-                    ? () => _save(draft: true)
-                    : null,
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  side: BorderSide(
-                    color: AppColors.warning.withValues(alpha: 0.45),
+              if (!_isEditing) ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                  onPressed: blockedReason == null && !_saving
+                      ? () => _save(draft: true)
+                      : null,
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    side: BorderSide(
+                      color: AppColors.warning.withValues(alpha: 0.45),
+                    ),
+                    foregroundColor: AppColors.warning,
                   ),
-                  foregroundColor: AppColors.warning,
+                  child: _saving && _savingAsDraft
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Save as draft'),
                 ),
-                child: _saving && _savingAsDraft
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save as draft'),
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Only you can see drafts until you publish.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: Colors.white70),
-              ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Only you can see drafts until you publish.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: Colors.white70),
+                ),
+              ],
             ],
           ),
         ),

@@ -303,6 +303,19 @@ const computeBalances = (
   }));
 };
 
+/** Edit/delete rights on an expense: the person who entered it, or the trip
+ *  owner as moderator. Expenses created before `createdBy` existed fall back
+ *  to the payer as the presumed author. */
+const canModifyExpense = (
+  expense: Pick<Expense, "createdBy" | "paidByMemberId">,
+  ownerId: string,
+  userId: string
+): boolean =>
+  ownerId === userId ||
+  (expense.createdBy
+    ? expense.createdBy === userId
+    : expense.paidByMemberId === userId);
+
 const resolveRemainderTarget = (
   memberIds: string[],
   preferredId?: string,
@@ -871,13 +884,9 @@ export class TripService {
     const userEntries = parsed.data.members.filter((member) => member.userId);
     const nameEntries = parsed.data.members.filter((member) => member.name);
 
-    // Real-account adds stay owner-only; placeholders (added by name, no
-    // account yet) can be created by any member — that's the at-the-table
-    // "add Sarah so we can split now" move.
-    if (userEntries.length && !isOwner) {
-      throw new ForbiddenError("Only trip owners can add members");
-    }
-    if (nameEntries.length && !isMember) {
+    // Any member can bring people in — by account or by name. This mirrors
+    // the invite link, which every member can already share with anyone.
+    if (!isOwner && !isMember) {
       throw new ForbiddenError("You are not part of this trip");
     }
 
@@ -1161,6 +1170,12 @@ export class TripService {
       throw new ValidationError("Expense not found");
     }
 
+    if (!canModifyExpense(expense, details.trip.ownerId, auth.userId)) {
+      throw new ForbiddenError(
+        "Only the person who added this expense (or the trip owner) can edit it"
+      );
+    }
+
     if (parsed.data.draft === true && !expense.draft) {
       throw new ValidationError(
         "A published expense cannot be turned back into a draft"
@@ -1299,11 +1314,10 @@ export class TripService {
       throw new ValidationError("Expense not found");
     }
 
-    const canDelete =
-      expense.paidByMemberId === auth.userId ||
-      details.trip.ownerId === auth.userId;
-    if (!canDelete) {
-      throw new ForbiddenError("Not authorized to delete this expense");
+    if (!canModifyExpense(expense, details.trip.ownerId, auth.userId)) {
+      throw new ForbiddenError(
+        "Only the person who added this expense (or the trip owner) can delete it"
+      );
     }
 
     await getTripStore().softDeleteExpense(tripId, expenseId, auth.userId);

@@ -36,11 +36,16 @@ enum _Phase { analyzing, analyzeFailed, review }
 /// With no [imageBytes] it runs in manual mode: no analyze step, no receipt
 /// thumbnail or upload — just the itemized review form ("New itemized
 /// expense").
+///
+/// With [initialExpense] it edits in place: the form seeds from the existing
+/// items and saves via PATCH. Draft/published status is left untouched —
+/// publishing stays its own explicit action.
 class ScanReviewScreen extends StatefulWidget {
   final ApiClient api;
   final TripSummary summary;
   final Uint8List? imageBytes;
   final String? fileName;
+  final Expense? initialExpense;
 
   const ScanReviewScreen({
     super.key,
@@ -48,6 +53,7 @@ class ScanReviewScreen extends StatefulWidget {
     required this.summary,
     this.imageBytes,
     this.fileName,
+    this.initialExpense,
   });
 
   @override
@@ -59,6 +65,8 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   String? _analyzeError;
 
   bool get _isManual => widget.imageBytes == null;
+
+  bool get _isEditing => widget.initialExpense != null;
 
   final _descriptionController = TextEditingController();
   final _taxController = TextEditingController();
@@ -80,11 +88,44 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   @override
   void initState() {
     super.initState();
-    if (_isManual) {
+    if (_isEditing) {
+      _seedFromExpense(widget.initialExpense!);
+    } else if (_isManual) {
       _startManually();
     } else {
       _analyze();
     }
+  }
+
+  /// Seeds the review form from an existing expense (edit mode).
+  void _seedFromExpense(Expense expense) {
+    _vendor = expense.vendor;
+    _descriptionController.text = expense.description;
+    _uploadedReceiptId = expense.receiptId;
+    _extrasSplitMode = expense.extrasSplitMode ?? 'proportional';
+    if ((expense.tax ?? 0) > 0) {
+      _taxController.text = expense.tax!.toStringAsFixed(2);
+    }
+    if ((expense.tip ?? 0) > 0) {
+      _tipController.text = expense.tip!.toStringAsFixed(2);
+    }
+    for (final item in expense.lineItems ?? const <ExpenseLineItem>[]) {
+      _items.add(
+        EditableReceiptItem(
+          description: item.description,
+          amount: item.total,
+          assignedMemberIds: item.assignedMemberIds,
+        ),
+      );
+    }
+    if (_items.isEmpty) {
+      _items.add(
+        EditableReceiptItem(
+          assignedMemberIds: _members.map((member) => member.memberId),
+        ),
+      );
+    }
+    _phase = _Phase.review;
   }
 
   @override
@@ -324,8 +365,10 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       if (_vendor != null && _vendor!.isNotEmpty) 'vendor': _vendor,
       'total': result.grandTotal,
       'currency': _currency,
-      if (tax > 0) 'tax': tax,
-      if (tip > 0) 'tip': tip,
+      // When editing, send zeros explicitly — PATCH treats a missing field
+      // as "unchanged", which would resurrect a cleared tax or tip.
+      if (tax > 0 || _isEditing) 'tax': tax,
+      if (tip > 0 || _isEditing) 'tip': tip,
       'paidByMemberId': payerId,
       'sharedWithMemberIds': sharedWith.toList(),
       'splitEvenly': false,
@@ -388,21 +431,28 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     }
 
     onProgress(draft ? 'Saving draft…' : 'Saving…');
-    await widget.api.post(
-      '/trips/$tripId/expenses',
-      _buildExpensePayload(
-        payerId: payerId,
-        receiptId: _uploadedReceiptId,
-        result: result,
-        draft: draft,
-      ),
+    final payload = _buildExpensePayload(
+      payerId: payerId,
+      receiptId: _uploadedReceiptId,
+      result: result,
+      draft: draft,
     );
+    if (_isEditing) {
+      // PATCH keeps draft/published status as-is; publishing is a separate
+      // explicit action from the draft menu.
+      await widget.api.patch(
+        '/trips/$tripId/expenses/${widget.initialExpense!.expenseId}',
+        payload,
+      );
+    } else {
+      await widget.api.post('/trips/$tripId/expenses', payload);
+    }
 
     return ScanSaveResult(
       total: result.grandTotal,
       peopleCount: result.allocations.length,
       currency: _currency,
-      draft: draft,
+      draft: _isEditing ? widget.initialExpense!.draft : draft,
     );
   }
 
@@ -416,6 +466,8 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
         result: _computeResult(),
         currency: _currency,
         onSave: _save,
+        editing: _isEditing,
+        initialPayerId: widget.initialExpense?.paidByMemberId,
       ),
     );
     if (saved != null && mounted) {
@@ -438,7 +490,11 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isManual ? 'New itemized expense' : 'Scan receipt'),
+        title: Text(
+          _isEditing
+              ? (widget.initialExpense!.draft ? 'Edit draft' : 'Edit expense')
+              : (_isManual ? 'New itemized expense' : 'Scan receipt'),
+        ),
         centerTitle: false,
       ),
       body: LayoutBuilder(
@@ -805,11 +861,16 @@ class _ConfirmSheet extends StatefulWidget {
   })
   onSave;
 
+  final bool editing;
+  final String? initialPayerId;
+
   const _ConfirmSheet({
     required this.summary,
     required this.result,
     required this.currency,
     required this.onSave,
+    this.editing = false,
+    this.initialPayerId,
   });
 
   @override
@@ -832,10 +893,16 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
     final memberIds = widget.summary.members
         .map((member) => member.memberId)
         .toSet();
-    // Default the payer to the signed-in user when they're on the trip.
-    _payerId = memberIds.contains(widget.summary.currentUserId)
-        ? widget.summary.currentUserId
-        : widget.summary.members.first.memberId;
+    // Editing keeps the recorded payer; otherwise default to the signed-in
+    // user when they're on the trip.
+    final initial = widget.initialPayerId;
+    if (initial != null && memberIds.contains(initial)) {
+      _payerId = initial;
+    } else {
+      _payerId = memberIds.contains(widget.summary.currentUserId)
+          ? widget.summary.currentUserId
+          : widget.summary.members.first.memberId;
+    }
   }
 
   Future<void> _save({required bool draft}) async {
@@ -1024,44 +1091,46 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
                   : Text(
                       _phase == _SavePhase.failed && !_savingAsDraft
                           ? 'Retry save'
-                          : 'Save expense',
+                          : (widget.editing ? 'Save changes' : 'Save expense'),
                     ),
             ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: working ? null : () => _save(draft: true),
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                side: BorderSide(
-                  color: AppColors.warning.withValues(alpha: 0.45),
+            if (!widget.editing) ...[
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: working ? null : () => _save(draft: true),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  side: BorderSide(
+                    color: AppColors.warning.withValues(alpha: 0.45),
+                  ),
+                  foregroundColor: AppColors.warning,
                 ),
-                foregroundColor: AppColors.warning,
+                child: working && _savingAsDraft
+                    ? Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(_progressLabel),
+                        ],
+                      )
+                    : Text(
+                        _phase == _SavePhase.failed && _savingAsDraft
+                            ? 'Retry draft'
+                            : 'Save as draft',
+                      ),
               ),
-              child: working && _savingAsDraft
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(_progressLabel),
-                      ],
-                    )
-                  : Text(
-                      _phase == _SavePhase.failed && _savingAsDraft
-                          ? 'Retry draft'
-                          : 'Save as draft',
-                    ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Only you can see drafts until you publish.',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: Colors.white70),
-            ),
+              const SizedBox(height: 6),
+              const Text(
+                'Only you can see drafts until you publish.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: Colors.white70),
+              ),
+            ],
           ],
         ),
       ),

@@ -47,6 +47,14 @@ export const ExpenseCard = ({
   hasReceiptStorage,
   onViewReceipt
 }: ExpenseCardProps) => {
+  // Mirrors the server's ownership rule: the person who entered the expense
+  // (payer for legacy expenses without createdBy) or the trip owner.
+  const canModify =
+    isTripOwner ||
+    (expense.createdBy
+      ? expense.createdBy === currentUserId
+      : expense.paidByMemberId === currentUserId);
+
   const badges: string[] = [];
   if (typeof expense.tax === "number" && expense.tax > 0) {
     badges.push(`Tax ${formatCurrency.format(expense.tax)}`);
@@ -281,37 +289,41 @@ export const ExpenseCard = ({
           >
             <span aria-hidden="true">↻</span> Repeat
           </button>
-          <button
-            type="button"
-            className="secondary"
-            style={{
-              paddingInline: "0.7rem",
-              fontSize: "0.85rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem"
-            }}
-            title="Load this expense into the form and save changes to it"
-            onClick={() => onEditExpense(expense)}
-          >
-            <span aria-hidden="true">✎</span> Edit
-          </button>
-          <button
-            type="button"
-            className="secondary"
-            style={{
-              paddingInline: "0.7rem",
-              opacity: 0.6,
-              fontSize: "0.85rem"
-            }}
-            disabled={deleteDisabled}
-            title="Move to Recently deleted (undoable for now)"
-            onClick={() => {
-              onDeleteExpense(expense.expenseId, expense.description).catch(() => {});
-            }}
-          >
-            Delete
-          </button>
+          {canModify && (
+            <>
+              <button
+                type="button"
+                className="secondary"
+                style={{
+                  paddingInline: "0.7rem",
+                  fontSize: "0.85rem",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.3rem"
+                }}
+                title="Load this expense into the form and save changes to it"
+                onClick={() => onEditExpense(expense)}
+              >
+                <span aria-hidden="true">✎</span> Edit
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                style={{
+                  paddingInline: "0.7rem",
+                  opacity: 0.6,
+                  fontSize: "0.85rem"
+                }}
+                disabled={deleteDisabled}
+                title="Move to Recently deleted (undoable for now)"
+                onClick={() => {
+                  onDeleteExpense(expense.expenseId, expense.description).catch(() => {});
+                }}
+              >
+                Delete
+              </button>
+            </>
+          )}
         </div>
       </div>
       <ExpenseCommentsThread
