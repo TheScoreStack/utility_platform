@@ -561,6 +561,87 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
 
+  Future<void> _showRecurringActions(RecurringExpense template) async {
+    final summary = _summary;
+    if (summary == null) return;
+    HapticFeedback.selectionClick();
+    final canStop =
+        template.createdBy == summary.currentUserId ||
+        summary.trip.ownerId == summary.currentUserId;
+
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 8),
+            ListTile(
+              title: Text(
+                template.description,
+                style: const TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(
+                '${formatCurrency(template.total, template.currency)} · '
+                '${template.cadence == 'weekly' ? 'every week' : 'every month'}'
+                ' · next ${formatShortDate(template.nextRunAt) ?? 'soon'}',
+                style: const TextStyle(color: Colors.white70),
+              ),
+            ),
+            const Divider(height: 1),
+            if (canStop)
+              ListTile(
+                leading: const Icon(
+                  Icons.stop_circle_outlined,
+                  color: AppColors.danger,
+                ),
+                title: const Text(
+                  'Stop repeating',
+                  style: TextStyle(color: AppColors.danger),
+                ),
+                subtitle: const Text(
+                  'Already-added expenses stay; no new ones are created.',
+                  style: TextStyle(fontSize: 12, color: Colors.white54),
+                ),
+                onTap: () => Navigator.of(sheetContext).pop('stop'),
+              )
+            else
+              const ListTile(
+                leading: Icon(Icons.lock_outline_rounded, color: Colors.white38),
+                title: Text(
+                  'Only whoever set this up (or the trip owner) can stop it.',
+                  style: TextStyle(fontSize: 13, color: Colors.white54),
+                ),
+              ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (action != 'stop' || !mounted) return;
+
+    try {
+      await widget.api.delete(
+        '/trips/${widget.tripId}/recurring/${template.recurringId}',
+      );
+      if (!mounted) return;
+      HapticFeedback.lightImpact();
+      showAppSnackBar(
+        context,
+        'Stopped repeating "${template.description}"',
+        success: true,
+      );
+      await _load();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not stop the recurring expense.', error: true);
+    }
+  }
+
   /// Mirrors the server's ownership rule: the person who entered the expense
   /// (payer for legacy expenses without `createdBy`) or the trip owner.
   bool _canModifyExpense(Expense expense) {
@@ -800,6 +881,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 onReceiptTap: _openReceipt,
                 onDraftPublish: _confirmPublishDraft,
                 onDraftLongPress: _showDraftActions,
+                onRecurringTap: _showRecurringActions,
               ),
               SettleUpView(api: widget.api, summary: summary, onRefresh: _load),
             ],
@@ -911,6 +993,7 @@ class _ExpensesTab extends StatelessWidget {
   final Future<void> Function(Expense) onReceiptTap;
   final Future<void> Function(Expense) onDraftPublish;
   final Future<void> Function(Expense) onDraftLongPress;
+  final Future<void> Function(RecurringExpense) onRecurringTap;
 
   const _ExpensesTab({
     required this.summary,
@@ -919,6 +1002,7 @@ class _ExpensesTab extends StatelessWidget {
     required this.onReceiptTap,
     required this.onDraftPublish,
     required this.onDraftLongPress,
+    required this.onRecurringTap,
   });
 
   @override
@@ -981,6 +1065,83 @@ class _ExpensesTab extends StatelessWidget {
                       draft: draft,
                       onPublish: () => onDraftPublish(draft),
                       onLongPress: () => onDraftLongPress(draft),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (summary.recurringExpenses.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.autorenew_rounded,
+                        size: 16,
+                        color: Color(0xFFA5B4FC),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Recurring',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  ...summary.recurringExpenses.map(
+                    (template) => Card(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        side: const BorderSide(color: Colors.white10),
+                      ),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () => onRecurringTap(template),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      template.description,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      '${template.cadence == 'weekly' ? 'Every week' : 'Every month'}'
+                                      ' · next ${formatShortDate(template.nextRunAt) ?? 'soon'}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Text(
+                                formatCurrency(
+                                  template.total,
+                                  template.currency,
+                                ),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontFeatures: kTabularFigures,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(
+                                Icons.more_horiz_rounded,
+                                size: 16,
+                                color: Colors.white38,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),

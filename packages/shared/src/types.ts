@@ -28,10 +28,33 @@ export interface TripMember {
   placeholder?: boolean;
 }
 
+export type PaymentMethodKey = "venmo" | "paypal" | "zelle";
+
 export interface PaymentMethods {
   venmo?: string;
   paypal?: string;
   zelle?: string;
+  /** The method this person prefers to be paid through. */
+  primary?: PaymentMethodKey;
+}
+
+export type RecurrenceCadence = "weekly" | "monthly";
+
+/** Template that materializes an evenly split expense on a schedule. */
+export interface RecurringExpense {
+  tripId: string;
+  recurringId: string;
+  description: string;
+  total: number;
+  currency: string;
+  paidByMemberId: string;
+  sharedWithMemberIds: string[];
+  cadence: RecurrenceCadence;
+  /** ISO timestamp of the next materialization. */
+  nextRunAt: string;
+  lastRunAt?: string;
+  createdBy: string;
+  createdAt: string;
 }
 
 export interface TripInvite {

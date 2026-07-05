@@ -26,16 +26,53 @@ class PaymentMethods {
   final String? paypal;
   final String? zelle;
 
-  const PaymentMethods({this.venmo, this.paypal, this.zelle});
+  /// Which method ('venmo' | 'paypal' | 'zelle') this person prefers to be
+  /// paid through.
+  final String? primary;
+
+  const PaymentMethods({this.venmo, this.paypal, this.zelle, this.primary});
 
   factory PaymentMethods.fromJson(Map<String, dynamic> json) => PaymentMethods(
     venmo: json['venmo'] as String?,
     paypal: json['paypal'] as String?,
     zelle: json['zelle'] as String?,
+    primary: json['primary'] as String?,
   );
 
-  Map<String, dynamic> toJson() =>
-      _withoutNulls({'venmo': venmo, 'paypal': paypal, 'zelle': zelle});
+  Map<String, dynamic> toJson() => _withoutNulls({
+    'venmo': venmo,
+    'paypal': paypal,
+    'zelle': zelle,
+    'primary': primary,
+  });
+
+  /// Handle for a given method key, or null when unset/blank.
+  String? handleFor(String method) {
+    final value = switch (method) {
+      'venmo' => venmo,
+      'paypal' => paypal,
+      'zelle' => zelle,
+      _ => null,
+    };
+    return (value == null || value.trim().isEmpty) ? null : value;
+  }
+
+  bool get isEmpty =>
+      handleFor('venmo') == null &&
+      handleFor('paypal') == null &&
+      handleFor('zelle') == null;
+
+  /// Filled-in method keys with the preferred one first.
+  List<String> get orderedKeys {
+    final keys = ['venmo', 'paypal', 'zelle']
+        .where((method) => handleFor(method) != null)
+        .toList();
+    final preferred = primary;
+    if (preferred != null && keys.remove(preferred)) {
+      keys.insert(0, preferred);
+    }
+    return keys;
+  }
 }
 
 class Trip {
@@ -532,6 +569,55 @@ class BalanceRow {
 }
 
 /// `GET /trips/:id` response (see `tripService.getTripSummary`).
+/// Template that materializes an evenly split expense on a schedule.
+class RecurringExpense {
+  final String tripId;
+  final String recurringId;
+  final String description;
+  final double total;
+  final String currency;
+  final String paidByMemberId;
+  final List<String> sharedWithMemberIds;
+
+  /// 'weekly' | 'monthly'
+  final String cadence;
+  final String nextRunAt;
+  final String? lastRunAt;
+  final String createdBy;
+  final String createdAt;
+
+  const RecurringExpense({
+    required this.tripId,
+    required this.recurringId,
+    required this.description,
+    required this.total,
+    required this.currency,
+    required this.paidByMemberId,
+    required this.sharedWithMemberIds,
+    required this.cadence,
+    required this.nextRunAt,
+    this.lastRunAt,
+    required this.createdBy,
+    required this.createdAt,
+  });
+
+  factory RecurringExpense.fromJson(Map<String, dynamic> json) =>
+      RecurringExpense(
+        tripId: _reqString(json['tripId']),
+        recurringId: _reqString(json['recurringId']),
+        description: _reqString(json['description']),
+        total: _reqDouble(json['total']),
+        currency: (json['currency'] as String?) ?? 'USD',
+        paidByMemberId: _reqString(json['paidByMemberId']),
+        sharedWithMemberIds: _stringList(json['sharedWithMemberIds']),
+        cadence: _reqString(json['cadence']),
+        nextRunAt: _reqString(json['nextRunAt']),
+        lastRunAt: json['lastRunAt'] as String?,
+        createdBy: _reqString(json['createdBy']),
+        createdAt: _reqString(json['createdAt']),
+      );
+}
+
 class TripSummary {
   final Trip trip;
   final List<TripMember> members;
@@ -546,6 +632,7 @@ class TripSummary {
   final List<Settlement> deletedSettlements;
   final List<BalanceRow> balances;
   final List<Settlement> pendingSettlements;
+  final List<RecurringExpense> recurringExpenses;
   final String currentUserId;
 
   const TripSummary({
@@ -559,6 +646,7 @@ class TripSummary {
     required this.deletedSettlements,
     required this.balances,
     required this.pendingSettlements,
+    this.recurringExpenses = const [],
     required this.currentUserId,
   });
 
@@ -578,6 +666,10 @@ class TripSummary {
     pendingSettlements: _mapList(
       json['pendingSettlements'],
       Settlement.fromJson,
+    ),
+    recurringExpenses: _mapList(
+      json['recurringExpenses'],
+      RecurringExpense.fromJson,
     ),
     currentUserId: _reqString(json['currentUserId']),
   );

@@ -280,6 +280,37 @@ export class GroupExpensesStack extends Stack {
       description: "Fires the weekly group-expenses digest every Sunday 14:00 UTC"
     });
 
+    const recurringExpensesLambda = new NodejsFunction(
+      this,
+      "RecurringExpensesHandler",
+      {
+        ...sharedFunctionProps,
+        timeout: Duration.minutes(2),
+        memorySize: 512,
+        entry: path.join(
+          stackDir,
+          "../../../services/api/src/handlers/recurringExpenses.ts"
+        ),
+        logRetention: RetentionDays.ONE_WEEK,
+        environment: {
+          TABLE_NAME: table.tableName,
+          RECEIPT_BUCKET: receiptBucket.bucketName,
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+        }
+      }
+    );
+    table.grantReadWriteData(recurringExpensesLambda);
+
+    new Rule(this, "RecurringExpensesSchedule", {
+      schedule: Schedule.cron({
+        minute: "5",
+        hour: "13"
+      }),
+      targets: [new LambdaFunction(recurringExpensesLambda)],
+      description:
+        "Materializes due recurring expenses daily at 13:05 UTC (morning in the US)"
+    });
+
     textractLambda.addToRolePolicy(
       new PolicyStatement({
         actions: ["textract:AnalyzeExpense"],

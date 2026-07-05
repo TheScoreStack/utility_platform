@@ -444,6 +444,22 @@ export const handler = async (
         return ok(url, origin);
       }
 
+      if (remainder === "/recurring" && method === "POST") {
+        const body = parseBody(event);
+        const template = await tripService.createRecurringExpense(
+          tripId,
+          body,
+          auth
+        );
+        return created(template, origin);
+      }
+      const recurringMatch = remainder.match(/^\/recurring\/([^/]+)$/);
+      if (recurringMatch && method === "DELETE") {
+        const recurringId = decodeURIComponent(recurringMatch[1]);
+        await tripService.deleteRecurringExpense(tripId, recurringId, auth);
+        return noContent(origin);
+      }
+
       if (remainder === "/settlements" && method === "POST") {
         const body = parseBody(event);
         const settlement = await tripService.recordSettlement(tripId, body, auth);

@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { nanoid } from "nanoid";
 import { z } from "zod";
-import { TripStore } from "../data/tripStore.js";
+import { TripStore, type TripDetails } from "../data/tripStore.js";
 import { UserStore } from "../data/userStore.js";
 import {
   Trip,
@@ -14,10 +14,12 @@ import {
   Settlement,
   UserProfile,
   type TextractExtraction,
-  PaymentMethods
+  PaymentMethods,
+  RecurringExpense
 } from "../types.js";
 import { ValidationError, ForbiddenError, NotFoundError } from "../lib/errors.js";
 import { buildItemizedAllocations } from "../lib/splitMath.js";
+import { advanceCadence } from "../lib/recurrence.js";
 import {
   rewriteExpenseMember,
   rewriteSettlementMember
@@ -190,6 +192,15 @@ const confirmSettlementSchema = z.object({
   confirmed: z.boolean()
 });
 
+const recurringExpenseSchema = z.object({
+  description: z.string().min(1).max(200),
+  total: z.number().positive(),
+  currency: z.string().optional(),
+  paidByMemberId: z.string().min(1),
+  sharedWithMemberIds: z.array(z.string().min(1)).min(1),
+  cadence: z.enum(["weekly", "monthly"])
+});
+
 const updateSettlementSchema = z.object({
   fromMemberId: z.string().min(1).optional(),
   toMemberId: z.string().min(1).optional(),
@@ -204,13 +215,15 @@ const paymentMethodsSchema = z
   .object({
     venmo: paymentMethodField,
     paypal: paymentMethodField,
-    zelle: paymentMethodField
+    zelle: paymentMethodField,
+    primary: z.union([z.enum(["venmo", "paypal", "zelle"]), z.null()]).optional()
   })
   .refine(
     (methods) =>
       methods.venmo !== undefined ||
       methods.paypal !== undefined ||
-      methods.zelle !== undefined,
+      methods.zelle !== undefined ||
+      methods.primary !== undefined,
     { message: "No payment methods provided" }
   );
 
@@ -875,11 +888,25 @@ export class TripService {
     }
 
     const cleaned: Partial<Record<keyof PaymentMethods, string | null>> = {};
-    (["venmo", "paypal", "zelle"] as Array<keyof PaymentMethods>).forEach((key) => {
-      const value = parsed.data[key];
-      if (value === undefined) return;
-      cleaned[key] = value === null ? null : value.trim();
-    });
+    (["venmo", "paypal", "zelle", "primary"] as Array<keyof PaymentMethods>).forEach(
+      (key) => {
+        const value = parsed.data[key];
+        if (value === undefined) return;
+        cleaned[key] = value === null ? null : value.trim();
+      }
+    );
+
+    // A preferred method has to point at a handle that will actually exist
+    // after this update.
+    if (typeof cleaned.primary === "string") {
+      const profile = await getUserStore().getUser(auth.userId);
+      const merged = { ...(profile?.paymentMethods ?? {}), ...cleaned };
+      if (!merged[cleaned.primary as keyof PaymentMethods]) {
+        throw new ValidationError(
+          "Add a handle for your preferred method before making it primary"
+        );
+      }
+    }
 
     await getUserStore().updatePaymentMethods(auth.userId, cleaned);
   }
@@ -1436,6 +1463,149 @@ export class TripService {
 
     await getTripStore().saveReceipt(receipt);
     return receipt;
+  }
+
+  /** Creates a repeating-expense template. The caller records today's
+   *  expense through the normal flow; the template's first materialization
+   *  is one cadence step out. */
+  async createRecurringExpense(
+    tripId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<RecurringExpense> {
+    const parsed = recurringExpenseSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const isMember = details.members.some(
+      (member) => member.memberId === auth.userId
+    );
+    if (!isMember) {
+      throw new ForbiddenError("You are not part of this trip");
+    }
+    ensureMember(details.members, parsed.data.paidByMemberId);
+    parsed.data.sharedWithMemberIds.forEach((memberId) =>
+      ensureMember(details.members, memberId)
+    );
+
+    const now = isoNow();
+    const template: RecurringExpense = {
+      tripId,
+      recurringId: `rec_${nanoid(10)}`,
+      description: parsed.data.description,
+      total: parsed.data.total,
+      currency: parsed.data.currency ?? details.trip.currency,
+      paidByMemberId: parsed.data.paidByMemberId,
+      sharedWithMemberIds: Array.from(
+        new Set(parsed.data.sharedWithMemberIds)
+      ),
+      cadence: parsed.data.cadence,
+      nextRunAt: advanceCadence(now, parsed.data.cadence),
+      createdBy: auth.userId,
+      createdAt: now
+    };
+
+    await getTripStore().saveRecurringExpense(template);
+    return template;
+  }
+
+  async deleteRecurringExpense(
+    tripId: string,
+    recurringId: string,
+    auth: AuthContext
+  ): Promise<void> {
+    await ensureCurrentUserProfile(auth);
+    const details = await getTripStore().getTripDetails(tripId);
+    const template = details.recurringExpenses.find(
+      (item) => item.recurringId === recurringId
+    );
+    if (!template) {
+      throw new ValidationError("Recurring expense not found");
+    }
+    // Same ownership shape as expenses: whoever set it up, or the owner.
+    if (
+      template.createdBy !== auth.userId &&
+      details.trip.ownerId !== auth.userId
+    ) {
+      throw new ForbiddenError(
+        "Only the person who set up this recurring expense (or the trip owner) can stop it"
+      );
+    }
+    await getTripStore().deleteRecurringExpense(tripId, recurringId);
+  }
+
+  /** Daily scheduler entry point: creates the expense for every due
+   *  template and advances its next run. Returns the created count. */
+  async materializeDueRecurringExpenses(): Promise<number> {
+    const now = isoNow();
+    const due = await getTripStore().listDueRecurringExpenses(now);
+    if (!due.length) return 0;
+
+    const detailsByTrip = new Map<string, TripDetails>();
+    let created = 0;
+
+    for (const template of due) {
+      try {
+        let details = detailsByTrip.get(template.tripId);
+        if (!details) {
+          details = await getTripStore().getTripDetails(template.tripId);
+          detailsByTrip.set(template.tripId, details);
+        }
+
+        const memberIds = new Set(
+          details.members.map((member) => member.memberId)
+        );
+        const sharedWith = template.sharedWithMemberIds.filter((memberId) =>
+          memberIds.has(memberId)
+        );
+
+        // Members can leave between runs; skip this cycle rather than
+        // billing people who are gone, but keep the schedule advancing.
+        if (
+          sharedWith.length &&
+          memberIds.has(template.paidByMemberId) &&
+          !details.trip.archivedAt
+        ) {
+          const allocations = buildEvenSplitAllocations(
+            template.total,
+            sharedWith,
+            template.paidByMemberId
+          );
+          const createdAt = isoNow();
+          await getTripStore().saveExpense({
+            tripId: template.tripId,
+            expenseId: `exp_${nanoid(10)}`,
+            createdAt,
+            updatedAt: createdAt,
+            description: template.description,
+            total: template.total,
+            currency: template.currency,
+            paidByMemberId: template.paidByMemberId,
+            sharedWithMemberIds: sharedWith,
+            allocations,
+            createdBy: template.createdBy
+          });
+          created += 1;
+        }
+
+        await getTripStore().advanceRecurringExpense(
+          template,
+          advanceCadence(template.nextRunAt, template.cadence),
+          now
+        );
+      } catch (error) {
+        // One broken template must not stall the whole run.
+        console.error(
+          `Recurring materialization failed for ${template.tripId}/${template.recurringId}`,
+          error
+        );
+      }
+    }
+
+    return created;
   }
 
   async recordSettlement(

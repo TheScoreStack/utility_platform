@@ -9,7 +9,7 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { getDocumentClient } from "./dynamo.js";
 import { loadConfig } from "../config.js";
-import { Trip, TripMember, Expense, Receipt, Settlement, PaymentMethods, TripInvite, ExpenseComment } from "../types.js";
+import { Trip, TripMember, Expense, Receipt, Settlement, PaymentMethods, TripInvite, ExpenseComment, RecurringExpense } from "../types.js";
 import { NotFoundError } from "../lib/errors.js";
 
 const keys = {
@@ -20,6 +20,7 @@ const keys = {
   expenseSk: (expenseId: string) => `EXPENSE#${expenseId}`,
   receiptSk: (receiptId: string) => `RECEIPT#${receiptId}`,
   settlementSk: (settlementId: string) => `SETTLEMENT#${settlementId}`,
+  recurringSk: (recurringId: string) => `RECURRING#${recurringId}`,
   invitePk: (inviteId: string) => `INVITE#${inviteId}`,
   inviteSk: "METADATA",
   commentSk: (expenseId: string, commentId: string) =>
@@ -66,6 +67,36 @@ type SettlementEntity = Settlement & {
   SK: string;
 };
 
+/** Due-scan support: every template carries GSI2 keys so the daily
+ *  materializer can query all due templates across trips in one go. */
+const RECURRING_DUE_PARTITION = "RECURRING_DUE";
+
+type RecurringEntity = RecurringExpense & {
+  entityType: "RecurringExpense";
+  PK: string;
+  SK: string;
+  GSI2PK: string;
+  GSI2SK: string;
+};
+
+const recurringGsi2Sk = (template: RecurringExpense): string =>
+  `${template.nextRunAt}#${template.tripId}#${template.recurringId}`;
+
+const toRecurring = (item: Record<string, unknown>): RecurringExpense => ({
+  tripId: item.tripId as string,
+  recurringId: item.recurringId as string,
+  description: item.description as string,
+  total: item.total as number,
+  currency: item.currency as string,
+  paidByMemberId: item.paidByMemberId as string,
+  sharedWithMemberIds: (item.sharedWithMemberIds as string[]) ?? [],
+  cadence: item.cadence as RecurringExpense["cadence"],
+  nextRunAt: item.nextRunAt as string,
+  lastRunAt: item.lastRunAt as string | undefined,
+  createdBy: item.createdBy as string,
+  createdAt: item.createdAt as string
+});
+
 const toTrip = (item: TripEntity): Trip => ({
   tripId: item.tripId,
   ownerId: item.ownerId,
@@ -90,6 +121,7 @@ export interface TripDetails {
   receipts: Receipt[];
   settlements: Settlement[];
   deletedSettlements: Settlement[];
+  recurringExpenses: RecurringExpense[];
 }
 
 export class TripStore {
@@ -302,6 +334,12 @@ export class TripStore {
       .filter((s) => Boolean(s.deletedAt))
       .sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
 
+    const recurringExpenses = Items.filter(
+      (item) => item.entityType === "RecurringExpense"
+    )
+      .map((item) => toRecurring(item))
+      .sort((a, b) => a.nextRunAt.localeCompare(b.nextRunAt));
+
     return {
       trip,
       members,
@@ -310,8 +348,83 @@ export class TripStore {
       deletedExpenses,
       receipts,
       settlements,
-      deletedSettlements
+      deletedSettlements,
+      recurringExpenses
     };
+  }
+
+  async saveRecurringExpense(template: RecurringExpense): Promise<void> {
+    const item: RecurringEntity = {
+      entityType: "RecurringExpense",
+      PK: keys.tripPk(template.tripId),
+      SK: keys.recurringSk(template.recurringId),
+      GSI2PK: RECURRING_DUE_PARTITION,
+      GSI2SK: recurringGsi2Sk(template),
+      ...template
+    };
+    await this.docClient.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: item
+      })
+    );
+  }
+
+  async deleteRecurringExpense(
+    tripId: string,
+    recurringId: string
+  ): Promise<void> {
+    await this.docClient.send(
+      new DeleteCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(tripId),
+          SK: keys.recurringSk(recurringId)
+        }
+      })
+    );
+  }
+
+  /** All templates whose nextRunAt is at or before `nowIso`, across trips. */
+  async listDueRecurringExpenses(nowIso: string): Promise<RecurringExpense[]> {
+    const { Items } = await this.docClient.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        IndexName: "GSI2",
+        KeyConditionExpression: "GSI2PK = :pk AND GSI2SK <= :due",
+        ExpressionAttributeValues: {
+          ":pk": RECURRING_DUE_PARTITION,
+          // '#' sorts after digits, so this catches every timestamp <= now.
+          ":due": `${nowIso}#￿`
+        }
+      })
+    );
+    return (Items ?? []).map((item) => toRecurring(item));
+  }
+
+  /** Moves a template to its next scheduled run (keeps GSI2 in sync). */
+  async advanceRecurringExpense(
+    template: RecurringExpense,
+    nextRunAt: string,
+    lastRunAt: string
+  ): Promise<void> {
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: keys.tripPk(template.tripId),
+          SK: keys.recurringSk(template.recurringId)
+        },
+        UpdateExpression:
+          "SET nextRunAt = :next, lastRunAt = :last, GSI2SK = :gsi2sk",
+        ExpressionAttributeValues: {
+          ":next": nextRunAt,
+          ":last": lastRunAt,
+          ":gsi2sk": recurringGsi2Sk({ ...template, nextRunAt })
+        },
+        ConditionExpression: "attribute_exists(PK)"
+      })
+    );
   }
 
   async archiveTrip(tripId: string, archivedBy: string): Promise<void> {

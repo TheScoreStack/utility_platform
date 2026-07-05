@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { orderedPayableMethods } from "../../lib/paymentLinks";
 import { OvAvatar } from "./OvAvatar";
 import type { PaymentMethods, TripInvite, TripSummary, UserProfile } from "../../types";
 
@@ -6,6 +7,7 @@ export type PaymentMethodsInput = {
   venmo?: string | null;
   paypal?: string | null;
   zelle?: string | null;
+  primary?: "venmo" | "paypal" | "zelle" | null;
 };
 
 interface InviteLinkBoxProps {
@@ -192,12 +194,25 @@ export const PeopleTab = ({
     setMethodDraft(paymentMethodsByMember[editableMemberId] ?? {});
   }, [editableMemberId, paymentMethodsByMember]);
 
+  const filledDraftKeys = (["venmo", "paypal", "zelle"] as const).filter((key) =>
+    (methodDraft[key] ?? "").trim()
+  );
+
   const handleSave = () => {
     if (!editableMemberId) return;
+    // Preference must point at a filled handle; a single handle is
+    // automatically the preference.
+    const chosen =
+      methodDraft.primary && filledDraftKeys.includes(methodDraft.primary)
+        ? methodDraft.primary
+        : filledDraftKeys.length === 1
+          ? filledDraftKeys[0]
+          : null;
     const payload: PaymentMethodsInput = {
       venmo: (methodDraft.venmo ?? "").trim() || null,
       paypal: (methodDraft.paypal ?? "").trim() || null,
-      zelle: (methodDraft.zelle ?? "").trim() || null
+      zelle: (methodDraft.zelle ?? "").trim() || null,
+      primary: chosen
     };
     onSavePaymentMethods(payload);
   };
@@ -245,11 +260,7 @@ export const PeopleTab = ({
                   member.email ??
                   member.memberId;
                 const methods = paymentMethodsByMember[member.memberId];
-                const methodEntries = methods
-                  ? (Object.entries(methods).filter(
-                      ([, value]) => typeof value === "string" && value.trim()
-                    ) as Array<[string, string]>)
-                  : [];
+                const methodEntries = orderedPayableMethods(methods);
 
                 return (
                   <article
@@ -296,7 +307,11 @@ export const PeopleTab = ({
                           {methodEntries.map(([method, value]) => (
                             <PplPayChip
                               key={method}
-                              method={method}
+                              method={
+                                methods?.primary === method
+                                  ? `${method} ★`
+                                  : method
+                              }
                               value={value}
                             />
                           ))}
@@ -514,6 +529,42 @@ export const PeopleTab = ({
                     </div>
                   </div>
                 ))}
+
+                {filledDraftKeys.length > 1 && (
+                  <div style={{ marginTop: "0.35rem" }}>
+                    <p className="ppl-panel__sub" style={{ marginBottom: "0.4rem" }}>
+                      Preferred — shown first when someone pays you.
+                    </p>
+                    <div style={{ display: "flex", gap: "0.9rem", flexWrap: "wrap" }}>
+                      {filledDraftKeys.map((key) => (
+                        <label
+                          key={key}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.35rem",
+                            fontSize: "0.85rem",
+                            textTransform: "capitalize",
+                            cursor: "pointer"
+                          }}
+                        >
+                          <input
+                            type="radio"
+                            name="preferred-method"
+                            checked={methodDraft.primary === key}
+                            onChange={() =>
+                              setMethodDraft((current) => ({
+                                ...current,
+                                primary: key
+                              }))
+                            }
+                          />
+                          {key}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {paymentMethodsMessage && (
                   <p

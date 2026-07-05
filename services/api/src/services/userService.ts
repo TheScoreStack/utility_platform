@@ -16,7 +16,8 @@ const paymentMethodsSchema = z
   .object({
     venmo: paymentMethodField,
     paypal: paymentMethodField,
-    zelle: paymentMethodField
+    zelle: paymentMethodField,
+    primary: z.union([z.enum(["venmo", "paypal", "zelle"]), z.null()]).optional()
   })
   .superRefine((value, ctx) => {
     const hasValue = Object.values(value).some((item) => item !== undefined);
@@ -71,11 +72,23 @@ export class UserService {
     const cleaned: Partial<
       Record<keyof NonNullable<UserProfile["paymentMethods"]>, string | null>
     > = {};
-    (["venmo", "paypal", "zelle"] as const).forEach((key) => {
+    (["venmo", "paypal", "zelle", "primary"] as const).forEach((key) => {
       const value = parsed.data[key];
       if (value === undefined) return;
       cleaned[key] = value === null ? null : value.trim();
     });
+
+    // A preferred method has to point at a handle that will exist after
+    // this update.
+    if (typeof cleaned.primary === "string") {
+      const current = await userStore.getUser(auth.userId);
+      const merged = { ...(current?.paymentMethods ?? {}), ...cleaned };
+      if (!merged[cleaned.primary as "venmo" | "paypal" | "zelle"]) {
+        throw new ValidationError(
+          "Add a handle for your preferred method before making it primary"
+        );
+      }
+    }
 
     await userStore.updatePaymentMethods(auth.userId, cleaned);
 

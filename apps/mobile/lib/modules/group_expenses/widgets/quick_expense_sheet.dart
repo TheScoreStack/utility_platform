@@ -72,6 +72,10 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
   bool _savingAsDraft = false;
   String? _error;
 
+  /// 'none' | 'weekly' | 'monthly' — creates a repeating template alongside
+  /// the expense. Only offered when creating (not editing).
+  String _cadence = 'none';
+
   List<TripMember> get _members => widget.summary.members;
 
   String get _currency => widget.summary.trip.currency;
@@ -160,6 +164,18 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
         );
       } else {
         await widget.api.post('/trips/$tripId/expenses', payload);
+        if (_cadence != 'none') {
+          // Today's expense was just recorded; the template takes over from
+          // the next cycle.
+          await widget.api.post('/trips/$tripId/recurring', {
+            'description': description.isEmpty ? 'Expense' : description,
+            'total': total,
+            'currency': _currency,
+            'paidByMemberId': _payerId,
+            'sharedWithMemberIds': memberIds,
+            'cadence': _cadence,
+          });
+        }
       }
       if (!mounted) return;
       HapticFeedback.mediumImpact();
@@ -341,6 +357,47 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
                   style: const TextStyle(fontSize: 12, color: Colors.white70),
                 ),
               ],
+              if (!_isEditing) ...[
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Text('REPEATS', style: eyebrowStyle()),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'none', label: Text('Never')),
+                          ButtonSegment(value: 'weekly', label: Text('Weekly')),
+                          ButtonSegment(
+                            value: 'monthly',
+                            label: Text('Monthly'),
+                          ),
+                        ],
+                        selected: {_cadence},
+                        showSelectedIcon: false,
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onSelectionChanged: _saving
+                            ? null
+                            : (selection) {
+                                HapticFeedback.selectionClick();
+                                setState(() => _cadence = selection.first);
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+                if (_cadence != 'none') ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Adds this expense automatically every '
+                    '${_cadence == 'weekly' ? 'week' : 'month'} — manage it '
+                    'from the Recurring section.',
+                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
+                ],
+              ],
               if (_error != null) ...[
                 const SizedBox(height: 10),
                 Text(
@@ -367,7 +424,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
                             (_isEditing ? 'Save changes' : 'Save expense'),
                       ),
               ),
-              if (!_isEditing) ...[
+              if (!_isEditing && _cadence == 'none') ...[
                 const SizedBox(height: 8),
                 OutlinedButton(
                   onPressed: blockedReason == null && !_saving

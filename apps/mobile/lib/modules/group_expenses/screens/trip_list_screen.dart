@@ -8,6 +8,7 @@ import '../../../core/formatters.dart';
 import '../../../models/models.dart';
 import '../widgets/join_trip_sheet.dart';
 import '../widgets/new_trip_sheet.dart';
+import '../widgets/payment_methods_sheet.dart';
 import 'account_screen.dart';
 import 'trip_detail_screen.dart';
 
@@ -32,6 +33,11 @@ class TripListScreen extends StatefulWidget {
 }
 
 class _TripListScreenState extends State<TripListScreen> {
+  /// Once per app run: nudge people with no payment methods to add one so
+  /// settling up works out of the box. Never re-shown after "Maybe later"
+  /// within the same run.
+  static bool _paymentPromptShown = false;
+
   List<TripListItem>? _trips;
   String? _error;
   bool _loading = true;
@@ -45,6 +51,36 @@ class _TripListScreenState extends State<TripListScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _joinTrip(initialInput: inviteId);
       });
+    } else {
+      // Don't compete with the join sheet when arriving via an invite link.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _maybePromptPaymentSetup();
+      });
+    }
+  }
+
+  Future<void> _maybePromptPaymentSetup() async {
+    if (_paymentPromptShown) return;
+    _paymentPromptShown = true;
+    try {
+      final data = await widget.api.get('/profile') as Map<String, dynamic>;
+      final profile = UserProfile.fromJson(
+        (data['profile'] as Map<String, dynamic>?) ?? const {},
+      );
+      final methods = profile.paymentMethods;
+      if (methods != null && !methods.isEmpty) return;
+      if (!mounted) return;
+      final saved = await showPaymentMethodsSheet(
+        context: context,
+        api: widget.api,
+        current: methods,
+        setupMode: true,
+      );
+      if (saved == true && mounted) {
+        showAppSnackBar(context, 'Payment methods saved', success: true);
+      }
+    } catch (_) {
+      // Purely a nudge — never block the trip list on it.
     }
   }
 

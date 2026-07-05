@@ -1,4 +1,5 @@
 import { FormEvent, WheelEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { orderedPayableMethods } from "../lib/paymentLinks";
 import type { PaymentMethods, TripMember } from "../types";
 
 export type SettlementPrefill = {
@@ -178,12 +179,11 @@ const SettlementForm = ({
   };
 
   const payeeMethods = paymentMethods?.[toMemberId];
-  const availableMethodEntries = useMemo(() => {
-    if (!payeeMethods) return [];
-    return Object.entries(payeeMethods).filter(([, value]) => Boolean(value)) as Array<
-      [keyof PaymentMethods, string]
-    >;
-  }, [payeeMethods]);
+  const availableMethodEntries = useMemo(
+    () =>
+      orderedPayableMethods(payeeMethods) as Array<[keyof PaymentMethods, string]>,
+    [payeeMethods]
+  );
 
   const balanceFormatter = useMemo(
     () =>
@@ -299,6 +299,9 @@ const SettlementForm = ({
             {availableMethodEntries.map(([method, value]) => (
               <li key={method} style={{ margin: "0.15rem 0" }}>
                 <strong style={{ textTransform: "capitalize" }}>{method}:</strong> {value}
+                {payeeMethods?.primary === method && (
+                  <em style={{ color: "#a5b4fc", marginLeft: "0.35rem" }}>· preferred</em>
+                )}
               </li>
             ))}
           </ul>

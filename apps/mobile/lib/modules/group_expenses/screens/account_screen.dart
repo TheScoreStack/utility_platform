@@ -7,6 +7,7 @@ import '../../../core/auth_messages.dart';
 import '../../../core/auth_service.dart';
 import '../../../models/models.dart';
 import '../widgets/member_avatar.dart';
+import '../widgets/payment_methods_sheet.dart';
 
 /// Possible exit results the caller (trip list) reacts to.
 enum AccountScreenResult { signedOut, deleted }
@@ -63,14 +64,10 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _openPaymentMethods() async {
-    final saved = await showModalBottomSheet<bool>(
+    final saved = await showPaymentMethodsSheet(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (_) => _PaymentMethodsSheet(
-        api: widget.api,
-        current: _profile?.paymentMethods,
-      ),
+      api: widget.api,
+      current: _profile?.paymentMethods,
     );
     if (saved == true && mounted) {
       HapticFeedback.mediumImpact();
@@ -416,164 +413,6 @@ class _ChangePasswordSheetState extends State<_ChangePasswordSheet> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : Text(blockedReason ?? 'Update password'),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PaymentMethodsSheet extends StatefulWidget {
-  final ApiClient api;
-  final PaymentMethods? current;
-
-  const _PaymentMethodsSheet({required this.api, this.current});
-
-  @override
-  State<_PaymentMethodsSheet> createState() => _PaymentMethodsSheetState();
-}
-
-class _PaymentMethodsSheetState extends State<_PaymentMethodsSheet> {
-  late final TextEditingController _venmoController;
-  late final TextEditingController _paypalController;
-  late final TextEditingController _zelleController;
-  bool _working = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _venmoController = TextEditingController(text: widget.current?.venmo ?? '');
-    _paypalController = TextEditingController(
-      text: widget.current?.paypal ?? '',
-    );
-    _zelleController = TextEditingController(text: widget.current?.zelle ?? '');
-  }
-
-  @override
-  void dispose() {
-    _venmoController.dispose();
-    _paypalController.dispose();
-    _zelleController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _save() async {
-    if (_working) return;
-    setState(() {
-      _working = true;
-      _error = null;
-    });
-    // Empty fields are sent as null, which clears the stored handle.
-    String? valueOf(TextEditingController controller) {
-      final trimmed = controller.text.trim();
-      return trimmed.isEmpty ? null : trimmed;
-    }
-
-    try {
-      await widget.api.patch('/profile', {
-        'venmo': valueOf(_venmoController),
-        'paypal': valueOf(_paypalController),
-        'zelle': valueOf(_zelleController),
-      });
-      if (!mounted) return;
-      Navigator.of(context).pop(true);
-    } on ApiException catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _working = false;
-        _error = error.message;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _working = false;
-        _error = 'Could not save payment methods.';
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 8,
-          bottom: MediaQuery.of(context).viewInsets.bottom + 16,
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Payment methods',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                'Shown to trip members when they settle up with you.',
-                style: TextStyle(fontSize: 13, color: Colors.white70),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _venmoController,
-                enabled: !_working,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Venmo',
-                  hintText: '@username',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _paypalController,
-                enabled: !_working,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'PayPal',
-                  hintText: 'paypal.me handle',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _zelleController,
-                enabled: !_working,
-                autocorrect: false,
-                keyboardType: TextInputType.emailAddress,
-                onSubmitted: (_) => _save(),
-                decoration: const InputDecoration(
-                  labelText: 'Zelle',
-                  hintText: 'Email or phone number',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 10),
-                Text(
-                  _error!,
-                  style: const TextStyle(color: AppColors.danger, fontSize: 13),
-                ),
-              ],
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: _working ? null : _save,
-                style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
-                child: _working
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Save payment methods'),
               ),
             ],
           ),

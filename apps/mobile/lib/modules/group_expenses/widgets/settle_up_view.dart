@@ -57,6 +57,13 @@ class SettleUpView extends StatelessWidget {
         api: api,
         summary: summary,
         suggestion: suggestion,
+        onPay: (method, handle, amount) => _openPaymentLink(
+          context,
+          method,
+          handle,
+          amount: amount,
+          currency: summary.trip.currency,
+        ),
       ),
     );
     if (recorded == true && context.mounted) {
@@ -197,9 +204,10 @@ class SettleUpView extends StatelessWidget {
   Future<void> _openPaymentLink(
     BuildContext context,
     String method,
-    String handle,
-    Settlement settlement,
-  ) async {
+    String handle, {
+    required double amount,
+    required String currency,
+  }) async {
     if (method == 'zelle') {
       await Clipboard.setData(ClipboardData(text: handle));
       if (context.mounted) {
@@ -215,8 +223,8 @@ class SettleUpView extends StatelessWidget {
     if (method == 'venmo') {
       final appLink = buildVenmoAppLink(
         handle,
-        amount: settlement.amount,
-        currency: settlement.currency,
+        amount: amount,
+        currency: currency,
         note: note,
       );
       if (appLink != null) {
@@ -234,8 +242,8 @@ class SettleUpView extends StatelessWidget {
     final link = buildPaymentLink(
       method,
       handle,
-      amount: settlement.amount,
-      currency: settlement.currency,
+      amount: amount,
+      currency: currency,
       note: note,
     );
     if (link == null) {
@@ -425,8 +433,13 @@ class SettleUpView extends StatelessWidget {
                   nameOf: _name,
                   memberOf: _member,
                   onConfirm: () => _confirmSettlement(context, settlement),
-                  onPay: (method, handle) =>
-                      _openPaymentLink(context, method, handle, settlement),
+                  onPay: (method, handle) => _openPaymentLink(
+                    context,
+                    method,
+                    handle,
+                    amount: settlement.amount,
+                    currency: settlement.currency,
+                  ),
                   onMore: _canModify(settlement)
                       ? () => _showSettlementActions(context, settlement)
                       : null,
@@ -527,34 +540,44 @@ class _PendingSettlementCard extends StatelessWidget {
 
     final payButtons = <Widget>[];
     if (isPayer && recipientMethods != null) {
-      void addButton(String method, String? handle, IconData icon) {
-        if (handle == null || handle.trim().isEmpty) return;
+      // Preferred method first, and visually loudest — "pay this person
+      // through this method" should be a single obvious tap.
+      final ordered = recipientMethods.orderedKeys;
+      for (var i = 0; i < ordered.length; i++) {
+        final method = ordered[i];
+        final handle = recipientMethods.handleFor(method)!;
+        final icon = method == 'venmo'
+            ? Icons.bolt_rounded
+            : method == 'paypal'
+            ? Icons.account_balance_wallet_rounded
+            : Icons.copy_rounded;
+        final label = method == 'venmo'
+            ? 'Venmo'
+            : method == 'paypal'
+            ? 'PayPal'
+            : 'Zelle';
+        final isPreferred = i == 0 && recipientMethods.primary == method;
         payButtons.add(
-          OutlinedButton.icon(
-            onPressed: () => onPay(method, handle),
-            icon: Icon(icon, size: 16),
-            style: OutlinedButton.styleFrom(
-              visualDensity: VisualDensity.compact,
-              side: const BorderSide(color: Colors.white10),
-            ),
-            label: Text(
-              method == 'venmo'
-                  ? 'Venmo'
-                  : method == 'paypal'
-                  ? 'PayPal'
-                  : 'Zelle',
-            ),
-          ),
+          isPreferred
+              ? FilledButton.icon(
+                  onPressed: () => onPay(method, handle),
+                  icon: Icon(icon, size: 16),
+                  style: FilledButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  label: Text('Pay via $label'),
+                )
+              : OutlinedButton.icon(
+                  onPressed: () => onPay(method, handle),
+                  icon: Icon(icon, size: 16),
+                  style: OutlinedButton.styleFrom(
+                    visualDensity: VisualDensity.compact,
+                    side: const BorderSide(color: Colors.white10),
+                  ),
+                  label: Text(label),
+                ),
         );
       }
-
-      addButton('venmo', recipientMethods.venmo, Icons.bolt_rounded);
-      addButton(
-        'paypal',
-        recipientMethods.paypal,
-        Icons.account_balance_wallet_rounded,
-      );
-      addButton('zelle', recipientMethods.zelle, Icons.copy_rounded);
     }
 
     return Card(
@@ -644,11 +667,16 @@ class _RecordSettlementSheet extends StatefulWidget {
   final SettlementSuggestion? suggestion;
   final Settlement? initial;
 
+  /// Launches a payment deep link for (method, handle, amount). Only used
+  /// when the signed-in user is the payer.
+  final void Function(String method, String handle, double amount)? onPay;
+
   const _RecordSettlementSheet({
     required this.api,
     required this.summary,
     this.suggestion,
     this.initial,
+    this.onPay,
   }) : assert(suggestion != null || initial != null);
 
   @override
@@ -690,6 +718,98 @@ class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
       if (member.memberId == memberId) return member.displayName;
     }
     return 'Someone';
+  }
+
+  double get _enteredAmount =>
+      double.tryParse(_amountController.text.trim().replaceAll(',', '.')) ?? 0;
+
+  /// "Pay first, then record" — shown when the signed-in user is the payer
+  /// and the recipient has payment handles. Preferred method leads.
+  List<Widget> _buildPaySection() {
+    final onPay = widget.onPay;
+    if (_isEditing ||
+        onPay == null ||
+        _fromMemberId != widget.summary.currentUserId) {
+      return const [];
+    }
+    PaymentMethods? methods;
+    for (final member in widget.summary.members) {
+      if (member.memberId == _toMemberId) {
+        methods = member.paymentMethods;
+        break;
+      }
+    }
+    if (methods == null || methods.isEmpty) return const [];
+
+    final ordered = methods.orderedKeys;
+    final recipient = firstName(_name(_toMemberId));
+    final resolvedMethods = methods;
+
+    return [
+      const SizedBox(height: 16),
+      Text('PAY $recipient VIA'.toUpperCase(), style: eyebrowStyle()),
+      const SizedBox(height: 8),
+      Wrap(
+        spacing: 8,
+        runSpacing: 6,
+        children: [
+          for (var i = 0; i < ordered.length; i++)
+            (i == 0 && resolvedMethods.primary == ordered[i])
+                ? FilledButton.tonalIcon(
+                    onPressed: () => onPay(
+                      ordered[i],
+                      resolvedMethods.handleFor(ordered[i])!,
+                      _enteredAmount,
+                    ),
+                    icon: Icon(
+                      ordered[i] == 'venmo'
+                          ? Icons.bolt_rounded
+                          : ordered[i] == 'paypal'
+                          ? Icons.account_balance_wallet_rounded
+                          : Icons.copy_rounded,
+                      size: 16,
+                    ),
+                    label: Text(
+                      '${ordered[i] == 'venmo'
+                          ? 'Venmo'
+                          : ordered[i] == 'paypal'
+                          ? 'PayPal'
+                          : 'Zelle'} · preferred',
+                    ),
+                  )
+                : OutlinedButton.icon(
+                    onPressed: () => onPay(
+                      ordered[i],
+                      resolvedMethods.handleFor(ordered[i])!,
+                      _enteredAmount,
+                    ),
+                    icon: Icon(
+                      ordered[i] == 'venmo'
+                          ? Icons.bolt_rounded
+                          : ordered[i] == 'paypal'
+                          ? Icons.account_balance_wallet_rounded
+                          : Icons.copy_rounded,
+                      size: 16,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Colors.white10),
+                    ),
+                    label: Text(
+                      ordered[i] == 'venmo'
+                          ? 'Venmo'
+                          : ordered[i] == 'paypal'
+                          ? 'PayPal'
+                          : 'Zelle',
+                    ),
+                  ),
+        ],
+      ),
+      const SizedBox(height: 4),
+      const Text(
+        'Send the money there, then record it below so balances update.',
+        style: TextStyle(fontSize: 12, color: Colors.white70),
+      ),
+    ];
   }
 
   Future<void> _save() async {
@@ -771,6 +891,7 @@ class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
                 style: TextStyle(fontSize: 12, color: AppColors.warning),
               ),
             ],
+            ..._buildPaySection(),
             const SizedBox(height: 16),
             TextField(
               controller: _amountController,

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import SettlementForm, { type SettlementPrefill } from "../SettlementForm";
 import { formatDate } from "../../lib/tripFormat";
-import { buildPaymentLink } from "../../lib/paymentLinks";
+import { buildPaymentLink, orderedPayableMethods } from "../../lib/paymentLinks";
 import type { SettlementSuggestion } from "../../lib/settlementSuggestions";
 import { OvAvatar } from "./OvAvatar";
 import { OvFlowArc } from "./OvFlowArc";
@@ -201,9 +201,7 @@ export const SettlementsTab = ({
                   ? "stl-row--owed-self"
                   : "";
               const recipientMethods = paymentMethodsByMember[settlement.toMemberId];
-              const payableMethods = recipientMethods
-                ? (Object.entries(recipientMethods).filter(([, v]) => Boolean(v)) as Array<[string, string]>)
-                : [];
+              const payableMethods = orderedPayableMethods(recipientMethods);
               const showPayPanel =
                 !confirmed && isFromUser && payableMethods.length > 0;
 
@@ -297,7 +295,11 @@ export const SettlementsTab = ({
                         {payableMethods.map(([method, value]) => (
                           <StlPayChip
                             key={method}
-                            method={method}
+                            method={
+                              method === recipientMethods?.primary
+                                ? `${method} ★`
+                                : method
+                            }
                             value={value}
                             href={buildPaymentLink(
                               method,
