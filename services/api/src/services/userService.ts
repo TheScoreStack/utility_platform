@@ -99,6 +99,37 @@ export class UserService {
     return updated;
   }
 
+  async setNotificationPrefs(
+    body: unknown,
+    auth: AuthContext
+  ): Promise<UserProfile> {
+    const parsed = z
+      .object({
+        activity: z.boolean().optional(),
+        comments: z.boolean().optional()
+      })
+      .refine(
+        (value) => value.activity !== undefined || value.comments !== undefined,
+        { message: "No preferences provided" }
+      )
+      .safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const current = await userStore.ensureUserProfile(auth);
+    await userStore.setNotificationPrefs(auth.userId, {
+      ...current.notificationPrefs,
+      ...parsed.data
+    });
+
+    const updated = await userStore.getUser(auth.userId);
+    if (!updated) {
+      throw new ValidationError("Profile not found");
+    }
+    return updated;
+  }
+
   async setEmailDigestPreference(
     body: unknown,
     auth: AuthContext

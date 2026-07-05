@@ -7,8 +7,12 @@ import {
 import { z } from "zod";
 import { loadConfig } from "../config.js";
 import { DeviceStore } from "../data/deviceStore.js";
+import { UserStore } from "../data/userStore.js";
 import { ValidationError } from "../lib/errors.js";
 import type { AuthContext } from "../auth.js";
+
+/** Preference bucket a notification belongs to; users can mute per kind. */
+export type PushKind = "activity" | "comments";
 
 const registerSchema = z.object({
   // APNs tokens are hex; FCM tokens are base64url-ish with colons.
@@ -34,6 +38,7 @@ export interface PushMessage {
  */
 export class PushService {
   private readonly deviceStore = new DeviceStore();
+  private readonly userStore = new UserStore();
   private snsClient: SNSClient | null = null;
 
   private platformArnFor(platform: "ios" | "android"): string | undefined {
@@ -104,10 +109,27 @@ export class PushService {
     }
   }
 
-  /** Sends to every device of every listed user. Never throws — callers
+  /** Sends to every device of every listed user, honoring per-user mute
+   *  preferences for the notification kind. Never throws — callers
    *  fire-and-forget from request paths. */
-  async notifyUsers(userIds: string[], message: PushMessage): Promise<void> {
+  async notifyUsers(
+    userIds: string[],
+    message: PushMessage,
+    kind: PushKind = "activity"
+  ): Promise<void> {
     if (!this.enabled || !userIds.length) return;
+
+    // Preferences default to on; only an explicit false mutes.
+    const profiles = await this.userStore
+      .getUsersByIds(userIds)
+      .catch(() => []);
+    const muted = new Set(
+      profiles
+        .filter((profile) => profile.notificationPrefs?.[kind] === false)
+        .map((profile) => profile.userId)
+    );
+    const recipients = userIds.filter((userId) => !muted.has(userId));
+    if (!recipients.length) return;
 
     const apnsPayload = JSON.stringify({
       aps: {
@@ -131,7 +153,7 @@ export class PushService {
 
     const targets = (
       await Promise.all(
-        userIds.map((userId) =>
+        recipients.map((userId) =>
           this.deviceStore.listDevices(userId).catch(() => [])
         )
       )
@@ -175,10 +197,11 @@ export const pushService = new PushService();
  *  slow down the API call that triggered them beyond the send itself. */
 export const notifyUsersSafely = async (
   userIds: string[],
-  message: PushMessage
+  message: PushMessage,
+  kind: PushKind = "activity"
 ): Promise<void> => {
   try {
-    await pushService.notifyUsers(userIds, message);
+    await pushService.notifyUsers(userIds, message, kind);
   } catch (error) {
     console.error("Push notification batch failed", error);
   }

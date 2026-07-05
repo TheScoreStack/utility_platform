@@ -90,6 +90,12 @@ export const handler = async (
       return ok({ profile }, origin);
     }
 
+    if (path === "/profile/notifications" && method === "POST") {
+      const body = parseBody(event);
+      const profile = await userService.setNotificationPrefs(body, auth);
+      return ok({ profile }, origin);
+    }
+
     if (path === "/profile" && method === "DELETE") {
       await userService.deleteAccount(auth);
       return noContent(origin);

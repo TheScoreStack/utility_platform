@@ -1669,6 +1669,22 @@ export class TripService {
             createdBy: template.createdBy
           });
           created += 1;
+
+          // Automated money movement is exactly what people want to hear
+          // about — everyone on the trip gets this one, payer included.
+          await notifyUsersSafely(
+            details.members
+              .filter((member) => !member.placeholder)
+              .map((member) => member.memberId),
+            {
+              title: details.trip.name,
+              body:
+                `${template.description} · ` +
+                `${formatMoney(template.total, template.currency)} ` +
+                `posted automatically (${template.cadence})`,
+              data: { tripId: template.tripId }
+            }
+          );
         }
 
         await getTripStore().advanceRecurringExpense(
@@ -2062,6 +2078,42 @@ export class TripService {
       createdAt: isoNow()
     };
     await getTripStore().createComment(comment);
+
+    // Notify the people in the conversation: whoever entered the expense
+    // (payer for legacy rows) plus everyone who has commented — not the
+    // whole trip, and never the author. Mutable via the "comments" pref.
+    const expense = details.expenses.find((e) => e.expenseId === expenseId);
+    if (expense) {
+      const priorComments = await getTripStore()
+        .listExpenseComments(tripId, expenseId)
+        .catch(() => [] as ExpenseComment[]);
+      const interested = new Set<string>([
+        expense.createdBy ?? expense.paidByMemberId,
+        ...priorComments.map((item) => item.authorId)
+      ]);
+      interested.delete(auth.userId);
+      const recipients = [...interested].filter((userId) =>
+        details.members.some(
+          (member) => member.memberId === userId && !member.placeholder
+        )
+      );
+      const preview =
+        comment.body.length > 90
+          ? `${comment.body.slice(0, 87)}…`
+          : comment.body;
+      await notifyUsersSafely(
+        recipients,
+        {
+          title: details.trip.name,
+          body:
+            `${firstName(getDisplayName(profile))} on ` +
+            `${expense.description}: “${preview}”`,
+          data: { tripId }
+        },
+        "comments"
+      );
+    }
+
     return comment;
   }
 

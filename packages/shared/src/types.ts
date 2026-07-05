@@ -163,6 +163,13 @@ export interface Settlement {
   deletedBy?: string;
 }
 
+export interface NotificationPrefs {
+  /** Expense/settlement/join/recurring pushes. Default true. */
+  activity?: boolean;
+  /** Comment pushes. Default true. */
+  comments?: boolean;
+}
+
 export interface UserProfile {
   userId: string;
   displayName?: string;
@@ -172,6 +179,7 @@ export interface UserProfile {
   createdAt?: string;
   updatedAt?: string;
   emailDigestOptIn?: boolean;
+  notificationPrefs?: NotificationPrefs;
 }
 
 export type HarmonyLedgerEntryType =

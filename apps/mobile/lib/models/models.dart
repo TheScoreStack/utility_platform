@@ -529,25 +529,38 @@ class UserProfile {
   final PaymentMethods? paymentMethods;
   final bool emailDigestOptIn;
 
+  /// Push preferences; missing keys default to on.
+  final bool notifyActivity;
+  final bool notifyComments;
+
   const UserProfile({
     required this.userId,
     this.displayName,
     this.email,
     this.paymentMethods,
     this.emailDigestOptIn = false,
+    this.notifyActivity = true,
+    this.notifyComments = true,
   });
 
-  factory UserProfile.fromJson(Map<String, dynamic> json) => UserProfile(
-    userId: _reqString(json['userId']),
-    displayName: json['displayName'] as String?,
-    email: json['email'] as String?,
-    paymentMethods: json['paymentMethods'] is Map<String, dynamic>
-        ? PaymentMethods.fromJson(
-            json['paymentMethods'] as Map<String, dynamic>,
-          )
-        : null,
-    emailDigestOptIn: json['emailDigestOptIn'] == true,
-  );
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    final prefs = json['notificationPrefs'] is Map<String, dynamic>
+        ? json['notificationPrefs'] as Map<String, dynamic>
+        : const <String, dynamic>{};
+    return UserProfile(
+      userId: _reqString(json['userId']),
+      displayName: json['displayName'] as String?,
+      email: json['email'] as String?,
+      paymentMethods: json['paymentMethods'] is Map<String, dynamic>
+          ? PaymentMethods.fromJson(
+              json['paymentMethods'] as Map<String, dynamic>,
+            )
+          : null,
+      emailDigestOptIn: json['emailDigestOptIn'] == true,
+      notifyActivity: prefs['activity'] != false,
+      notifyComments: prefs['comments'] != false,
+    );
+  }
 }
 
 class BalanceRow {

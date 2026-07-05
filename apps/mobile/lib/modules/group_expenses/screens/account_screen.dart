@@ -88,6 +88,30 @@ class _AccountScreenState extends State<AccountScreen> {
         : set.join(' · ');
   }
 
+  Future<void> _setNotificationPref({bool? activity, bool? comments}) async {
+    try {
+      final data =
+          await widget.api.post('/profile/notifications', {
+                if (activity != null) 'activity': activity,
+                if (comments != null) 'comments': comments,
+              })
+              as Map<String, dynamic>;
+      if (!mounted) return;
+      HapticFeedback.selectionClick();
+      setState(() {
+        _profile = UserProfile.fromJson(
+          (data['profile'] as Map<String, dynamic>?) ?? const {},
+        );
+      });
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not save the preference.', error: true);
+    }
+  }
+
   Future<void> _openChangePassword() async {
     final changed = await showModalBottomSheet<bool>(
       context: context,
@@ -228,6 +252,45 @@ class _AccountScreenState extends State<AccountScreen> {
                         onTap: () => Navigator.of(
                           context,
                         ).pop(AccountScreenResult.signedOut),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Card(
+                  margin: EdgeInsets.zero,
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        secondary: const Icon(
+                          Icons.notifications_active_rounded,
+                        ),
+                        title: const Text('Activity notifications'),
+                        subtitle: const Text(
+                          'New expenses, settlements, and people joining',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white54,
+                          ),
+                        ),
+                        value: profile.notifyActivity,
+                        onChanged: (value) =>
+                            _setNotificationPref(activity: value),
+                      ),
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        secondary: const Icon(Icons.mode_comment_outlined),
+                        title: const Text('Comment notifications'),
+                        subtitle: const Text(
+                          'Replies on expenses you added or commented on',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white54,
+                          ),
+                        ),
+                        value: profile.notifyComments,
+                        onChanged: (value) =>
+                            _setNotificationPref(comments: value),
                       ),
                     ],
                   ),

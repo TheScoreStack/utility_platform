@@ -32,7 +32,8 @@ const mapToProfile = (item: Record<string, unknown>): UserProfile => ({
   emailDigestOptIn:
     typeof item.emailDigestOptIn === "boolean"
       ? (item.emailDigestOptIn as boolean)
-      : undefined
+      : undefined,
+  notificationPrefs: item.notificationPrefs as UserProfile["notificationPrefs"]
 });
 
 export class UserStore {
@@ -366,6 +367,24 @@ export class UserStore {
     }
 
     await this.docClient.send(new UpdateCommand(params));
+  }
+
+  async setNotificationPrefs(
+    userId: string,
+    prefs: { activity?: boolean; comments?: boolean }
+  ): Promise<void> {
+    await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: { PK: userPk(userId), SK: userSk },
+        ConditionExpression: "attribute_exists(PK)",
+        UpdateExpression: "SET notificationPrefs = :prefs, updatedAt = :u",
+        ExpressionAttributeValues: {
+          ":prefs": prefs,
+          ":u": new Date().toISOString()
+        }
+      })
+    );
   }
 
   async setEmailDigestPreference(

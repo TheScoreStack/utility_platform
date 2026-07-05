@@ -334,11 +334,34 @@ export class GroupExpensesStack extends Stack {
         environment: {
           TABLE_NAME: table.tableName,
           RECEIPT_BUCKET: receiptBucket.bucketName,
-          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1",
+          ...(pushPlatformAppArn
+            ? { PUSH_PLATFORM_APP_ARN: pushPlatformAppArn }
+            : {}),
+          ...(pushPlatformAppArnAndroid
+            ? { PUSH_PLATFORM_APP_ARN_ANDROID: pushPlatformAppArnAndroid }
+            : {})
         }
       }
     );
     table.grantReadWriteData(recurringExpensesLambda);
+    if (pushAppArns.length) {
+      recurringExpensesLambda.addToRolePolicy(
+        new PolicyStatement({
+          actions: [
+            "sns:CreatePlatformEndpoint",
+            "sns:Publish",
+            "sns:DeleteEndpoint",
+            "sns:GetEndpointAttributes",
+            "sns:SetEndpointAttributes"
+          ],
+          resources: pushAppArns.flatMap((arn) => [
+            arn,
+            `${arn.replace(":app/", ":endpoint/")}/*`
+          ])
+        })
+      );
+    }
 
     new Rule(this, "RecurringExpensesSchedule", {
       schedule: Schedule.cron({
