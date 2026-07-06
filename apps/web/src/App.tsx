@@ -15,6 +15,7 @@ import TripDetailPage from "./pages/TripDetailPage";
 import { useMemo } from "react";
 import AboutPage from "./pages/AboutPage";
 import ModuleHub from "./pages/ModuleHub";
+import DeleteAccountPage from "./pages/DeleteAccountPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import SupportPage from "./pages/SupportPage";
 import TermsPage from "./pages/TermsPage";
@@ -261,6 +262,8 @@ const App = () => {
       return <TermsPage />;
     case "/about":
       return <AboutPage />;
+    case "/delete-account":
+      return <DeleteAccountPage />;
   }
 
   return (

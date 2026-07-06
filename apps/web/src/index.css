@@ -5612,7 +5612,8 @@ button.ghost {
   line-height: 1.75;
 }
 
-.pub-body ul {
+.pub-body ul,
+.pub-body ol {
   padding-left: 1.2rem;
   margin: 0.6rem 0;
 }
