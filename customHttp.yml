@@ -1,3 +1,10 @@
+# Rewrite rules are NOT in this file — they live in the Amplify app config
+# (aws amplify update-app --custom-rules). Current rules, in order:
+#   1. /.well-known/apple-app-site-association -> /apple-app-site-association.json (200)
+#   2. </^[^.]+$/>                             -> /index.html (200)   SPA deep links
+#   3. /<*>                                    -> /index.html (404-200) fallback
+# Rule 2 is load-bearing: without it S3 301s extensionless paths to a
+# trailing slash and deep links (/privacy, /group-expenses/join/*) 404.
 applications:
   - appRoot: apps/web
     customHeaders:
