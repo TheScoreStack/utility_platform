@@ -20,6 +20,15 @@ const HarmonySubNav = () => (
     >
       Ledger
     </NavLink>
+    <NavLink
+      to="/harmony-ledger/statements"
+      role="tab"
+      className={({ isActive }) =>
+        isActive ? "hl-subnav__link hl-subnav__link--active" : "hl-subnav__link"
+      }
+    >
+      Statements
+    </NavLink>
   </div>
 );
 

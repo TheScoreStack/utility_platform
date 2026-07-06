@@ -18,6 +18,9 @@ import type {
   HarmonyLedgerGroupSummary,
   HarmonyLedgerTransfer,
   HarmonyLedgerUnallocatedSummary,
+  HarmonyStagedTransaction,
+  HarmonyStatement,
+  HarmonyStatementCounts,
   Receipt,
   Settlement,
   StackTimeAccessRecord,
@@ -154,6 +157,38 @@ export interface HarmonyLedgerAccessResponse {
   isAdmin: boolean;
   currentAccessId?: string;
   members?: HarmonyLedgerAccessRecord[];
+}
+
+export interface HarmonyStatementsResponse {
+  statements: HarmonyStatement[];
+}
+
+export interface HarmonyStatementCreateResponse {
+  statement: HarmonyStatement;
+  uploadUrl: string;
+}
+
+export interface HarmonyStatementDetailResponse {
+  statement: HarmonyStatement;
+  transactions: HarmonyStagedTransaction[];
+  groups: HarmonyLedgerGroup[];
+}
+
+export interface HarmonyStatementConfirmResponse {
+  transaction: HarmonyStagedTransaction;
+  entry: HarmonyLedgerEntry;
+}
+
+/** Shape shared by the dismiss and reopen staged-transaction endpoints. */
+export interface HarmonyStatementTransactionResponse {
+  transaction: HarmonyStagedTransaction;
+}
+
+export interface HarmonyStatementBulkConfirmResponse {
+  confirmed: number;
+  skipped: number;
+  remaining: number;
+  counts: HarmonyStatementCounts;
 }
 
 export interface StackTimeAccessResponse {
