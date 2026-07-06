@@ -18,6 +18,7 @@ import type {
   HarmonyLedgerGroupSummary,
   HarmonyLedgerTransfer,
   HarmonyLedgerUnallocatedSummary,
+  HarmonyRecurringTemplate,
   HarmonyStagedTransaction,
   HarmonyStatement,
   HarmonyStatementCounts,
@@ -189,6 +190,10 @@ export interface HarmonyStatementBulkConfirmResponse {
   skipped: number;
   remaining: number;
   counts: HarmonyStatementCounts;
+}
+
+export interface HarmonyRecurringTemplatesResponse {
+  templates: HarmonyRecurringTemplate[];
 }
 
 export interface StackTimeAccessResponse {

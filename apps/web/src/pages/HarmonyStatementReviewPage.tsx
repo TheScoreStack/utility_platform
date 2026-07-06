@@ -77,6 +77,13 @@ const formatDateTime = (value: string) =>
     minute: "2-digit"
   }).format(new Date(value));
 
+const formatReviewedDate = (value: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "2-digit"
+  }).format(new Date(value));
+
 const computeCounts = (
   txns: HarmonyStagedTransaction[]
 ): HarmonyStatementCounts => ({
@@ -715,6 +722,18 @@ const HarmonyStatementReviewPage = () => {
                         >
                           Dismissed
                         </span>
+                      )}
+                      {txn.reviewedByName && (
+                        <p
+                          className="muted"
+                          style={{ margin: "0.3rem 0 0", fontSize: "0.8rem" }}
+                        >
+                          {txn.status === "CONFIRMED" ? "Confirmed by" : "Skipped by"}{" "}
+                          {txn.reviewedByName}
+                          {txn.reviewedAt
+                            ? ` · ${formatReviewedDate(txn.reviewedAt)}`
+                            : ""}
+                        </p>
                       )}
                     </td>
                     <td>

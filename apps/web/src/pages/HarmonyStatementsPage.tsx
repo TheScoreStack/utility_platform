@@ -7,6 +7,7 @@ import {
   HarmonyStatement,
   HarmonyStatementCreateResponse,
   HarmonyStatementDetailResponse,
+  HarmonyStatementFileType,
   HarmonyStatementSourceType,
   HarmonyStatementsResponse
 } from "../types";
@@ -23,6 +24,14 @@ const sourceTypeLabels: Record<HarmonyStatementSourceType, string> = {
   OTHER: "Other"
 };
 
+const fileTypeLabels: Record<HarmonyStatementFileType, string> = {
+  PDF: "PDF",
+  CSV: "CSV",
+  IMAGE: "Image"
+};
+
+const FILE_TYPE_ERROR = "Upload a PDF, CSV, or a photo of a statement (JPEG, PNG, or WebP).";
+
 type UploadPhase =
   | { step: "idle" }
   | { step: "uploading" }
@@ -30,9 +39,18 @@ type UploadPhase =
   | { step: "failed"; message: string };
 
 const contentTypeFor = (file: File): string | null => {
+  const type = file.type.toLowerCase();
+  if (type === "application/pdf" || type === "text/csv" || type.startsWith("image/")) {
+    return type;
+  }
+  // Fall back by extension for files the browser doesn't type (or mistypes).
   const name = file.name.toLowerCase();
   if (name.endsWith(".pdf")) return "application/pdf";
   if (name.endsWith(".csv")) return "text/csv";
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".gif")) return "image/gif";
   return null;
 };
 
@@ -170,7 +188,7 @@ const HarmonyStatementsPage = () => {
     }
     if (!contentTypeFor(candidate)) {
       setFile(null);
-      setFileError("Only PDF and CSV statements are supported.");
+      setFileError(FILE_TYPE_ERROR);
       return;
     }
     if (candidate.size > MAX_FILE_BYTES) {
@@ -196,7 +214,7 @@ const HarmonyStatementsPage = () => {
     if (!file || isBusy) return;
     const contentType = contentTypeFor(file);
     if (!contentType) {
-      setFileError("Only PDF and CSV statements are supported.");
+      setFileError(FILE_TYPE_ERROR);
       return;
     }
 
@@ -323,7 +341,8 @@ const HarmonyStatementsPage = () => {
           <div>
             <h2>Import a Statement</h2>
             <p className="muted">
-              Upload a bank, Venmo, or PayPal export and let AI turn it into ledger entries.
+              Upload a bank, Venmo, or PayPal export — or a photo of a statement —
+              and let AI turn it into ledger entries.
             </p>
           </div>
         </div>
@@ -370,13 +389,15 @@ const HarmonyStatementsPage = () => {
               ) : (
                 <span>Drop a statement here, or click to browse</span>
               )}
-              <span className="hl-dropzone__hint">PDF or CSV · up to 18 MB</span>
+              <span className="hl-dropzone__hint">
+                PDF, CSV, or a photo of a statement · up to 18 MB
+              </span>
             </div>
             <input
               ref={fileInputRef}
               id="statement-file"
               type="file"
-              accept=".pdf,.csv"
+              accept=".pdf,.csv,image/jpeg,image/png,image/webp"
               style={{ display: "none" }}
               onChange={handleFileChange}
               disabled={isBusy}
@@ -443,7 +464,7 @@ const HarmonyStatementsPage = () => {
                       <td>
                         <strong>{statement.fileName}</strong>
                         <p className="muted" style={{ margin: 0 }}>
-                          {statement.fileType}
+                          {fileTypeLabels[statement.fileType] ?? statement.fileType}
                         </p>
                       </td>
                       <td>{sourceTypeLabels[statement.sourceType]}</td>

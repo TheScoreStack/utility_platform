@@ -11,10 +11,13 @@ import {
   HarmonyLedgerEntryType,
   HarmonyLedgerGroup,
   HarmonyLedgerGroupSummary,
-  HarmonyLedgerTransfer
+  HarmonyLedgerTransfer,
+  HarmonyRecurringCadence,
+  HarmonyRecurringTemplate
 } from "../types";
 import { useHarmonyLedgerAccess } from "../modules/useHarmonyLedgerAccess";
 import { useHarmonyLedgerEntries } from "../modules/useHarmonyLedgerEntries";
+import { useHarmonyRecurringTemplates } from "../modules/useHarmonyRecurringTemplates";
 import { useConfirm } from "../components/ConfirmDialog";
 
 interface EntryFormState {
@@ -35,6 +38,29 @@ interface TransferFormState {
   amount: string;
   note: string;
 }
+
+interface RecurringFormState {
+  type: HarmonyLedgerEntryType;
+  amount: string;
+  description: string;
+  category: string;
+  groupId: string;
+  cadence: HarmonyRecurringCadence;
+}
+
+const defaultRecurringForm: RecurringFormState = {
+  type: "DONATION",
+  amount: "",
+  description: "",
+  category: "",
+  groupId: "",
+  cadence: "monthly"
+};
+
+const cadenceCopy: Record<HarmonyRecurringCadence, { label: string; unit: string }> = {
+  weekly: { label: "Weekly", unit: "week" },
+  monthly: { label: "Monthly", unit: "month" }
+};
 
 const defaultEntryForm: EntryFormState = {
   type: "DONATION",
@@ -105,6 +131,12 @@ const formatDateTime = (value: string) =>
     minute: "2-digit"
   }).format(new Date(value));
 
+const formatShortDate = (value: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric"
+  }).format(new Date(value));
+
 const HarmonyLedgerPage = () => {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
@@ -133,8 +165,12 @@ const HarmonyLedgerPage = () => {
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingGroupName, setEditingGroupName] = useState("");
   const [groupErrors, setGroupErrors] = useState<Record<string, string>>({});
+  const [recurringForm, setRecurringForm] = useState<RecurringFormState>(defaultRecurringForm);
+  const [recurringError, setRecurringError] = useState<string | null>(null);
+  const [recurringRowErrors, setRecurringRowErrors] = useState<Record<string, string>>({});
 
   const entriesQuery = useHarmonyLedgerEntries(accessData?.allowed ?? false);
+  const recurringQuery = useHarmonyRecurringTemplates(accessData?.allowed ?? false);
 
   const entryMutation = useMutation({
     mutationFn: (payload: unknown) =>
@@ -296,6 +332,74 @@ const HarmonyLedgerPage = () => {
     ? updateGroupMutation.variables?.groupId ?? null
     : null;
 
+  const createRecurringMutation = useMutation({
+    mutationFn: (payload: unknown) =>
+      api.post<HarmonyRecurringTemplate>("/harmony-ledger/recurring", payload),
+    onSuccess: () => {
+      // Entries only change when the schedule fires, so just refresh templates.
+      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "recurring"] });
+      setRecurringForm(defaultRecurringForm);
+      setRecurringError(null);
+    },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        setRecurringError(error.message);
+      } else {
+        setRecurringError("Unable to add recurring entry");
+      }
+    }
+  });
+
+  const clearRecurringRowError = (templateId: string) => {
+    setRecurringRowErrors((prev) => {
+      if (!(templateId in prev)) return prev;
+      const next = { ...prev };
+      delete next[templateId];
+      return next;
+    });
+  };
+
+  const updateRecurringMutation = useMutation({
+    mutationFn: (payload: { templateId: string; body: { isActive?: boolean } }) =>
+      api.patch<HarmonyRecurringTemplate>(
+        `/harmony-ledger/recurring/${payload.templateId}`,
+        payload.body
+      ),
+    onMutate: (payload) => clearRecurringRowError(payload.templateId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "recurring"] });
+    },
+    onError: (error: unknown, payload) => {
+      setRecurringRowErrors((prev) => ({
+        ...prev,
+        [payload.templateId]:
+          error instanceof ApiError ? error.message : "Unable to update recurring entry"
+      }));
+    }
+  });
+
+  const deleteRecurringMutation = useMutation({
+    mutationFn: (templateId: string) =>
+      api.delete(`/harmony-ledger/recurring/${templateId}`),
+    onMutate: (templateId) => clearRecurringRowError(templateId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "recurring"] });
+    },
+    onError: (error: unknown, templateId) => {
+      setRecurringRowErrors((prev) => ({
+        ...prev,
+        [templateId]:
+          error instanceof ApiError ? error.message : "Unable to delete recurring entry"
+      }));
+    }
+  });
+
+  const busyTemplateId = updateRecurringMutation.isPending
+    ? updateRecurringMutation.variables?.templateId ?? null
+    : deleteRecurringMutation.isPending
+      ? deleteRecurringMutation.variables ?? null
+      : null;
+
   const totals = entriesQuery.data?.totals;
   const entriesData = entriesQuery.data;
   const entries = useMemo(() => entriesData?.entries ?? [], [entriesData]);
@@ -307,6 +411,7 @@ const HarmonyLedgerPage = () => {
   );
   const unallocated = entriesQuery.data?.unallocated;
   const transfers = entriesQuery.data?.transfers ?? [];
+  const recurringTemplates = recurringQuery.data?.templates ?? [];
   const groupSummaryMap = useMemo(() => {
     const map = new Map<string, HarmonyLedgerGroupSummary>();
     for (const summary of groupSummaries) {
@@ -641,6 +746,42 @@ const HarmonyLedgerPage = () => {
       groupId: group.groupId,
       body: { isActive: !group.isActive }
     });
+  };
+
+  const handleRecurringSubmit = (event: FormEvent) => {
+    event.preventDefault();
+    setRecurringError(null);
+    const amount = Number(recurringForm.amount);
+    if (!recurringForm.amount || Number.isNaN(amount) || amount <= 0) {
+      setRecurringError("Enter a positive amount");
+      return;
+    }
+    createRecurringMutation.mutate({
+      type: recurringForm.type,
+      amount,
+      description: recurringForm.description || undefined,
+      category: recurringForm.category || undefined,
+      groupId: recurringForm.groupId || undefined,
+      cadence: recurringForm.cadence
+    });
+  };
+
+  const toggleRecurringActive = (template: HarmonyRecurringTemplate) => {
+    updateRecurringMutation.mutate({
+      templateId: template.templateId,
+      body: { isActive: !template.isActive }
+    });
+  };
+
+  const handleDeleteRecurring = async (template: HarmonyRecurringTemplate) => {
+    const ok = await confirm({
+      title: `Delete "${template.description ?? entryTypeCopy[template.type].label}"?`,
+      body: "Future scheduled entries stop. Entries it already posted are kept.",
+      confirmLabel: "Delete",
+      tone: "danger"
+    });
+    if (!ok) return;
+    deleteRecurringMutation.mutate(template.templateId);
   };
 
   const renderAccessSection = (data: HarmonyLedgerAccessResponse) => {
@@ -1048,6 +1189,195 @@ const HarmonyLedgerPage = () => {
           </div>
         </section>
       )}
+
+      <section className="card">
+        <div className="section-title">
+          <div>
+            <h2>Recurring</h2>
+            <p className="muted">
+              Entries that post themselves on a weekly or monthly schedule.
+            </p>
+          </div>
+        </div>
+        {recurringQuery.isLoading ? (
+          <p className="muted">Loading recurring entries…</p>
+        ) : recurringTemplates.length === 0 ? (
+          <p className="muted">No recurring entries yet. Add your first one below.</p>
+        ) : (
+          <div className="list">
+            {recurringTemplates.map((template) => {
+              const busy = busyTemplateId === template.templateId;
+              const groupLabel =
+                template.groupName ??
+                groups.find((group) => group.groupId === template.groupId)?.name ??
+                "Unallocated";
+              return (
+                <div key={template.templateId}>
+                  <div className="pill-row">
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 600 }}>
+                        {template.description || entryTypeCopy[template.type].label}
+                        {!template.isActive && (
+                          <span
+                            className="pill"
+                            style={{
+                              marginLeft: "0.5rem",
+                              background: "rgba(148, 163, 184, 0.18)",
+                              color: "#94a3b8"
+                            }}
+                          >
+                            Paused
+                          </span>
+                        )}
+                      </p>
+                      <p className="muted" style={{ margin: 0 }}>
+                        {entryTypeCopy[template.type].label} ·{" "}
+                        {formatCurrencyValue(template.amount, template.currency)} ·{" "}
+                        {groupLabel} · {cadenceCopy[template.cadence].label} · next:{" "}
+                        {formatShortDate(template.nextRunAt)}
+                      </p>
+                    </div>
+                    <div className="hl-txn-actions">
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => toggleRecurringActive(template)}
+                        disabled={busy}
+                      >
+                        {busy && updateRecurringMutation.isPending
+                          ? "Saving…"
+                          : template.isActive
+                            ? "Pause"
+                            : "Resume"}
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        onClick={() => handleDeleteRecurring(template)}
+                        disabled={busy}
+                      >
+                        {busy && deleteRecurringMutation.isPending ? "Deleting…" : "Delete"}
+                      </button>
+                    </div>
+                  </div>
+                  {recurringRowErrors[template.templateId] && (
+                    <p className="error" style={{ margin: "0.35rem 0 0" }}>
+                      {recurringRowErrors[template.templateId]}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <hr />
+        <form onSubmit={handleRecurringSubmit} className="list">
+          <div className="input-group">
+            <label htmlFor="recurring-type">Type</label>
+            <select
+              id="recurring-type"
+              value={recurringForm.type}
+              onChange={(event) =>
+                setRecurringForm((prev) => ({
+                  ...prev,
+                  type: event.target.value as HarmonyLedgerEntryType
+                }))
+              }
+              disabled={createRecurringMutation.isPending}
+            >
+              {Object.entries(entryTypeCopy).map(([value, meta]) => (
+                <option key={value} value={value}>
+                  {meta.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="input-group">
+            <label htmlFor="recurring-amount">Amount</label>
+            <input
+              id="recurring-amount"
+              type="number"
+              min="0"
+              step="0.01"
+              required
+              value={recurringForm.amount}
+              onChange={(event) =>
+                setRecurringForm((prev) => ({ ...prev, amount: event.target.value }))
+              }
+              disabled={createRecurringMutation.isPending}
+            />
+          </div>
+          <div className="input-group">
+            <label htmlFor="recurring-description">Description</label>
+            <input
+              id="recurring-description"
+              value={recurringForm.description}
+              placeholder="e.g., Rehearsal space rent"
+              onChange={(event) =>
+                setRecurringForm((prev) => ({ ...prev, description: event.target.value }))
+              }
+              disabled={createRecurringMutation.isPending}
+            />
+          </div>
+          <div className="input-group">
+            <label htmlFor="recurring-category">Category (optional)</label>
+            <input
+              id="recurring-category"
+              value={recurringForm.category}
+              onChange={(event) =>
+                setRecurringForm((prev) => ({ ...prev, category: event.target.value }))
+              }
+              disabled={createRecurringMutation.isPending}
+            />
+          </div>
+          <div className="input-group">
+            <label htmlFor="recurring-group">Group allocation</label>
+            <select
+              id="recurring-group"
+              value={recurringForm.groupId}
+              onChange={(event) =>
+                setRecurringForm((prev) => ({ ...prev, groupId: event.target.value }))
+              }
+              disabled={createRecurringMutation.isPending}
+            >
+              <option value="">Unallocated</option>
+              {activeGroups.map((group) => (
+                <option key={group.groupId} value={group.groupId}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="input-group">
+            <label htmlFor="recurring-cadence">Cadence</label>
+            <select
+              id="recurring-cadence"
+              value={recurringForm.cadence}
+              onChange={(event) =>
+                setRecurringForm((prev) => ({
+                  ...prev,
+                  cadence: event.target.value as HarmonyRecurringCadence
+                }))
+              }
+              disabled={createRecurringMutation.isPending}
+            >
+              {Object.entries(cadenceCopy).map(([value, meta]) => (
+                <option key={value} value={value}>
+                  {meta.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {recurringError && <p className="error">{recurringError}</p>}
+          <button type="submit" disabled={createRecurringMutation.isPending}>
+            {createRecurringMutation.isPending ? "Adding…" : "Add recurring entry"}
+          </button>
+          <p className="muted" style={{ margin: 0 }}>
+            Posts automatically each {cadenceCopy[recurringForm.cadence].unit}, starting
+            next cycle.
+          </p>
+        </form>
+      </section>
 
       {accessData.isAdmin && (
         <section className="card">
