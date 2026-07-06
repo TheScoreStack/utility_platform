@@ -53,6 +53,10 @@ class _EntrySheetState extends State<_EntrySheet> {
   bool _saving = false;
   String? _error;
 
+  /// 'none' | 'weekly' | 'monthly' — creates a recurring template alongside
+  /// the entry. Only offered when creating.
+  String _cadence = 'none';
+
   bool get _isEditing => widget.initialEntry != null;
 
   @override
@@ -113,6 +117,17 @@ class _EntrySheetState extends State<_EntrySheet> {
           source: 'Cash',
           groupId: _groupId,
         );
+        if (_cadence != 'none') {
+          // Today's entry was just recorded; the template takes over from
+          // the next cycle.
+          await widget.api.createRecurringTemplate(
+            type: _type,
+            amount: amount,
+            description: description.isEmpty ? null : description,
+            groupId: _groupId,
+            cadence: _cadence,
+          );
+        }
       }
       if (!mounted) return;
       HapticFeedback.mediumImpact();
@@ -261,6 +276,48 @@ class _EntrySheetState extends State<_EntrySheet> {
                   border: OutlineInputBorder(),
                 ),
               ),
+              if (!_isEditing) ...[
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Text('REPEATS', style: eyebrowStyle()),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'none', label: Text('Never')),
+                          ButtonSegment(value: 'weekly', label: Text('Weekly')),
+                          ButtonSegment(
+                            value: 'monthly',
+                            label: Text('Monthly'),
+                          ),
+                        ],
+                        selected: {_cadence},
+                        showSelectedIcon: false,
+                        style: const ButtonStyle(
+                          visualDensity: VisualDensity.compact,
+                        ),
+                        onSelectionChanged: _saving
+                            ? null
+                            : (selection) {
+                                HapticFeedback.selectionClick();
+                                setState(() => _cadence = selection.first);
+                              },
+                      ),
+                    ),
+                  ],
+                ),
+                if (_cadence != 'none') ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Posts this ${kEntryTypeLabels[_type]?.toLowerCase()} '
+                    'automatically every '
+                    '${_cadence == 'weekly' ? 'week' : 'month'}, starting '
+                    'next cycle. Manage it from the web ledger.',
+                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
+                ],
+              ],
               if (_error != null) ...[
                 const SizedBox(height: 10),
                 Text(

@@ -61,6 +61,24 @@ class HarmonyApi {
     {'recordedAt': recordedAt},
   );
 
+  /// Creates a recurring template; the first entry posts one cadence out.
+  Future<void> createRecurringTemplate({
+    required String type,
+    required double amount,
+    String? description,
+    String? category,
+    String? groupId,
+    required String cadence,
+  }) => _api.post('/harmony-ledger/recurring', {
+    'type': type,
+    'amount': amount,
+    if (description != null && description.isNotEmpty)
+      'description': description,
+    if (category != null && category.isNotEmpty) 'category': category,
+    if (groupId != null) 'groupId': groupId,
+    'cadence': cadence,
+  });
+
   /// Moves funds between groups; null group = the unallocated pool.
   Future<HarmonyTransfer> createTransfer({
     String? fromGroupId,

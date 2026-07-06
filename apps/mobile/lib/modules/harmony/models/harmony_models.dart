@@ -296,6 +296,7 @@ class HarmonyStagedTxn {
   final bool isLikelyInternalTransfer;
   final bool isDuplicate;
   final String status;
+  final String? reviewedByName;
 
   const HarmonyStagedTxn({
     required this.txnId,
@@ -313,6 +314,7 @@ class HarmonyStagedTxn {
     required this.isLikelyInternalTransfer,
     required this.isDuplicate,
     required this.status,
+    this.reviewedByName,
   });
 
   factory HarmonyStagedTxn.fromJson(Map<String, dynamic> json) =>
@@ -332,6 +334,7 @@ class HarmonyStagedTxn {
         isLikelyInternalTransfer: json['isLikelyInternalTransfer'] == true,
         isDuplicate: json['duplicateOf'] != null,
         status: json['status'] as String,
+        reviewedByName: json['reviewedByName'] as String?,
       );
 
   bool get isPending => status == 'PENDING';

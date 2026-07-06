@@ -132,7 +132,12 @@ class StagedTxnTile extends StatelessWidget {
                       color: AppColors.warning,
                     ),
                   if (txn.status == 'CONFIRMED') ...[
-                    const _Badge(label: 'Confirmed', color: AppColors.positive),
+                    _Badge(
+                      label: txn.reviewedByName != null
+                          ? 'Confirmed by ${txn.reviewedByName}'
+                          : 'Confirmed',
+                      color: AppColors.positive,
+                    ),
                     if (onUndo != null)
                       ActionChip(
                         avatar: const Icon(Icons.undo_rounded, size: 16),
@@ -142,7 +147,12 @@ class StagedTxnTile extends StatelessWidget {
                       ),
                   ],
                   if (txn.status == 'DISMISSED') ...[
-                    const _Badge(label: 'Skipped', color: Colors.white54),
+                    _Badge(
+                      label: txn.reviewedByName != null
+                          ? 'Skipped by ${txn.reviewedByName}'
+                          : 'Skipped',
+                      color: Colors.white54,
+                    ),
                     if (onRestore != null)
                       ActionChip(
                         avatar: const Icon(Icons.undo_rounded, size: 16),

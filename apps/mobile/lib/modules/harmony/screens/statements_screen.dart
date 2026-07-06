@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
@@ -147,14 +148,70 @@ class _StatementsScreenState extends State<StatementsScreen> {
     );
     if (source == null || !mounted) return;
 
-    final picked = await FilePicker.platform.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['pdf', 'csv'],
-      withData: true,
+    // Second step: a document file, or a photo of a paper statement.
+    final method = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.description_rounded),
+              title: const Text('PDF or CSV file'),
+              onTap: () => Navigator.of(sheetContext).pop('file'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded),
+              title: const Text('Take a photo'),
+              onTap: () => Navigator.of(sheetContext).pop('camera'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded),
+              title: const Text('Photo library'),
+              onTap: () => Navigator.of(sheetContext).pop('gallery'),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
     );
-    final file = picked?.files.firstOrNull;
-    final bytes = file?.bytes;
-    if (file == null || bytes == null || !mounted) return;
+    if (method == null || !mounted) return;
+
+    final String fileName;
+    final List<int> bytes;
+    final String contentType;
+
+    if (method == 'file') {
+      final picked = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'csv'],
+        withData: true,
+      );
+      final file = picked?.files.firstOrNull;
+      final fileBytes = file?.bytes;
+      if (file == null || fileBytes == null || !mounted) return;
+      fileName = file.name;
+      bytes = fileBytes;
+      contentType = file.name.toLowerCase().endsWith('.pdf')
+          ? 'application/pdf'
+          : 'text/csv';
+    } else {
+      // maxWidth keeps photos well under the API and image-input caps while
+      // staying readable for the model.
+      final picked = await ImagePicker().pickImage(
+        source: method == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        imageQuality: 82,
+        maxWidth: 2048,
+      );
+      if (picked == null || !mounted) return;
+      fileName = picked.name.toLowerCase().endsWith('.jpg')
+          ? picked.name
+          : '${picked.name}.jpg';
+      bytes = await picked.readAsBytes();
+      contentType = 'image/jpeg';
+      if (!mounted) return;
+    }
 
     if (bytes.length > 18 * 1024 * 1024) {
       showAppSnackBar(
@@ -165,14 +222,10 @@ class _StatementsScreenState extends State<StatementsScreen> {
       return;
     }
 
-    final contentType = file.name.toLowerCase().endsWith('.pdf')
-        ? 'application/pdf'
-        : 'text/csv';
-
     setState(() => _importing = true);
     try {
       final created = await widget.api.createStatement(
-        fileName: file.name,
+        fileName: fileName,
         contentType: contentType,
         sourceType: source,
       );
@@ -308,8 +361,8 @@ class _StatementsScreenState extends State<StatementsScreen> {
                               padding: EdgeInsets.symmetric(horizontal: 32),
                               child: Text(
                                 'Upload a bank, Venmo, or PayPal statement '
-                                '(PDF or CSV) and the transactions get mapped '
-                                'to groups for you.',
+                                '(PDF, CSV, or a photo) and the transactions '
+                                'get mapped to groups for you.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: Colors.white70),
                               ),
