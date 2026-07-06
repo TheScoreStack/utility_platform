@@ -1,86 +1,71 @@
-// Public page (rendered outside the Authenticator) — the App Store listing's
-// Support URL points here.
+import PublicShell from "../components/PublicShell";
 
-const sectionStyle: React.CSSProperties = { marginTop: "2rem" };
-const headingStyle: React.CSSProperties = {
-  fontSize: "1.05rem",
-  marginBottom: "0.5rem"
-};
-
+// Public support page — the App Store listing's Support URL.
 export const SupportPage = () => (
-  <main
-    style={{
-      maxWidth: "46rem",
-      margin: "0 auto",
-      padding: "3rem 1.5rem 5rem",
-      lineHeight: 1.65,
-      color: "#e2e8f0",
-      background: "#0f172a",
-      minHeight: "100vh"
-    }}
-  >
-    <a href="/" style={{ color: "#a5b4fc", fontSize: "0.9rem" }}>
-      ← The Stack Core
-    </a>
-    <h1 style={{ marginTop: "1rem" }}>Support</h1>
-    <p>
-      Questions, problems, or feedback about Stack Core? Email{" "}
-      <a href="mailto:hunter.j.adam@gmail.com" style={{ color: "#a5b4fc" }}>
-        hunter.j.adam@gmail.com
-      </a>{" "}
-      and you'll hear back within a couple of days.
+  <PublicShell active="support">
+    <p className="pub-eyebrow">Support</p>
+    <h1 className="pub-title">
+      How can <em>we help?</em>
+    </h1>
+    <p className="pub-lede">
+      Questions, problems, or feedback about Stack Core — start with the
+      quick answers below, or just email us.
     </p>
 
-    <section style={sectionStyle}>
-      <h2 style={headingStyle}>Common questions</h2>
-      <ul>
-        <li>
-          <strong>How do invites work?</strong> Every trip has a share link —
-          anyone who opens it can join, even without an account yet. If
-          someone added you by name before you signed up, pick "I'm ‹you›"
-          when joining and your balance comes with you.
-        </li>
-        <li>
-          <strong>A receipt scanned wrong.</strong> Every extracted item is
-          editable before you save — fix the amounts or assignments on the
-          review screen. If scans fail repeatedly, email us the receipt and
-          we'll investigate.
-        </li>
-        <li>
-          <strong>How do I delete my account?</strong> In the app: Account →
-          Delete account. Your login and profile are removed permanently.
-          Details in the{" "}
-          <a href="/privacy" style={{ color: "#a5b4fc" }}>
-            privacy policy
-          </a>
-          .
-        </li>
-        <li>
-          <strong>How do I stop notifications?</strong> Account settings has
-          per-category toggles (activity and comments), or turn them off
-          system-wide in iOS Settings.
-        </li>
-        <li>
-          <strong>Can I leave a trip?</strong> Yes — trip menu → Members →
-          Leave, as long as you have no recorded expenses or settlements in
-          it.
-        </li>
-      </ul>
-    </section>
+    <div className="pub-faq pub-body">
+      <div className="pub-faq__item">
+        <h3 className="pub-faq__q">How do invites work?</h3>
+        <p className="pub-faq__a">
+          Every trip has a share link — anyone who opens it can join, even
+          without an account yet. If someone added you by name before you
+          signed up, pick “I'm ‹you›” when joining and your balance comes
+          with you.
+        </p>
+      </div>
+      <div className="pub-faq__item">
+        <h3 className="pub-faq__q">A receipt scanned wrong.</h3>
+        <p className="pub-faq__a">
+          Every extracted item is editable before you save — fix amounts or
+          assignments on the review screen. If scans fail repeatedly, email
+          us the receipt and we'll investigate.
+        </p>
+      </div>
+      <div className="pub-faq__item">
+        <h3 className="pub-faq__q">How do I delete my account?</h3>
+        <p className="pub-faq__a">
+          In the app: Account → Delete account. Your login and profile are
+          removed permanently — details in the{" "}
+          <a href="/privacy">privacy policy</a>.
+        </p>
+      </div>
+      <div className="pub-faq__item">
+        <h3 className="pub-faq__q">How do I stop notifications?</h3>
+        <p className="pub-faq__a">
+          Account settings has per-category toggles (activity and comments),
+          or turn them off system-wide in iOS Settings.
+        </p>
+      </div>
+      <div className="pub-faq__item">
+        <h3 className="pub-faq__q">Can I leave a trip?</h3>
+        <p className="pub-faq__a">
+          Yes — trip menu → Members → Leave, as long as you have no recorded
+          expenses or settlements in it.
+        </p>
+      </div>
+    </div>
 
-    <section style={sectionStyle}>
-      <h2 style={headingStyle}>Legal</h2>
-      <p>
-        <a href="/privacy" style={{ color: "#a5b4fc" }}>
-          Privacy Policy
-        </a>
-        {" · "}
-        <a href="/terms" style={{ color: "#a5b4fc" }}>
-          Terms of Use
-        </a>
+    <div className="pub-contact pub-body">
+      <h2 className="pub-h2" style={{ marginTop: 0 }}>
+        Still <em>stuck?</em>
+      </h2>
+      <p style={{ margin: "0.3rem 0 1.2rem" }}>
+        Email us and you'll hear back within a couple of days.
       </p>
-    </section>
-  </main>
+      <a className="pub-cta" href="mailto:hunter.j.adam@gmail.com">
+        hunter.j.adam@gmail.com
+      </a>
+    </div>
+  </PublicShell>
 );
 
 export default SupportPage;
