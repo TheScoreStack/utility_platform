@@ -46,5 +46,22 @@ class AppConfig {
       firebaseMessagingSenderId.isNotEmpty &&
       firebaseProjectId.isNotEmpty;
 
+  // iOS Firebase app (Crashlytics only — pushes use native APNs). Same
+  // Firebase project; each platform gets its own appId/apiKey.
+  static const String firebaseIosApiKey = String.fromEnvironment(
+    'FIREBASE_IOS_API_KEY',
+    defaultValue: '',
+  );
+  static const String firebaseIosAppId = String.fromEnvironment(
+    'FIREBASE_IOS_APP_ID',
+    defaultValue: '',
+  );
+
+  static bool get firebaseIosConfigured =>
+      firebaseIosApiKey.isNotEmpty &&
+      firebaseIosAppId.isNotEmpty &&
+      firebaseMessagingSenderId.isNotEmpty &&
+      firebaseProjectId.isNotEmpty;
+
   const AppConfig._();
 }

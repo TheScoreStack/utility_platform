@@ -13,6 +13,7 @@ import TripListPage from "./pages/TripListPage";
 import TripDetailPage from "./pages/TripDetailPage";
 import { useMemo } from "react";
 import ModuleHub from "./pages/ModuleHub";
+import PrivacyPage from "./pages/PrivacyPage";
 import { modules } from "./modules/registry";
 import { WorkspaceBadgeIcon } from "./components/icons/UtilityIcons";
 import HarmonyLedgerPage from "./pages/HarmonyLedgerPage";
@@ -235,6 +236,12 @@ const App = () => {
     }),
     []
   );
+
+  // Public pages render outside the Authenticator — App Store reviewers
+  // (and signed-out users) must be able to read the privacy policy.
+  if (window.location.pathname === "/privacy") {
+    return <PrivacyPage />;
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

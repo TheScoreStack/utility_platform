@@ -57,6 +57,10 @@ import { RetentionDays } from "aws-cdk-lib/aws-logs";
 import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 import { Rule, Schedule } from "aws-cdk-lib/aws-events";
 import { LambdaFunction } from "aws-cdk-lib/aws-events-targets";
+import { Alarm, ComparisonOperator, TreatMissingData } from "aws-cdk-lib/aws-cloudwatch";
+import { SnsAction } from "aws-cdk-lib/aws-cloudwatch-actions";
+import { Topic } from "aws-cdk-lib/aws-sns";
+import { EmailSubscription } from "aws-cdk-lib/aws-sns-subscriptions";
 
 export class GroupExpensesStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
@@ -504,6 +508,60 @@ export class GroupExpensesStack extends Stack {
     new CfnOutput(this, "ReceiptBucketName", {
       value: receiptBucket.bucketName
     });
+
+    // ------------------------------------------------------------- alarms
+    // Every Lambda failure emails ops — these paths otherwise fail silently
+    // (scheduled jobs, async Textract, push sends).
+    const opsTopic = new Topic(this, "OpsAlerts", {
+      displayName: "Stack Core ops alerts"
+    });
+    opsTopic.addSubscription(
+      new EmailSubscription(
+        process.env.OPS_ALERT_EMAIL ?? "hunter.j.adam@gmail.com"
+      )
+    );
+
+    const alarmOnErrors = (
+      id: string,
+      fn: NodejsFunction,
+      description: string
+    ) => {
+      new Alarm(this, id, {
+        metric: fn.metricErrors({ period: Duration.minutes(5) }),
+        threshold: 1,
+        evaluationPeriods: 1,
+        comparisonOperator:
+          ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+        treatMissingData: TreatMissingData.NOT_BREACHING,
+        alarmDescription: description
+      }).addAlarmAction(new SnsAction(opsTopic));
+    };
+
+    alarmOnErrors(
+      "HttpErrorsAlarm",
+      httpLambda,
+      "Stack Core API handler is throwing errors"
+    );
+    alarmOnErrors(
+      "TextractErrorsAlarm",
+      textractLambda,
+      "Receipt OCR processor is failing — scans will hang for users"
+    );
+    alarmOnErrors(
+      "RecurringErrorsAlarm",
+      recurringExpensesLambda,
+      "Recurring-expense scheduler failed — templates are not materializing"
+    );
+    alarmOnErrors(
+      "DigestErrorsAlarm",
+      weeklyDigestLambda,
+      "Weekly digest emailer failed"
+    );
+    alarmOnErrors(
+      "PostConfirmationErrorsAlarm",
+      postConfirmationLambda,
+      "Cognito post-confirmation failed — new signups may lack profiles"
+    );
 
     new CfnOutput(this, "DynamoTableName", {
       value: table.tableName
