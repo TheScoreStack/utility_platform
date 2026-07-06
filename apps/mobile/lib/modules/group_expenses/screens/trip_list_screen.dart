@@ -47,12 +47,16 @@ class _TripListScreenState extends State<TripListScreen> {
   void initState() {
     super.initState();
     _load();
+    // Notification taps navigate straight into the trip.
+    PushService.instance.onOpenTrip = _openTripFromNotification;
+
     final inviteId = widget.initialInviteId;
     if (inviteId != null && inviteId.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (!mounted) return;
         await _joinTrip(initialInput: inviteId);
         if (mounted) await PushService.instance.register(widget.api);
+        if (mounted) await PushService.instance.attachTapHandlers();
       });
     } else {
       // Don't compete with the join sheet when arriving via an invite link.
@@ -61,8 +65,25 @@ class _TripListScreenState extends State<TripListScreen> {
         // One prompt at a time: payment setup first, then notifications.
         await _maybePromptPaymentSetup();
         if (mounted) await PushService.instance.register(widget.api);
+        if (mounted) await PushService.instance.attachTapHandlers();
       });
     }
+  }
+
+  void _openTripFromNotification(String tripId) {
+    if (!mounted) return;
+    final known = _trips
+        ?.where((item) => item.trip.tripId == tripId)
+        .firstOrNull;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripDetailScreen(
+          api: widget.api,
+          tripId: tripId,
+          tripName: known?.trip.name ?? 'Trip',
+        ),
+      ),
+    );
   }
 
   Future<void> _maybePromptPaymentSetup() async {

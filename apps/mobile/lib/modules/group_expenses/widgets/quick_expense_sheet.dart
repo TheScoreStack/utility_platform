@@ -81,11 +81,30 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
   String? _error;
 
   /// 'none' | 'weekly' | 'monthly' — creates a repeating template alongside
-  /// the expense. Only offered when creating (not editing).
+  /// the expense. Only offered when creating (not editing) with even split.
   String _cadence = 'none';
 
   /// Canonical category id, or null for uncategorized.
   String? _categoryId;
+
+  /// 'even' | 'percent' | 'exact'.
+  String _splitMode = 'even';
+
+  /// Per-member share inputs (percent or exact amount, per [_splitMode]).
+  final Map<String, TextEditingController> _shareControllers = {};
+
+  TextEditingController _shareController(String memberId) =>
+      _shareControllers.putIfAbsent(memberId, () {
+        final controller = TextEditingController();
+        controller.addListener(() => setState(() {}));
+        return controller;
+      });
+
+  double _shareValue(String memberId) =>
+      double.tryParse(
+        (_shareControllers[memberId]?.text ?? '').trim().replaceAll(',', '.'),
+      ) ??
+      0;
 
   List<TripMember> get _members => widget.summary.members;
 
@@ -109,6 +128,22 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
           .where(memberIds.contains)
           .toSet();
       _selectedMemberIds = shared.isEmpty ? {...memberIds} : shared;
+
+      // Uneven allocations (from web custom splits or a previous exact
+      // split) open in exact mode with the amounts prefilled.
+      final allocations = initial.allocations;
+      if (allocations.length > 1) {
+        final amounts = allocations.map((a) => a.amount).toList()..sort();
+        if ((amounts.last - amounts.first).abs() > 0.011) {
+          _splitMode = 'exact';
+          for (final allocation in allocations) {
+            if (memberIds.contains(allocation.memberId)) {
+              _shareController(allocation.memberId).text = allocation.amount
+                  .toStringAsFixed(2);
+            }
+          }
+        }
+      }
     } else {
       _payerId = memberIds.contains(widget.summary.currentUserId)
           ? widget.summary.currentUserId
@@ -121,31 +156,114 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
   void dispose() {
     _amountController.dispose();
     _descriptionController.dispose();
+    for (final controller in _shareControllers.values) {
+      controller.dispose();
+    }
     super.dispose();
   }
 
   double get _amount =>
       double.tryParse(_amountController.text.trim().replaceAll(',', '.')) ?? 0;
 
+  double get _selectedSharesSum => _members
+      .map((member) => member.memberId)
+      .where(_selectedMemberIds.contains)
+      .fold(0.0, (sum, id) => sum + _shareValue(id));
+
   String? get _blockedReason {
     if (_amount <= 0) return 'Enter an amount';
     if (_selectedMemberIds.isEmpty) return 'Pick who shared it';
+    if (_splitMode == 'percent' && (_selectedSharesSum - 100).abs() > 0.5) {
+      return 'Percentages must total 100';
+    }
+    if (_splitMode == 'exact' && (_selectedSharesSum - _amount).abs() > 0.05) {
+      return 'Shares must add up to the total';
+    }
     return null;
+  }
+
+  /// Cent-exact custom allocations for percent/exact mode. Rounding drift
+  /// lands on the largest share (percent uses largest-remainder).
+  List<MapEntry<String, double>> _customAllocations(double total) {
+    final ids = _members
+        .map((member) => member.memberId)
+        .where(_selectedMemberIds.contains)
+        .toList();
+    final totalCents = (total * 100).round();
+
+    if (_splitMode == 'exact') {
+      final entries = [
+        for (final id in ids)
+          if (_shareValue(id) > 0) MapEntry(id, roundCents(_shareValue(id))),
+      ];
+      final sumCents = entries.fold<int>(
+        0,
+        (sum, entry) => sum + (entry.value * 100).round(),
+      );
+      final diff = totalCents - sumCents;
+      if (diff != 0 && entries.isNotEmpty) {
+        entries.sort((a, b) => b.value.compareTo(a.value));
+        entries[0] = MapEntry(
+          entries[0].key,
+          roundCents(entries[0].value + diff / 100),
+        );
+      }
+      return entries;
+    }
+
+    // Percent: floor everyone, then hand out leftover cents by largest
+    // fractional part.
+    final raw = [for (final id in ids) totalCents * _shareValue(id) / 100];
+    final cents = [for (final value in raw) value.floor()];
+    var remainder = totalCents - cents.fold<int>(0, (a, b) => a + b);
+    final order = List.generate(ids.length, (i) => i)
+      ..sort((a, b) => (raw[b] - cents[b]).compareTo(raw[a] - cents[a]));
+    var cursor = 0;
+    while (remainder > 0 && order.isNotEmpty) {
+      cents[order[cursor % order.length]] += 1;
+      remainder -= 1;
+      cursor += 1;
+    }
+    while (remainder < 0 && order.isNotEmpty) {
+      cents[order[order.length - 1 - (cursor % order.length)]] -= 1;
+      remainder += 1;
+      cursor += 1;
+    }
+    return [
+      for (var i = 0; i < ids.length; i++)
+        if (cents[i] > 0) MapEntry(ids[i], cents[i] / 100),
+    ];
   }
 
   Future<void> _save({required bool draft}) async {
     final total = roundCents(_amount);
-    final memberIds = _members
-        .map((member) => member.memberId)
-        .where(_selectedMemberIds.contains)
-        .toList();
-    // Matches the server's resolveRemainderTarget: paidBy absorbs leftover
-    // cents when included in the split, otherwise the last member does.
-    final allocations = buildEvenSplitAllocations(
-      total,
-      memberIds,
-      remainderMemberId: _payerId,
-    );
+    final List<Map<String, dynamic>> allocationMaps;
+    final List<String> sharedWith;
+    if (_splitMode == 'even') {
+      final memberIds = _members
+          .map((member) => member.memberId)
+          .where(_selectedMemberIds.contains)
+          .toList();
+      // Matches the server's resolveRemainderTarget: paidBy absorbs leftover
+      // cents when included in the split, otherwise the last member does.
+      final allocations = buildEvenSplitAllocations(
+        total,
+        memberIds,
+        remainderMemberId: _payerId,
+      );
+      allocationMaps = [
+        for (final allocation in allocations)
+          {'memberId': allocation.memberId, 'amount': allocation.amount},
+      ];
+      sharedWith = memberIds;
+    } else {
+      final custom = _customAllocations(total);
+      allocationMaps = [
+        for (final entry in custom)
+          {'memberId': entry.key, 'amount': entry.value},
+      ];
+      sharedWith = [for (final entry in custom) entry.key];
+    }
     final description = _descriptionController.text.trim();
 
     setState(() {
@@ -160,11 +278,9 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
         'total': total,
         'currency': _currency,
         'paidByMemberId': _payerId,
-        'sharedWithMemberIds': memberIds,
-        'splitEvenly': true,
-        'allocations': allocations
-            .map((a) => {'memberId': a.memberId, 'amount': a.amount})
-            .toList(),
+        'sharedWithMemberIds': sharedWith,
+        'splitEvenly': _splitMode == 'even',
+        'allocations': allocationMaps,
         if (draft) 'draft': true,
       };
       final tripId = widget.summary.trip.tripId;
@@ -185,7 +301,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
             'total': total,
             'currency': _currency,
             'paidByMemberId': _payerId,
-            'sharedWithMemberIds': memberIds,
+            'sharedWithMemberIds': sharedWith,
             'cadence': _cadence,
           });
         }
@@ -195,7 +311,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
       Navigator.of(context).pop(
         QuickExpenseResult(
           total: total,
-          peopleCount: memberIds.length,
+          peopleCount: sharedWith.length,
           currency: _currency,
           draft: _isEditing ? widget.initialExpense!.draft : draft,
         ),
@@ -244,9 +360,13 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 4),
-              const Text(
-                'Split evenly across everyone selected.',
-                style: TextStyle(fontSize: 12, color: Colors.white70),
+              Text(
+                switch (_splitMode) {
+                  'percent' => 'Split by percentage of the total.',
+                  'exact' => 'Enter exactly what each person owes.',
+                  _ => 'Split evenly across everyone selected.',
+                },
+                style: const TextStyle(fontSize: 12, color: Colors.white70),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -391,7 +511,100 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
                     )
                     .toList(),
               ),
-              if (perHead != null) ...[
+              const SizedBox(height: 12),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'even', label: Text('Evenly')),
+                  ButtonSegment(value: 'percent', label: Text('By %')),
+                  ButtonSegment(value: 'exact', label: Text('Exact')),
+                ],
+                selected: {_splitMode},
+                showSelectedIcon: false,
+                style: const ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                ),
+                onSelectionChanged: _saving
+                    ? null
+                    : (selection) {
+                        HapticFeedback.selectionClick();
+                        setState(() {
+                          _splitMode = selection.first;
+                          // Recurring templates are even-split only.
+                          if (_splitMode != 'even') _cadence = 'none';
+                        });
+                      },
+              ),
+              if (_splitMode != 'even') ...[
+                const SizedBox(height: 8),
+                ..._members
+                    .where(
+                      (member) =>
+                          _selectedMemberIds.contains(member.memberId),
+                    )
+                    .map(
+                      (member) => Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Row(
+                          children: [
+                            MemberAvatar(
+                              memberId: member.memberId,
+                              displayName: member.displayName,
+                              radius: 11,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                firstName(member.displayName),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            SizedBox(
+                              width: 110,
+                              child: TextField(
+                                controller: _shareController(member.memberId),
+                                enabled: !_saving,
+                                textAlign: TextAlign.right,
+                                keyboardType:
+                                    const TextInputType.numberWithOptions(
+                                      decimal: true,
+                                    ),
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.,]'),
+                                  ),
+                                ],
+                                decoration: InputDecoration(
+                                  hintText: '0',
+                                  isDense: true,
+                                  border: const OutlineInputBorder(),
+                                  prefixText: _splitMode == 'exact'
+                                      ? '${currencySymbol(_currency)} '
+                                      : null,
+                                  suffixText: _splitMode == 'percent'
+                                      ? '%'
+                                      : null,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                Text(
+                  _splitMode == 'percent'
+                      ? '${_selectedSharesSum.toStringAsFixed(1)}% of 100%'
+                      : '${formatCurrency(_selectedSharesSum, _currency)} of '
+                            '${formatCurrency(_amount, _currency)}',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: _blockedReason == null
+                        ? Colors.white70
+                        : AppColors.warning,
+                  ),
+                ),
+              ],
+              if (perHead != null && _splitMode == 'even') ...[
                 const SizedBox(height: 8),
                 Text(
                   '${formatCurrency(perHead, _currency)} each · '
@@ -400,7 +613,7 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
                   style: const TextStyle(fontSize: 12, color: Colors.white70),
                 ),
               ],
-              if (!_isEditing) ...[
+              if (!_isEditing && _splitMode == 'even') ...[
                 const SizedBox(height: 14),
                 Row(
                   children: [

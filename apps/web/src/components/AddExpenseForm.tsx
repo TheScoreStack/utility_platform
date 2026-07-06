@@ -126,23 +126,8 @@ const inferPreviewType = (fileName?: string, contentType?: string | null) => {
   return null;
 };
 
-const readFileAsBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result;
-      if (typeof result === "string") {
-        const base64 = result.includes(",") ? result.split(",")[1] : result;
-        resolve(base64);
-      } else {
-        reject(new Error("Unable to read receipt file"));
-      }
-    };
-    reader.onerror = () => {
-      reject(reader.error ?? new Error("Unable to read receipt file"));
-    };
-    reader.readAsDataURL(file);
-  });
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 export interface ExpenseLineItemInput {
   description: string;
@@ -170,6 +155,8 @@ export interface CreateExpenseInput {
   receiptId?: string;
   /** Save privately — visible only to the creator until published. */
   draft?: boolean;
+  /** Also create a recurring template (even splits only, create mode). */
+  repeat?: "weekly" | "monthly";
 }
 
 type SplitMode = "even" | "custom" | "items";
@@ -316,6 +303,7 @@ const AddExpenseForm = ({
     members.map((member) => member.memberId)
   );
   const [splitMode, setSplitMode] = useState<SplitMode>("even");
+  const [repeatCadence, setRepeatCadence] = useState<"" | "weekly" | "monthly">("");
   const splitEvenly = splitMode === "even";
   const [splitExtrasEvenly, setSplitExtrasEvenly] = useState(false);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
@@ -338,6 +326,9 @@ const AddExpenseForm = ({
   const [isAttachingReceipt, setIsAttachingReceipt] = useState(false);
   const liveReceiptInputRef = useRef<HTMLInputElement | null>(null);
   const liveReceiptFileRef = useRef<File | null>(null);
+  // Set once a scan has uploaded via presigned URL; save reuses this
+  // receipt instead of uploading the file a second time.
+  const scannedReceiptIdRef = useRef<string | null>(null);
   const [isFetchingReceiptUrl, setIsFetchingReceiptUrl] = useState(false);
   const [receiptPreviewError, setReceiptPreviewError] = useState<string | null>(null);
   const [receiptPreviewUrl, setReceiptPreviewUrl] = useState<string | null>(null);
@@ -930,17 +921,50 @@ const AddExpenseForm = ({
     setReceiptPreviewError(null);
 
     try {
-      const base64 = await readFileAsBase64(file);
-      setParseStatus("Analyzing receipt…");
-      const response = await api.post<{ extraction: TextractExtraction }>(
-        `/trips/${tripId}/receipts/analyze`,
+      // Presigned upload + async Textract poll — no payload-size ceiling,
+      // and the same uploaded file gets attached at save time.
+      scannedReceiptIdRef.current = null;
+      setParseStatus("Uploading receipt…");
+      const receipt = await api.post<ReceiptUploadResponse>(
+        `/trips/${tripId}/receipts`,
         {
           fileName: file.name,
-          contentType: file.type || undefined,
-          data: base64
+          contentType: file.type || "application/octet-stream",
+          // Hidden from other members until the expense decides visibility.
+          draft: true
         }
       );
-      applyExtraction(response.extraction);
+      const uploadResponse = await fetch(receipt.uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": file.type || "application/octet-stream" },
+        body: file
+      });
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed (${uploadResponse.status})`);
+      }
+      scannedReceiptIdRef.current = receipt.receiptId;
+
+      setParseStatus("Analyzing receipt…");
+      const deadline = Date.now() + 30_000;
+      let extraction: TextractExtraction | null = null;
+      while (Date.now() < deadline) {
+        const record = await api.get<{
+          receipt?: { status?: string; extractedData?: TextractExtraction };
+        }>(`/trips/${tripId}/receipts/${receipt.receiptId}/record`);
+        const status = record.receipt?.status;
+        if (status === "COMPLETED") {
+          extraction = record.receipt?.extractedData ?? {};
+          break;
+        }
+        if (status === "FAILED") {
+          throw new Error("Could not read the receipt.");
+        }
+        await sleep(1200);
+      }
+      if (!extraction) {
+        throw new Error("Reading the receipt took too long. Try again.");
+      }
+      applyExtraction(extraction);
       setParseStatus("Receipt scanned. Review the details before saving.");
     } catch (err) {
       const message =
@@ -1001,6 +1025,8 @@ const AddExpenseForm = ({
     setItemRows([]);
     setExtrasSplitMode("proportional");
     lastAppliedItemsExtractionRef.current = null;
+    scannedReceiptIdRef.current = null;
+    setRepeatCadence("");
     setReceiptId("");
     setReceiptStatusMessage(null);
     setParseStatus(null);
@@ -1189,7 +1215,11 @@ const AddExpenseForm = ({
       allocations: allocationsPayload,
       lineItems: lineItemsPayload,
       extrasSplitMode: lineItemsPayload ? extrasSplitMode : undefined,
-      receiptId: receiptId || undefined
+      receiptId: receiptId || undefined,
+      repeat:
+        !editingLabel && splitMode === "even" && repeatCadence
+          ? repeatCadence
+          : undefined
     };
 
     return payload;
@@ -1235,9 +1265,15 @@ const AddExpenseForm = ({
 
     const payload = { ...input };
 
-    // A live-scanned receipt only exists in memory; upload it now so the
-    // saved expense links to the same file the user scanned. Draft expenses
-    // upload a draft receipt so the file stays hidden until publish.
+    // A scanned receipt already uploaded via presigned URL — reuse it. It
+    // was uploaded as a draft; publishing the expense reveals it.
+    if (!payload.receiptId && scannedReceiptIdRef.current) {
+      payload.receiptId = scannedReceiptIdRef.current;
+    }
+
+    // Fallback for a manually attached file that never went through the
+    // scan path. Draft expenses upload a draft receipt so the file stays
+    // hidden until publish.
     if (!payload.receiptId && liveReceiptFileRef.current) {
       const file = liveReceiptFileRef.current;
       setIsAttachingReceipt(true);
@@ -2305,6 +2341,30 @@ const AddExpenseForm = ({
           {receiptStatusMessage && (
             <p className="muted" style={{ marginTop: "0.5rem" }}>
               {receiptStatusMessage}
+            </p>
+          )}
+        </div>
+      )}
+
+      {!editingLabel && splitMode === "even" && (
+        <div className="input-group" style={{ maxWidth: "16rem" }}>
+          <label htmlFor="expense-repeat">Repeats</label>
+          <select
+            id="expense-repeat"
+            value={repeatCadence}
+            onChange={(event) =>
+              setRepeatCadence(event.target.value as "" | "weekly" | "monthly")
+            }
+          >
+            <option value="">Never</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+          {repeatCadence && (
+            <p className="muted" style={{ margin: "0.3rem 0 0", fontSize: "0.8rem" }}>
+              Adds this expense automatically every{" "}
+              {repeatCadence === "weekly" ? "week" : "month"} — stop it any
+              time from the Recurring section.
             </p>
           )}
         </div>

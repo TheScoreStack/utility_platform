@@ -5,6 +5,7 @@ export * from "@utility-platform/shared";
 
 import type {
   Expense,
+  RecurringExpense,
   HarmonyLedgerAccessRecord,
   HarmonyLedgerEntry,
   HarmonyLedgerGroup,
@@ -31,6 +32,7 @@ export interface TripSummary {
   deletedSettlements: Settlement[];
   balances: BalanceRow[];
   pendingSettlements: Settlement[];
+  recurringExpenses?: RecurringExpense[];
   currentUserId: string;
 }
 

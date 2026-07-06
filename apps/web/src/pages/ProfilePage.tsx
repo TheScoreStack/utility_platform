@@ -66,6 +66,14 @@ const ProfilePage = () => {
     }
   });
 
+  const notificationPrefsMutation = useMutation({
+    mutationFn: (prefs: { activity?: boolean; comments?: boolean }) =>
+      api.post<{ profile: UserProfile }>("/profile/notifications", prefs),
+    onSuccess: (response) => {
+      queryClient.setQueryData(["profile"], response.profile);
+    }
+  });
+
   const userAttributes =
     user && "attributes" in user
       ? (user as { attributes?: Record<string, string> }).attributes
@@ -228,6 +236,64 @@ const ProfilePage = () => {
           <p style={{ color: "#fda4af", margin: "0.6rem 0 0" }}>
             {digestMutation.error instanceof ApiError
               ? digestMutation.error.message
+              : "Couldn't update — try again."}
+          </p>
+        )}
+      </section>
+
+      <section className="card" style={{ gridColumn: "1 / -1" }}>
+        <div className="section-title">
+          <div>
+            <h2>Push notifications</h2>
+            <p className="muted">
+              Applies to the mobile app on every device you're signed into.
+            </p>
+          </div>
+        </div>
+        <label className="digest-toggle">
+          <input
+            type="checkbox"
+            className="digest-toggle__input"
+            checked={profile?.notificationPrefs?.activity !== false}
+            disabled={notificationPrefsMutation.isPending}
+            onChange={(event) =>
+              notificationPrefsMutation.mutate({ activity: event.target.checked })
+            }
+          />
+          <span className="digest-toggle__track" aria-hidden="true">
+            <span className="digest-toggle__thumb" />
+          </span>
+          <span className="digest-toggle__copy">
+            <strong className="digest-toggle__title">Activity</strong>
+            <span className="digest-toggle__sub">
+              New expenses, settlements, and people joining
+            </span>
+          </span>
+        </label>
+        <label className="digest-toggle" style={{ marginTop: "0.6rem" }}>
+          <input
+            type="checkbox"
+            className="digest-toggle__input"
+            checked={profile?.notificationPrefs?.comments !== false}
+            disabled={notificationPrefsMutation.isPending}
+            onChange={(event) =>
+              notificationPrefsMutation.mutate({ comments: event.target.checked })
+            }
+          />
+          <span className="digest-toggle__track" aria-hidden="true">
+            <span className="digest-toggle__thumb" />
+          </span>
+          <span className="digest-toggle__copy">
+            <strong className="digest-toggle__title">Comments</strong>
+            <span className="digest-toggle__sub">
+              Replies on expenses you added or commented on
+            </span>
+          </span>
+        </label>
+        {notificationPrefsMutation.isError && (
+          <p style={{ color: "#fda4af", margin: "0.6rem 0 0" }}>
+            {notificationPrefsMutation.error instanceof ApiError
+              ? notificationPrefsMutation.error.message
               : "Couldn't update — try again."}
           </p>
         )}

@@ -22,6 +22,46 @@ class PushService {
   String? _registeredToken;
   String? _registeredPlatform;
   bool _attemptedThisRun = false;
+  bool _tapHandlersInstalled = false;
+
+  /// Called with a tripId when the user taps a notification. Set by the
+  /// trip list screen, which owns navigation.
+  void Function(String tripId)? onOpenTrip;
+
+  /// Installs tap handlers and drains any notification that launched the
+  /// app. Safe to call repeatedly; call after [onOpenTrip] is set.
+  Future<void> attachTapHandlers() async {
+    if (_tapHandlersInstalled || kIsWeb) return;
+    _tapHandlersInstalled = true;
+    try {
+      if (Platform.isIOS) {
+        _iosChannel.setMethodCallHandler((call) async {
+          if (call.method == 'onNotificationTap') {
+            final tripId = call.arguments as String?;
+            if (tripId != null && tripId.isNotEmpty) onOpenTrip?.call(tripId);
+          }
+          return null;
+        });
+        final launchTripId = await _iosChannel.invokeMethod<String>(
+          'getLaunchTripId',
+        );
+        if (launchTripId != null && launchTripId.isNotEmpty) {
+          onOpenTrip?.call(launchTripId);
+        }
+      } else if (Platform.isAndroid && AppConfig.firebaseAndroidConfigured) {
+        await _ensureFirebase();
+        FirebaseMessaging.onMessageOpenedApp.listen((message) {
+          final tripId = message.data['tripId'];
+          if (tripId is String && tripId.isNotEmpty) onOpenTrip?.call(tripId);
+        });
+        final initial = await FirebaseMessaging.instance.getInitialMessage();
+        final tripId = initial?.data['tripId'];
+        if (tripId is String && tripId.isNotEmpty) onOpenTrip?.call(tripId);
+      }
+    } catch (_) {
+      // Deep links are polish — never let them break startup.
+    }
+  }
 
   Future<void> register(ApiClient api) async {
     if (_attemptedThisRun || kIsWeb) return;
@@ -37,6 +77,18 @@ class PushService {
     }
   }
 
+  Future<void> _ensureFirebase() async {
+    if (Firebase.apps.isNotEmpty) return;
+    await Firebase.initializeApp(
+      options: const FirebaseOptions(
+        apiKey: AppConfig.firebaseAndroidApiKey,
+        appId: AppConfig.firebaseAndroidAppId,
+        messagingSenderId: AppConfig.firebaseMessagingSenderId,
+        projectId: AppConfig.firebaseProjectId,
+      ),
+    );
+  }
+
   Future<(String?, String)> _fetchToken() async {
     if (Platform.isIOS) {
       final token = await _iosChannel.invokeMethod<String>('requestToken');
@@ -45,16 +97,7 @@ class PushService {
     if (Platform.isAndroid && AppConfig.firebaseAndroidConfigured) {
       // Initialized from baked-in public config — no google-services.json
       // or Gradle plugin needed.
-      if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp(
-          options: const FirebaseOptions(
-            apiKey: AppConfig.firebaseAndroidApiKey,
-            appId: AppConfig.firebaseAndroidAppId,
-            messagingSenderId: AppConfig.firebaseMessagingSenderId,
-            projectId: AppConfig.firebaseProjectId,
-          ),
-        );
-      }
+      await _ensureFirebase();
       final messaging = FirebaseMessaging.instance;
       final settings = await messaging.requestPermission();
       if (settings.authorizationStatus == AuthorizationStatus.denied) {

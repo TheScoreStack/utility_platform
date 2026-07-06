@@ -7,6 +7,10 @@ import UserNotifications
   private var pushChannel: FlutterMethodChannel?
   private var pendingTokenResult: FlutterResult?
 
+  /// tripId from a notification tapped before Dart attached its handler
+  /// (cold start). Dart drains it via getLaunchTripId.
+  private var pendingLaunchTripId: String?
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
@@ -26,10 +30,36 @@ import UserNotifications
       switch call.method {
       case "requestToken":
         self?.requestPushToken(result: result)
+      case "getLaunchTripId":
+        result(self?.pendingLaunchTripId)
+        self?.pendingLaunchTripId = nil
       default:
         result(FlutterMethodNotImplemented)
       }
     }
+  }
+
+  // Notification tapped: hand the tripId to Dart (or park it for cold start).
+  override func userNotificationCenter(
+    _ center: UNUserNotificationCenter,
+    didReceive response: UNNotificationResponse,
+    withCompletionHandler completionHandler: @escaping () -> Void
+  ) {
+    let userInfo = response.notification.request.content.userInfo
+    if let tripId = userInfo["tripId"] as? String, !tripId.isEmpty {
+      if let channel = pushChannel {
+        channel.invokeMethod("onNotificationTap", arguments: tripId) {
+          [weak self] reply in
+          // No Dart handler yet (cold start) — park it for the drain call.
+          if (reply as? NSObject) === FlutterMethodNotImplemented {
+            self?.pendingLaunchTripId = tripId
+          }
+        }
+      } else {
+        pendingLaunchTripId = tripId
+      }
+    }
+    completionHandler()
   }
 
   /// Asks for notification permission, then registers with APNs. Resolves

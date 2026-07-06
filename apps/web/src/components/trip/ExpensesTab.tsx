@@ -8,7 +8,7 @@ import { ExpenseCard, type ReceiptPreviewData } from "./ExpenseCard";
 import { ExpenseFilters } from "./ExpenseFilters";
 import { ExpensesSidebar } from "./ExpensesSidebar";
 import { RecentlyDeletedList } from "./RecentlyDeletedList";
-import type { Expense, TripSummary } from "../../types";
+import type { Expense, RecurringExpense, TripSummary } from "../../types";
 
 interface ExpensesTabProps {
   receipts: TripSummary["receipts"];
@@ -42,6 +42,9 @@ interface ExpensesTabProps {
   restoringExpenseId?: string;
   purgingExpenseId?: string;
   isTripOwner: boolean;
+  recurringExpenses: RecurringExpense[];
+  onStopRecurring: (recurringId: string, description: string) => Promise<void>;
+  stoppingRecurringId?: string;
 }
 
 export const ExpensesTab = ({
@@ -71,7 +74,10 @@ export const ExpensesTab = ({
   onPurgeExpense,
   restoringExpenseId,
   purgingExpenseId,
-  isTripOwner
+  isTripOwner,
+  recurringExpenses,
+  onStopRecurring,
+  stoppingRecurringId
 }: ExpensesTabProps) => {
   const [openComments, setOpenComments] = useState<Record<string, boolean>>({});
   const toggleComments = (expenseId: string) =>
@@ -447,6 +453,73 @@ export const ExpensesTab = ({
           onCancelEdit={onCancelEditExpense}
         />
       </section>
+
+      {recurringExpenses.length > 0 && (
+        <section
+          className="card"
+          style={{
+            gridColumn: "1 / -1",
+            border: "1px solid rgba(165,180,252,0.35)"
+          }}
+        >
+          <div className="section-title">
+            <h2>Recurring</h2>
+            <span className="muted">
+              Added automatically on schedule — stop one any time.
+            </span>
+          </div>
+          <div className="list">
+            {recurringExpenses.map((template) => {
+              const canStop =
+                isTripOwner || template.createdBy === currentUserId;
+              const stopping = stoppingRecurringId === template.recurringId;
+              return (
+                <div
+                  key={template.recurringId}
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: "1rem",
+                    flexWrap: "wrap"
+                  }}
+                >
+                  <div>
+                    <strong>{template.description}</strong>{" "}
+                    <span className="muted">
+                      · {formatCurrency.format(template.total)} ·{" "}
+                      {template.cadence === "weekly"
+                        ? "every week"
+                        : "every month"}{" "}
+                      · next {formatDate(template.nextRunAt)}
+                    </span>
+                  </div>
+                  {canStop ? (
+                    <button
+                      type="button"
+                      className="secondary"
+                      disabled={stopping}
+                      title="No new expenses will be created; existing ones stay."
+                      onClick={() => {
+                        onStopRecurring(
+                          template.recurringId,
+                          template.description
+                        ).catch(() => {});
+                      }}
+                    >
+                      {stopping ? "Stopping…" : "Stop repeating"}
+                    </button>
+                  ) : (
+                    <span className="muted" style={{ fontSize: "0.8rem" }}>
+                      Set up by {membersById[template.createdBy] ?? "someone"}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {draftExpenses.length > 0 && (
         <section

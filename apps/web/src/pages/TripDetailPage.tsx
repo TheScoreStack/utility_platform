@@ -192,6 +192,14 @@ const TripDetailPage = () => {
     }
   });
 
+  const stopRecurringMutation = useMutation<void, unknown, string>({
+    mutationFn: (recurringId: string) => {
+      if (!tripId) throw new Error("Trip not found");
+      return api.delete<void>(`/trips/${tripId}/recurring/${recurringId}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey })
+  });
+
   const updateExpenseMutation = useMutation({
     mutationFn: ({
       expenseId,
@@ -208,7 +216,24 @@ const TripDetailPage = () => {
   const handleSubmitExpense = useCallback(
     async (input: CreateExpenseInput) => {
       if (!editingExpense) {
-        return createExpenseMutation.mutateAsync(input);
+        const { repeat, ...payload } = input;
+        const createdExpense = await createExpenseMutation.mutateAsync(
+          payload as CreateExpenseInput
+        );
+        // Drafts don't schedule anything — the template would publish
+        // expenses the group can see while the original stays private.
+        if (repeat && !payload.draft) {
+          await api.post(`/trips/${tripId}/recurring`, {
+            description: payload.description,
+            total: payload.total,
+            currency: payload.currency,
+            paidByMemberId: payload.paidByMemberId,
+            sharedWithMemberIds: payload.sharedWithMemberIds,
+            cadence: repeat
+          });
+          queryClient.invalidateQueries({ queryKey });
+        }
+        return createdExpense;
       }
       // PATCH semantics: omitted fields keep their stored value, so cleared
       // optional fields are sent explicitly (empty string / 0 / empty items).
@@ -862,6 +887,15 @@ const TripDetailPage = () => {
           restoringExpenseId={restoreExpenseMutation.variables}
           purgingExpenseId={purgeExpenseMutation.variables}
           isTripOwner={canManageMembers}
+          recurringExpenses={data.recurringExpenses ?? []}
+          onStopRecurring={(recurringId) =>
+            stopRecurringMutation.mutateAsync(recurringId)
+          }
+          stoppingRecurringId={
+            stopRecurringMutation.isPending
+              ? stopRecurringMutation.variables
+              : undefined
+          }
         />
       )}
 
