@@ -308,6 +308,42 @@ export const handler = async (
       return noContent(origin);
     }
 
+    if (path === "/harmony-ledger/recurring" && method === "GET") {
+      const templates = await harmonyLedgerService.listRecurringTemplates(auth);
+      return ok({ templates }, origin);
+    }
+
+    if (path === "/harmony-ledger/recurring" && method === "POST") {
+      const body = parseBody(event);
+      const template = await harmonyLedgerService.createRecurringTemplate(
+        body,
+        auth
+      );
+      return created(template, origin);
+    }
+
+    const recurringMatch = path.match(/^\/harmony-ledger\/recurring\/([^/]+)$/);
+    if (recurringMatch && method === "PATCH") {
+      const body = parseBody(event);
+      if (!body) {
+        return handleError(new ValidationError("Request body required"), origin);
+      }
+      const template = await harmonyLedgerService.updateRecurringTemplate(
+        decodeURIComponent(recurringMatch[1]),
+        body,
+        auth
+      );
+      return ok(template, origin);
+    }
+
+    if (recurringMatch && method === "DELETE") {
+      await harmonyLedgerService.deleteRecurringTemplate(
+        decodeURIComponent(recurringMatch[1]),
+        auth
+      );
+      return noContent(origin);
+    }
+
     if (path === "/harmony-ledger/statements" && method === "POST") {
       const body = parseBody(event);
       const response = await harmonyLedgerService.createStatement(body, auth);

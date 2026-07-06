@@ -268,7 +268,7 @@ export interface HarmonyLedgerTransfer {
 
 export type HarmonyStatementSourceType = "BANK" | "VENMO" | "PAYPAL" | "OTHER";
 
-export type HarmonyStatementFileType = "PDF" | "CSV";
+export type HarmonyStatementFileType = "PDF" | "CSV" | "IMAGE";
 
 export type HarmonyStatementStatus =
   | "PENDING_UPLOAD"
@@ -333,6 +333,29 @@ export interface HarmonyStagedTransaction {
   createdEntryRecordedAt?: string;
   reviewedAt?: string;
   reviewedBy?: string;
+  reviewedByName?: string;
+}
+
+export type HarmonyRecurringCadence = "weekly" | "monthly";
+
+/** Template that materializes into a ledger entry on a schedule. */
+export interface HarmonyRecurringTemplate {
+  templateId: string;
+  type: HarmonyLedgerEntryType;
+  amount: number;
+  currency: string;
+  description?: string;
+  source?: string;
+  category?: string;
+  groupId?: string;
+  groupName?: string;
+  cadence: HarmonyRecurringCadence;
+  /** ISO timestamp of the next materialization. */
+  nextRunAt: string;
+  isActive: boolean;
+  createdAt: string;
+  createdBy: string;
+  createdByName?: string;
 }
 
 // Stack Time Tracking types

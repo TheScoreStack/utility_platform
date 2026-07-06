@@ -96,6 +96,7 @@ const processRecord = async (record: S3EventRecord): Promise<void> => {
     const parsed = await parseStatement({
       bytes,
       fileType: statement.fileType,
+      contentType: statement.contentType,
       sourceType: statement.sourceType,
       context: { groups, recentEntries: entries }
     });

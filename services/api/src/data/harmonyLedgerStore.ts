@@ -11,7 +11,8 @@ import type {
   HarmonyLedgerAccessRecord,
   HarmonyLedgerEntry,
   HarmonyLedgerGroup,
-  HarmonyLedgerTransfer
+  HarmonyLedgerTransfer,
+  HarmonyRecurringTemplate
 } from "../types.js";
 
 const ACCESS_PK = "HARMONY_LEDGER#ACCESS";
@@ -24,6 +25,8 @@ const GROUP_SK = (groupId: string) => `GROUP#${groupId}`;
 const TRANSFER_PK = "HARMONY_LEDGER#TRANSFER";
 const TRANSFER_SK = (createdAt: string, transferId: string) =>
   `TRANSFER#${createdAt}#${transferId}`;
+const RECURRING_PK = "HARMONY_LEDGER#RECURRING";
+const RECURRING_SK = (templateId: string) => `RECURRING#${templateId}`;
 
 type AccessEntity = HarmonyLedgerAccessRecord & {
   entityType: "HarmonyLedgerAccess";
@@ -667,6 +670,129 @@ export class HarmonyLedgerStore {
         TableName: this.tableName,
         Item: entity,
         ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+      })
+    );
+  }
+
+  async listRecurringTemplates(): Promise<HarmonyRecurringTemplate[]> {
+    const { Items } = await this.docClient.send(
+      new QueryCommand({
+        TableName: this.tableName,
+        KeyConditionExpression: "PK = :pk",
+        ExpressionAttributeValues: { ":pk": RECURRING_PK }
+      })
+    );
+
+    if (!Items?.length) {
+      return [];
+    }
+
+    return Items.map((item) => {
+      const { PK: _pk, SK: _sk, entityType: _et, ...rest } = item;
+      return rest as HarmonyRecurringTemplate;
+    });
+  }
+
+  async createRecurringTemplate(
+    template: HarmonyRecurringTemplate
+  ): Promise<void> {
+    await this.docClient.send(
+      new PutCommand({
+        TableName: this.tableName,
+        Item: {
+          entityType: "HarmonyRecurringTemplate",
+          PK: RECURRING_PK,
+          SK: RECURRING_SK(template.templateId),
+          ...template
+        },
+        ConditionExpression: "attribute_not_exists(PK) AND attribute_not_exists(SK)"
+      })
+    );
+  }
+
+  async updateRecurringTemplate(
+    templateId: string,
+    updates: {
+      amount?: number;
+      description?: string | null;
+      category?: string | null;
+      cadence?: HarmonyRecurringTemplate["cadence"];
+      nextRunAt?: string;
+      isActive?: boolean;
+      group?: { groupId: string; groupName: string } | null;
+    }
+  ): Promise<HarmonyRecurringTemplate> {
+    const sets: string[] = [];
+    const removes: string[] = [];
+    const values: Record<string, unknown> = {};
+
+    if (updates.amount !== undefined) {
+      sets.push("amount = :amount");
+      values[":amount"] = updates.amount;
+    }
+    if (updates.description !== undefined) {
+      if (updates.description === null) {
+        removes.push("description");
+      } else {
+        sets.push("description = :description");
+        values[":description"] = updates.description;
+      }
+    }
+    if (updates.category !== undefined) {
+      if (updates.category === null) {
+        removes.push("category");
+      } else {
+        sets.push("category = :category");
+        values[":category"] = updates.category;
+      }
+    }
+    if (updates.cadence !== undefined) {
+      sets.push("cadence = :cadence");
+      values[":cadence"] = updates.cadence;
+    }
+    if (updates.nextRunAt !== undefined) {
+      sets.push("nextRunAt = :nextRunAt");
+      values[":nextRunAt"] = updates.nextRunAt;
+    }
+    if (updates.isActive !== undefined) {
+      sets.push("isActive = :isActive");
+      values[":isActive"] = updates.isActive;
+    }
+    if (updates.group === null) {
+      removes.push("groupId", "groupName");
+    } else if (updates.group) {
+      sets.push("groupId = :groupId", "groupName = :groupName");
+      values[":groupId"] = updates.group.groupId;
+      values[":groupName"] = updates.group.groupName;
+    }
+
+    const expression =
+      (sets.length ? `SET ${sets.join(", ")}` : "") +
+      (removes.length ? ` REMOVE ${removes.join(", ")}` : "");
+
+    const response = await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: { PK: RECURRING_PK, SK: RECURRING_SK(templateId) },
+        ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)",
+        UpdateExpression: expression.trim(),
+        ...(Object.keys(values).length
+          ? { ExpressionAttributeValues: values }
+          : {}),
+        ReturnValues: "ALL_NEW"
+      })
+    );
+
+    const { PK: _pk, SK: _sk, entityType: _et, ...rest } =
+      response.Attributes as Record<string, unknown>;
+    return rest as unknown as HarmonyRecurringTemplate;
+  }
+
+  async deleteRecurringTemplate(templateId: string): Promise<void> {
+    await this.docClient.send(
+      new DeleteCommand({
+        TableName: this.tableName,
+        Key: { PK: RECURRING_PK, SK: RECURRING_SK(templateId) }
       })
     );
   }

@@ -14,7 +14,9 @@ import {
   generateStatementUpload
 } from "./uploadService.js";
 import { invokeStatementParser } from "./invokeStatementParser.js";
+import { advanceCadence } from "../lib/recurrence.js";
 import type {
+  HarmonyRecurringTemplate,
   HarmonyLedgerAccessRecord,
   HarmonyLedgerEntry,
   HarmonyLedgerEntryType,
@@ -130,6 +132,8 @@ const bulkConfirmSchema = z
 /** Max entries created per bulk-confirm call (stays within the HTTP timeout). */
 const BULK_CONFIRM_CAP = 200;
 
+const IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".webp", ".gif"];
+
 export const statementFileTypeFrom = (
   fileName: string,
   contentType: string
@@ -142,8 +146,14 @@ export const statementFileTypeFrom = (
   if (lowerType.includes("csv") || lowerName.endsWith(".csv")) {
     return "CSV";
   }
+  if (
+    lowerType.startsWith("image/") ||
+    IMAGE_EXTENSIONS.some((ext) => lowerName.endsWith(ext))
+  ) {
+    return "IMAGE";
+  }
   throw new ValidationError(
-    "Only PDF and CSV statements are supported right now."
+    "Only PDF, CSV, and photo (JPEG/PNG) statements are supported."
   );
 };
 
@@ -209,6 +219,35 @@ const updateGroupSchema = z
   .refine((value) => value.name !== undefined || value.isActive !== undefined, {
     message: "Provide a new name or an active flag."
   });
+
+const recurringCadences = ["weekly", "monthly"] as const;
+
+const createRecurringSchema = z.object({
+  type: z.enum(ledgerEntryTypes),
+  amount: z.number().positive(),
+  currency: z.string().default("USD"),
+  description: z.string().min(1).optional(),
+  source: z.string().min(1).optional(),
+  category: z.string().min(1).optional(),
+  groupId: z.string().min(1).optional(),
+  cadence: z.enum(recurringCadences)
+});
+
+const updateRecurringSchema = z
+  .object({
+    amount: z.number().positive().optional(),
+    description: clearableText,
+    category: clearableText,
+    groupId: z.union([z.string().min(1), z.null()]).optional(),
+    cadence: z.enum(recurringCadences).optional(),
+    isActive: z.boolean().optional()
+  })
+  .refine((value) => Object.values(value).some((v) => v !== undefined), {
+    message: "Provide at least one field to update."
+  });
+
+/** Safety cap on catch-up materializations per template per run. */
+const MAX_CATCHUP_RUNS = 12;
 
 /** "Golden Ratio!" -> "golden-ratio". */
 export const slugifyGroupName = (name: string): string =>
@@ -794,6 +833,153 @@ export class HarmonyLedgerService {
     return group;
   }
 
+  async listRecurringTemplates(
+    auth: AuthContext
+  ): Promise<HarmonyRecurringTemplate[]> {
+    await this.requireAccess(auth);
+    const templates = await this.store.listRecurringTemplates();
+    return templates.sort((a, b) => a.nextRunAt.localeCompare(b.nextRunAt));
+  }
+
+  async createRecurringTemplate(
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyRecurringTemplate> {
+    const { profile } = await this.requireAccess(auth);
+    const parsed = createRecurringSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const payload = parsed.data;
+    let groupName: string | undefined;
+    if (payload.groupId) {
+      await this.ensureDefaultGroups();
+      const group = await this.store.getGroup(payload.groupId);
+      if (!group) {
+        throw new ValidationError("Unknown Harmony Collective group.");
+      }
+      groupName = group.name;
+    }
+
+    const now = isoNow();
+    const template: HarmonyRecurringTemplate = {
+      templateId: `hrt_${nanoid(10)}`,
+      type: payload.type,
+      amount: payload.amount,
+      currency: payload.currency,
+      description: payload.description,
+      source: payload.source,
+      category: payload.category,
+      groupId: payload.groupId,
+      groupName,
+      cadence: payload.cadence,
+      // First materialization is one cadence out — creating a template
+      // alongside a just-recorded entry must not double-post today.
+      nextRunAt: advanceCadence(now, payload.cadence),
+      isActive: true,
+      createdAt: now,
+      createdBy: profile.userId,
+      createdByName: displayNameFromProfile(profile)
+    };
+
+    await this.store.createRecurringTemplate(template);
+    return template;
+  }
+
+  async updateRecurringTemplate(
+    templateId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyRecurringTemplate> {
+    await this.requireAccess(auth);
+    const parsed = updateRecurringSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const { groupId, ...fields } = parsed.data;
+    let group: { groupId: string; groupName: string } | null | undefined;
+    if (groupId === null) {
+      group = null;
+    } else if (groupId) {
+      await this.ensureDefaultGroups();
+      const found = await this.store.getGroup(groupId);
+      if (!found) {
+        throw new ValidationError("Unknown Harmony Collective group.");
+      }
+      group = { groupId: found.groupId, groupName: found.name };
+    }
+
+    try {
+      return await this.store.updateRecurringTemplate(templateId, {
+        ...fields,
+        group
+      });
+    } catch (error) {
+      if ((error as Error).name === "ConditionalCheckFailedException") {
+        throw new NotFoundError("Recurring entry not found");
+      }
+      throw error;
+    }
+  }
+
+  async deleteRecurringTemplate(
+    templateId: string,
+    auth: AuthContext
+  ): Promise<void> {
+    await this.requireAccess(auth);
+    await this.store.deleteRecurringTemplate(templateId);
+  }
+
+  /**
+   * Materializes every due active template into a ledger entry and advances
+   * its schedule. Called from the daily EventBridge target (no auth).
+   */
+  async materializeDueRecurringEntries(): Promise<number> {
+    const templates = await this.store.listRecurringTemplates();
+    const now = isoNow();
+    let created = 0;
+
+    for (const template of templates) {
+      if (!template.isActive) continue;
+
+      let nextRunAt = template.nextRunAt;
+      let runs = 0;
+      while (nextRunAt <= now && runs < MAX_CATCHUP_RUNS) {
+        const entry: HarmonyLedgerEntry = {
+          entryId: nanoid(12),
+          type: template.type,
+          amount: template.amount,
+          currency: template.currency,
+          description: template.description,
+          source: template.source ?? "Recurring",
+          category: template.category,
+          groupId: template.groupId,
+          groupName: template.groupName,
+          recordedAt: isoNow(),
+          recordedBy: template.createdBy,
+          recordedByName: template.createdByName
+            ? `${template.createdByName} (recurring)`
+            : "Recurring",
+          occurredAt: nextRunAt.slice(0, 10)
+        };
+        await this.store.createEntry(entry);
+        created += 1;
+        runs += 1;
+        nextRunAt = advanceCadence(nextRunAt, template.cadence);
+      }
+
+      if (runs > 0) {
+        await this.store.updateRecurringTemplate(template.templateId, {
+          nextRunAt
+        });
+      }
+    }
+
+    return created;
+  }
+
   async createStatement(
     body: unknown,
     auth: AuthContext
@@ -1001,7 +1187,8 @@ export class HarmonyLedgerService {
         createdEntryId: entry.entryId,
         createdEntryRecordedAt: entry.recordedAt,
         reviewedAt: isoNow(),
-        reviewedBy: profile.userId
+        reviewedBy: profile.userId,
+        reviewedByName: displayNameFromProfile(profile)
       }
     );
 
@@ -1057,6 +1244,7 @@ export class HarmonyLedgerService {
         status: "PENDING",
         reviewedAt: isoNow(),
         reviewedBy: profile.userId,
+        reviewedByName: displayNameFromProfile(profile),
         clearCreatedEntry: true
       }
     );
@@ -1120,7 +1308,8 @@ export class HarmonyLedgerService {
       {
         status: "DISMISSED",
         reviewedAt: isoNow(),
-        reviewedBy: profile.userId
+        reviewedBy: profile.userId,
+        reviewedByName: displayNameFromProfile(profile)
       }
     );
 
@@ -1162,7 +1351,8 @@ export class HarmonyLedgerService {
       {
         status: "PENDING",
         reviewedAt: isoNow(),
-        reviewedBy: profile.userId
+        reviewedBy: profile.userId,
+        reviewedByName: displayNameFromProfile(profile)
       }
     );
 
@@ -1214,7 +1404,8 @@ export class HarmonyLedgerService {
           createdEntryId: entry.entryId,
           createdEntryRecordedAt: entry.recordedAt,
           reviewedAt: isoNow(),
-          reviewedBy: profile.userId
+          reviewedBy: profile.userId,
+          reviewedByName: displayNameFromProfile(profile)
         }
       );
       confirmed += 1;

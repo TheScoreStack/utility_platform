@@ -26,10 +26,17 @@ describe("statementFileTypeFrom", () => {
     );
   });
 
+  it("detects images by content type or extension", () => {
+    expect(statementFileTypeFrom("statement.jpg", "image/jpeg")).toBe("IMAGE");
+    expect(statementFileTypeFrom("scan.PNG", "application/octet-stream")).toBe(
+      "IMAGE"
+    );
+  });
+
   it("rejects unsupported files", () => {
     expect(() =>
       statementFileTypeFrom("statement.xlsx", "application/vnd.ms-excel")
-    ).toThrowError(/PDF and CSV/);
+    ).toThrowError(/PDF, CSV/);
   });
 });
 

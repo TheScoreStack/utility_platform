@@ -33,9 +33,21 @@ export interface StatementParseContext {
 export interface ParseStatementInput {
   bytes: Buffer;
   fileType: HarmonyStatementFileType;
+  /** Used to pick the image media type for IMAGE statements. */
+  contentType?: string;
   sourceType: HarmonyStatementSourceType;
   context: StatementParseContext;
 }
+
+type ImageMediaType = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+
+export const imageMediaTypeFrom = (contentType?: string): ImageMediaType => {
+  const lower = (contentType ?? "").toLowerCase();
+  if (lower.includes("png")) return "image/png";
+  if (lower.includes("webp")) return "image/webp";
+  if (lower.includes("gif")) return "image/gif";
+  return "image/jpeg";
+};
 
 const CSV_CHUNK_ROWS = 200;
 const MAX_CONTEXT_ENTRIES = 100;
@@ -154,6 +166,7 @@ Entry types:
 
 Rules:
 - Every row or line that represents a completed money movement becomes exactly one transaction. Skip pending, declined, and authorization-only lines. Skip balance summaries and totals.
+- For photos of statements, read every visible row carefully; skip rows that are cut off or unreadable rather than guessing amounts.
 - amount is always positive; use direction IN for money in and OUT for money out.
 - date is the transaction date in YYYY-MM-DD.
 - Flag transfers between the collective's own accounts (e.g. "Transfer to Savings", Venmo-to-bank cashouts, PayPal withdrawals to bank) with isLikelyInternalTransfer=true.
@@ -347,6 +360,10 @@ const callModel = async (
     | {
         type: "document";
         source: { type: "base64"; media_type: "application/pdf"; data: string };
+      }
+    | {
+        type: "image";
+        source: { type: "base64"; media_type: ImageMediaType; data: string };
       },
   prompt: { system: string; userPrefix: string }
 ): Promise<unknown> => {
@@ -409,6 +426,21 @@ export const parseStatement = async (
         source: {
           type: "base64",
           media_type: "application/pdf",
+          data: input.bytes.toString("base64")
+        }
+      },
+      prompt
+    );
+    return extractTransactions(output, validGroupIds);
+  }
+
+  if (input.fileType === "IMAGE") {
+    const output = await callModel(
+      {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: imageMediaTypeFrom(input.contentType),
           data: input.bytes.toString("base64")
         }
       },

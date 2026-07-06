@@ -430,12 +430,35 @@ export class GroupExpensesStack extends Stack {
       );
     }
 
+    const harmonyRecurringLambda = new NodejsFunction(
+      this,
+      "HarmonyRecurringHandler",
+      {
+        ...sharedFunctionProps,
+        timeout: Duration.minutes(2),
+        entry: path.join(
+          stackDir,
+          "../../../services/api/src/handlers/harmonyRecurring.ts"
+        ),
+        logRetention: RetentionDays.ONE_WEEK,
+        environment: {
+          TABLE_NAME: table.tableName,
+          RECEIPT_BUCKET: receiptBucket.bucketName,
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+        }
+      }
+    );
+    table.grantReadWriteData(harmonyRecurringLambda);
+
     new Rule(this, "RecurringExpensesSchedule", {
       schedule: Schedule.cron({
         minute: "5",
         hour: "13"
       }),
-      targets: [new LambdaFunction(recurringExpensesLambda)],
+      targets: [
+        new LambdaFunction(recurringExpensesLambda),
+        new LambdaFunction(harmonyRecurringLambda)
+      ],
       description:
         "Materializes due recurring expenses daily at 13:05 UTC (morning in the US)"
     });
@@ -650,6 +673,11 @@ export class GroupExpensesStack extends Stack {
       "HarmonyParserErrorsAlarm",
       harmonyParserLambda,
       "Harmony statement parser is failing — statement imports will hang"
+    );
+    alarmOnErrors(
+      "HarmonyRecurringErrorsAlarm",
+      harmonyRecurringLambda,
+      "Harmony recurring materializer failed — scheduled entries are not posting"
     );
     alarmOnErrors(
       "RecurringErrorsAlarm",

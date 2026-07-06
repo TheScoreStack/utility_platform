@@ -283,6 +283,7 @@ export class HarmonyStatementStore {
       createdEntryRecordedAt?: string;
       reviewedAt: string;
       reviewedBy: string;
+      reviewedByName?: string;
       /** Drop the created-entry pointers (un-confirm). */
       clearCreatedEntry?: boolean;
     }
@@ -298,6 +299,10 @@ export class HarmonyStatementStore {
       ":reviewedAt": updates.reviewedAt,
       ":reviewedBy": updates.reviewedBy
     };
+    if (updates.reviewedByName !== undefined) {
+      sets.push("reviewedByName = :reviewedByName");
+      values[":reviewedByName"] = updates.reviewedByName;
+    }
     if (updates.clearCreatedEntry) {
       removes.push("createdEntryId", "createdEntryRecordedAt");
     } else {
