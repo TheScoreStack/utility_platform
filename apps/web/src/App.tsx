@@ -12,6 +12,7 @@ import {
 import TripListPage from "./pages/TripListPage";
 import TripDetailPage from "./pages/TripDetailPage";
 import { useMemo } from "react";
+import AboutPage from "./pages/AboutPage";
 import ModuleHub from "./pages/ModuleHub";
 import PrivacyPage from "./pages/PrivacyPage";
 import SupportPage from "./pages/SupportPage";
@@ -248,6 +249,8 @@ const App = () => {
       return <SupportPage />;
     case "/terms":
       return <TermsPage />;
+    case "/about":
+      return <AboutPage />;
   }
 
   return (
