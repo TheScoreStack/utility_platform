@@ -309,6 +309,16 @@ export class GroupExpensesStack extends Stack {
         ]
       })
     );
+    // The Bedrock Mantle (Messages API) endpoint authorizes with its own
+    // action/resource pair, separate from classic bedrock:InvokeModel.
+    harmonyParserLambda.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["bedrock-mantle:CreateInference"],
+        resources: [
+          `arn:aws:bedrock-mantle:*:${this.account}:project/*`
+        ]
+      })
+    );
     if (pushPolicy) {
       harmonyParserLambda.addToRolePolicy(pushPolicy);
     }
