@@ -234,9 +234,8 @@ export class GroupExpensesStack extends Stack {
     const pushAppArns = [pushPlatformAppArn, pushPlatformAppArnAndroid].filter(
       Boolean
     );
-    if (pushAppArns.length) {
-      httpLambda.addToRolePolicy(
-        new PolicyStatement({
+    const pushPolicy = pushAppArns.length
+      ? new PolicyStatement({
           actions: [
             "sns:CreatePlatformEndpoint",
             "sns:Publish",
@@ -249,7 +248,9 @@ export class GroupExpensesStack extends Stack {
             `${arn.replace(":app/", ":endpoint/")}/*`
           ])
         })
-      );
+      : null;
+    if (pushPolicy) {
+      httpLambda.addToRolePolicy(pushPolicy);
     }
 
     const textractLambda = new NodejsFunction(this, "TextractProcessor", {
@@ -287,7 +288,14 @@ export class GroupExpensesStack extends Stack {
           RECEIPT_BUCKET: receiptBucket.bucketName,
           BEDROCK_MODEL_ID:
             process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-haiku-4-5",
-          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1",
+          // Parse-finished pushes to the uploader.
+          ...(pushPlatformAppArn
+            ? { PUSH_PLATFORM_APP_ARN: pushPlatformAppArn }
+            : {}),
+          ...(pushPlatformAppArnAndroid
+            ? { PUSH_PLATFORM_APP_ARN_ANDROID: pushPlatformAppArnAndroid }
+            : {})
         }
       }
     );
@@ -301,6 +309,9 @@ export class GroupExpensesStack extends Stack {
         ]
       })
     );
+    if (pushPolicy) {
+      harmonyParserLambda.addToRolePolicy(pushPolicy);
+    }
 
     table.grantReadWriteData(httpLambda);
     table.grantReadWriteData(textractLambda);

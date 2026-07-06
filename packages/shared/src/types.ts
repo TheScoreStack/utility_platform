@@ -319,6 +319,8 @@ export interface HarmonyStagedTransaction {
   suggestedType: HarmonyLedgerEntryType;
   suggestedGroupId?: string;
   suggestedGroupName?: string;
+  /** AI-suggested bookkeeping category (short free text, e.g. "supplies"). */
+  suggestedCategory?: string;
   /** AI hint: likely a transfer between the collective's own accounts. */
   isLikelyInternalTransfer?: boolean;
   /** 0..1 */

@@ -9,6 +9,7 @@ import {
   computeFingerprint,
   parseStatement
 } from "../services/statementParsingService.js";
+import { notifyUsersSafely } from "../services/pushService.js";
 import type { HarmonyStagedTransaction } from "../types.js";
 
 const MAX_STATEMENT_BYTES = 18 * 1024 * 1024;
@@ -147,6 +148,7 @@ const processRecord = async (record: S3EventRecord): Promise<void> => {
         suggestedGroupName: txn.suggestedGroupId
           ? groupNames.get(txn.suggestedGroupId)
           : undefined,
+        suggestedCategory: txn.suggestedCategory,
         isLikelyInternalTransfer: txn.isLikelyInternalTransfer,
         confidence: txn.confidence,
         fingerprint,
@@ -167,6 +169,16 @@ const processRecord = async (record: S3EventRecord): Promise<void> => {
         duplicates: staged.filter((txn) => Boolean(txn.duplicateOf)).length
       }
     });
+
+    await notifyUsersSafely([statement.uploadedBy], {
+      title: "Statement ready to review",
+      body:
+        staged.length === 0
+          ? `${statement.fileName}: no transactions found.`
+          : `${statement.fileName}: ${staged.length} ` +
+            `${staged.length === 1 ? "transaction" : "transactions"} to review.`,
+      data: { harmonyStatementId: statementId }
+    });
   } catch (error) {
     console.error("Failed to parse harmony statement", { statementId, error });
     const message =
@@ -174,6 +186,12 @@ const processRecord = async (record: S3EventRecord): Promise<void> => {
     await statementStore.updateStatementStatus(statementId, {
       status: "FAILED",
       errorMessage: message.slice(0, 500)
+    });
+
+    await notifyUsersSafely([statement.uploadedBy], {
+      title: "Statement parsing failed",
+      body: `${statement.fileName} could not be parsed — tap Retry to try again.`,
+      data: { harmonyStatementId: statementId }
     });
   }
 };

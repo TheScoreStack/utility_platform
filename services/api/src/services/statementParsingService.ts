@@ -20,6 +20,7 @@ export interface ParsedStatementTransaction {
   counterparty?: string;
   suggestedType: HarmonyLedgerEntryType;
   suggestedGroupId?: string;
+  suggestedCategory?: string;
   isLikelyInternalTransfer?: boolean;
   confidence?: number;
 }
@@ -157,6 +158,7 @@ Rules:
 - date is the transaction date in YYYY-MM-DD.
 - Flag transfers between the collective's own accounts (e.g. "Transfer to Savings", Venmo-to-bank cashouts, PayPal withdrawals to bank) with isLikelyInternalTransfer=true.
 - suggestedGroupId must be one of the provided group ids, or null when unsure.
+- suggestedCategory is a short lowercase bookkeeping category (one or two words, e.g. "supplies", "equipment", "food", "venue", "fees", "merch", "door"). Prefer a category already used in the ledger when one fits; null when unsure.
 - For Venmo/PayPal, put the other party's name in counterparty and use the memo or note to infer the entry type and group.
 - IN transactions must be DONATION, INCOME, or REIMBURSEMENT; OUT transactions must be EXPENSE.
 - confidence is your 0-1 confidence in the suggested type and group.`;
@@ -177,17 +179,30 @@ export const buildStatementPrompt = (input: {
       (entry) =>
         `- "${entry.description ?? entry.source}" -> ${entry.type}${
           entry.groupId ? ` / ${entry.groupId}` : ""
-        }`
+        }${entry.category ? ` / ${entry.category}` : ""}`
     );
+
+  const knownCategories = [
+    ...new Set(
+      input.context.recentEntries
+        .map((entry) => entry.category)
+        .filter((category): category is string => Boolean(category))
+    )
+  ].slice(0, 30);
 
   const userPrefix = [
     `Statement source: ${input.sourceType} (${input.fileType})`,
     `Groups: ${JSON.stringify(groups)}`,
+    knownCategories.length
+      ? `Categories already used in the ledger: ${knownCategories.join(", ")}`
+      : "",
     contextLines.length
-      ? `Recent ledger entries for context (description -> type / group):\n${contextLines.join("\n")}`
+      ? `Recent ledger entries for context (description -> type / group / category):\n${contextLines.join("\n")}`
       : "No prior ledger entries available for context.",
     "Extract all transactions from the following statement as JSON matching the schema."
-  ].join("\n\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 
   return { system: SYSTEM_PROMPT, userPrefix };
 };
@@ -211,6 +226,7 @@ const TXN_SCHEMA = {
             enum: ["DONATION", "INCOME", "EXPENSE", "REIMBURSEMENT"]
           },
           suggestedGroupId: { type: ["string", "null"] },
+          suggestedCategory: { type: ["string", "null"] },
           isLikelyInternalTransfer: { type: "boolean" },
           confidence: { type: "number" }
         },
@@ -223,6 +239,7 @@ const TXN_SCHEMA = {
           "counterparty",
           "suggestedType",
           "suggestedGroupId",
+          "suggestedCategory",
           "isLikelyInternalTransfer",
           "confidence"
         ],
@@ -243,6 +260,7 @@ interface RawParsedTxn {
   counterparty: string | null;
   suggestedType: string;
   suggestedGroupId: string | null;
+  suggestedCategory?: string | null;
   isLikelyInternalTransfer: boolean;
   confidence: number;
 }
@@ -299,6 +317,9 @@ export const sanitizeParsedTransaction = (
     counterparty: raw.counterparty || undefined,
     suggestedType,
     suggestedGroupId,
+    suggestedCategory: raw.suggestedCategory
+      ? raw.suggestedCategory.toLowerCase().trim().slice(0, 40)
+      : undefined,
     isLikelyInternalTransfer: raw.isLikelyInternalTransfer || undefined,
     confidence:
       typeof raw.confidence === "number"

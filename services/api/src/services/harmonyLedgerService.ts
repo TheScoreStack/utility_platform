@@ -111,6 +111,8 @@ const confirmTxnSchema = z.object({
   type: z.enum(ledgerEntryTypes).optional(),
   groupId: z.union([z.string().min(1), z.null()]).optional(),
   description: z.string().min(1).optional(),
+  // null suppresses the AI-suggested category; omitted keeps it.
+  category: z.union([z.string().min(1), z.null()]).optional(),
   memberName: z.string().min(1).optional(),
   notes: z.string().min(1).optional()
 });
@@ -881,6 +883,7 @@ export class HarmonyLedgerService {
       type?: HarmonyLedgerEntryType;
       group?: { groupId: string; groupName: string } | null;
       description?: string;
+      category?: string | null;
       memberName?: string;
       notes?: string;
     }
@@ -914,6 +917,10 @@ export class HarmonyLedgerService {
       currency: txn.currency,
       description: overrides.description ?? txn.rawDescription,
       source: entrySourceForStatement(statement.sourceType),
+      category:
+        overrides.category === undefined
+          ? txn.suggestedCategory
+          : (overrides.category ?? undefined),
       notes: overrides.notes,
       memberName: overrides.memberName ?? txn.counterparty,
       groupId: group?.groupId,
@@ -980,6 +987,7 @@ export class HarmonyLedgerService {
       type: payload.type,
       group: groupOverride,
       description: payload.description,
+      category: payload.category,
       memberName: payload.memberName,
       notes: payload.notes
     });
