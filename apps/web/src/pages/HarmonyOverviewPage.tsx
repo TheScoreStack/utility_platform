@@ -2,7 +2,10 @@ import { useMemo } from "react";
 import { Link } from "react-router-dom";
 import HarmonySubNav from "../components/HarmonySubNav";
 import { seedAvatar } from "../lib/avatarPalette";
+import { useHarmonyLedgerAccess } from "../modules/useHarmonyLedgerAccess";
+import { useHarmonyLedgerEntries } from "../modules/useHarmonyLedgerEntries";
 import { useHarmonyLedgerOverview } from "../modules/useHarmonyLedgerOverview";
+import { useHarmonyStatements } from "../modules/useHarmonyStatements";
 
 const CURRENCY = "USD";
 
@@ -12,6 +15,29 @@ const formatCurrencyValue = (value: number) =>
     currency: CURRENCY,
     maximumFractionDigits: 2
   }).format(value);
+
+const monthDateOf = (monthKey: string) => {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Date(year, month - 1, 1);
+};
+
+const formatMonthShort = (monthKey: string) =>
+  new Intl.DateTimeFormat(undefined, { month: "short" }).format(
+    monthDateOf(monthKey)
+  );
+
+const formatMonthLong = (monthKey: string) =>
+  new Intl.DateTimeFormat(undefined, {
+    month: "long",
+    year: "numeric"
+  }).format(monthDateOf(monthKey));
+
+interface MonthBucket {
+  monthKey: string;
+  inflow: number;
+  outflow: number;
+  net: number;
+}
 
 const formatDateLong = (): string => {
   try {
@@ -45,6 +71,63 @@ const SkeletonHero = () => (
 
 const HarmonyOverviewPage = () => {
   const { data, isLoading } = useHarmonyLedgerOverview();
+  const { data: accessData } = useHarmonyLedgerAccess();
+  const allowed = accessData?.allowed ?? false;
+  const statementsQuery = useHarmonyStatements(allowed);
+  const entriesQuery = useHarmonyLedgerEntries(allowed);
+
+  const statements = statementsQuery.data?.statements;
+  const pendingReview = useMemo(
+    () =>
+      (statements ?? []).reduce(
+        (sum, statement) =>
+          statement.status === "PARSED"
+            ? sum + (statement.counts?.pending ?? 0)
+            : sum,
+        0
+      ),
+    [statements]
+  );
+  const failedCount = useMemo(
+    () =>
+      (statements ?? []).filter((statement) => statement.status === "FAILED")
+        .length,
+    [statements]
+  );
+
+  // Last 12 months of activity, bucketed by effective transaction date.
+  const monthly = useMemo<MonthBucket[]>(() => {
+    const entries = entriesQuery.data?.entries;
+    if (!entries || entries.length === 0) return [];
+    const buckets = new Map<string, { inflow: number; outflow: number }>();
+    for (const entry of entries) {
+      const monthKey = (entry.occurredAt ?? entry.recordedAt).slice(0, 7);
+      const bucket = buckets.get(monthKey) ?? { inflow: 0, outflow: 0 };
+      if (entry.type === "EXPENSE") {
+        bucket.outflow += entry.amount;
+      } else {
+        bucket.inflow += entry.amount;
+      }
+      buckets.set(monthKey, bucket);
+    }
+    return [...buckets.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12)
+      .map(([monthKey, sums]) => ({
+        monthKey,
+        ...sums,
+        net: sums.inflow - sums.outflow
+      }));
+  }, [entriesQuery.data]);
+
+  const maxMonthlyFlow = useMemo(
+    () =>
+      monthly.reduce(
+        (max, month) => Math.max(max, month.inflow, month.outflow),
+        0
+      ),
+    [monthly]
+  );
 
   const groupRows = useMemo(() => {
     if (!data) return [];
@@ -82,9 +165,44 @@ const HarmonyOverviewPage = () => {
   const tone: "owed" | "owe" | "settled" =
     totals.net > 0.01 ? "owed" : totals.net < -0.01 ? "owe" : "settled";
 
+  const latestMonth = monthly.length > 0 ? monthly[monthly.length - 1] : null;
+  const latestTone: "owed" | "owe" | "settled" = latestMonth
+    ? latestMonth.net > 0.01
+      ? "owed"
+      : latestMonth.net < -0.01
+        ? "owe"
+        : "settled"
+    : "settled";
+
   return (
     <div className="hl-page">
       <HarmonySubNav />
+
+      {(pendingReview > 0 || failedCount > 0) && (
+        <Link
+          to="/harmony-ledger/statements"
+          className={`hl-nudge ov-rise${pendingReview === 0 ? " hl-nudge--failed" : ""}`}
+        >
+          <span className="hl-nudge__lines">
+            {pendingReview > 0 && (
+              <span className="hl-nudge__line">
+                <strong>{pendingReview}</strong> imported{" "}
+                {pendingReview === 1 ? "transaction" : "transactions"} awaiting
+                review
+              </span>
+            )}
+            {failedCount > 0 && (
+              <span className="hl-nudge__line hl-nudge__line--failed">
+                {failedCount}{" "}
+                {failedCount === 1
+                  ? "statement failed to parse — retry it"
+                  : "statements failed to parse — retry them"}
+              </span>
+            )}
+          </span>
+          <span className="hl-nudge__cta">Open statements →</span>
+        </Link>
+      )}
 
       <section className={`hl-hero hl-hero--${tone} ov-rise ov-rise-1`}>
         <span className="hl-hero__eyebrow">
@@ -205,6 +323,52 @@ const HarmonyOverviewPage = () => {
           </div>
         )}
       </section>
+
+      {latestMonth && (
+        <section className="hl-section ov-rise ov-rise-3">
+          <div className="hl-section-head">
+            <h2 className="hl-section-head__title">Monthly activity</h2>
+            <span className="hl-section-head__count">
+              last {monthly.length} {monthly.length === 1 ? "month" : "months"}
+            </span>
+          </div>
+          <div className="hl-months">
+            {monthly.map((month) => {
+              const inHeight =
+                maxMonthlyFlow > 0 ? (month.inflow / maxMonthlyFlow) * 100 : 0;
+              const outHeight =
+                maxMonthlyFlow > 0 ? (month.outflow / maxMonthlyFlow) * 100 : 0;
+              return (
+                <div
+                  key={month.monthKey}
+                  className="hl-months__col"
+                  title={`${formatMonthLong(month.monthKey)} — in ${formatCurrencyValue(month.inflow)} · out ${formatCurrencyValue(month.outflow)} · net ${formatCurrencyValue(month.net)}`}
+                >
+                  <div className="hl-months__bars" aria-hidden="true">
+                    <span
+                      className="hl-months__bar hl-months__bar--in"
+                      style={{ height: `${inHeight}%` }}
+                    />
+                    <span
+                      className="hl-months__bar hl-months__bar--out"
+                      style={{ height: `${outHeight}%` }}
+                    />
+                  </div>
+                  <span className="hl-months__label">
+                    {formatMonthShort(month.monthKey)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="hl-months__net">
+            {formatMonthLong(latestMonth.monthKey)} net:&nbsp;
+            <strong className={`hl-months__net-value hl-months__net-value--${latestTone}`}>
+              {formatCurrencyValue(latestMonth.net)}
+            </strong>
+          </p>
+        </section>
+      )}
     </div>
   );
 };

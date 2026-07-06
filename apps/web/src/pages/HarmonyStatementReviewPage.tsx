@@ -22,12 +22,16 @@ interface RowEdit {
   type?: HarmonyLedgerEntryType;
   /** "" means explicitly Unallocated. */
   groupId?: string;
+  /** Raw input value; undefined means the field was never touched. */
+  category?: string;
 }
 
 interface ConfirmPayload {
   txnDate: string;
   type?: HarmonyLedgerEntryType;
   groupId?: string | null;
+  /** String overrides the suggestion, null suppresses it, omitted keeps it. */
+  category?: string | null;
 }
 
 const sourceTypeLabels: Record<HarmonyStatementSourceType, string> = {
@@ -243,6 +247,13 @@ const HarmonyStatementReviewPage = () => {
     }
     if (edit?.groupId !== undefined && edit.groupId !== suggestedGroup) {
       payload.groupId = edit.groupId === "" ? null : edit.groupId;
+    }
+    if (edit?.category !== undefined) {
+      const trimmed = edit.category.trim();
+      const suggested = (txn.suggestedCategory ?? "").trim();
+      if (trimmed !== suggested) {
+        payload.category = trimmed === "" ? null : trimmed;
+      }
     }
     confirmMutation.mutate({ txn, payload });
   };
@@ -499,12 +510,13 @@ const HarmonyStatementReviewPage = () => {
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: "12%" }}>Date</th>
+                  <th style={{ width: "10%" }}>Date</th>
                   <th>Transaction</th>
-                  <th style={{ width: "12%" }}>Amount</th>
-                  <th style={{ width: "16%" }}>Type</th>
-                  <th style={{ width: "18%" }}>Group</th>
-                  <th style={{ width: "18%" }}></th>
+                  <th style={{ width: "10%" }}>Amount</th>
+                  <th style={{ width: "14%" }}>Type</th>
+                  <th style={{ width: "16%" }}>Group</th>
+                  <th style={{ width: "12%" }}>Category</th>
+                  <th style={{ width: "16%" }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -585,6 +597,25 @@ const HarmonyStatementReviewPage = () => {
                         </select>
                       </td>
                       <td>
+                        <input
+                          type="text"
+                          className="hl-cat-input"
+                          value={edit?.category ?? txn.suggestedCategory ?? ""}
+                          placeholder="category"
+                          aria-label="Category"
+                          disabled={rowBusy}
+                          onChange={(event) =>
+                            setEdits((prev) => ({
+                              ...prev,
+                              [txn.txnId]: {
+                                ...prev[txn.txnId],
+                                category: event.target.value
+                              }
+                            }))
+                          }
+                        />
+                      </td>
+                      <td>
                         <div className="hl-txn-actions">
                           <button
                             type="button"
@@ -647,6 +678,11 @@ const HarmonyStatementReviewPage = () => {
                       {txn.counterparty && (
                         <p className="muted" style={{ margin: 0 }}>
                           {txn.counterparty}
+                        </p>
+                      )}
+                      {txn.suggestedCategory && (
+                        <p className="muted" style={{ margin: 0, fontSize: "0.8rem" }}>
+                          {txn.suggestedCategory}
                         </p>
                       )}
                       {rowErrors[txn.txnId] && (

@@ -1,5 +1,5 @@
 import { FormEvent, Fragment, useMemo, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
 import HarmonySubNav from "../components/HarmonySubNav";
 import UserSelect from "../components/UserSelect";
@@ -7,7 +7,6 @@ import { seedAvatar } from "../lib/avatarPalette";
 import {
   HarmonyLedgerAccessRecord,
   HarmonyLedgerAccessResponse,
-  HarmonyLedgerEntriesResponse,
   HarmonyLedgerEntry,
   HarmonyLedgerEntryType,
   HarmonyLedgerGroup,
@@ -15,6 +14,7 @@ import {
   HarmonyLedgerTransfer
 } from "../types";
 import { useHarmonyLedgerAccess } from "../modules/useHarmonyLedgerAccess";
+import { useHarmonyLedgerEntries } from "../modules/useHarmonyLedgerEntries";
 import { useConfirm } from "../components/ConfirmDialog";
 
 interface EntryFormState {
@@ -134,11 +134,7 @@ const HarmonyLedgerPage = () => {
   const [editingGroupName, setEditingGroupName] = useState("");
   const [groupErrors, setGroupErrors] = useState<Record<string, string>>({});
 
-  const entriesQuery = useQuery({
-    queryKey: ["harmony-ledger", "entries"],
-    queryFn: () => api.get<HarmonyLedgerEntriesResponse>("/harmony-ledger/entries"),
-    enabled: accessData?.allowed ?? false
-  });
+  const entriesQuery = useHarmonyLedgerEntries(accessData?.allowed ?? false);
 
   const entryMutation = useMutation({
     mutationFn: (payload: unknown) =>
