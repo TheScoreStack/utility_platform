@@ -2,17 +2,31 @@ import { nanoid } from "nanoid";
 import { z } from "zod";
 import type { AuthContext } from "../auth.js";
 import { HarmonyLedgerStore } from "../data/harmonyLedgerStore.js";
+import { HarmonyStatementStore } from "../data/harmonyStatementStore.js";
 import { UserStore } from "../data/userStore.js";
 import {
   ForbiddenError,
+  NotFoundError,
   ValidationError
 } from "../lib/errors.js";
+import {
+  deleteObject,
+  generateStatementUpload
+} from "./uploadService.js";
+import { invokeStatementParser } from "./invokeStatementParser.js";
 import type {
   HarmonyLedgerAccessRecord,
   HarmonyLedgerEntry,
+  HarmonyLedgerEntryType,
   HarmonyLedgerGroup,
   HarmonyLedgerTransfer,
   HarmonyLedgerUnallocatedSummary,
+  HarmonyStagedTransaction,
+  HarmonyStatement,
+  HarmonyStatementCounts,
+  HarmonyStatementFileType,
+  HarmonyStatementSourceType,
+  HarmonyTxnDirection,
   UserProfile
 } from "../types.js";
 
@@ -55,6 +69,21 @@ const updateEntryGroupSchema = z.object({
   groupId: z.union([z.string().min(1), z.null()]).optional()
 });
 
+const clearableText = z.union([z.string().min(1), z.null()]).optional();
+
+const updateEntrySchema = z.object({
+  recordedAt: z.string().min(1),
+  type: z.enum(ledgerEntryTypes).optional(),
+  amount: z.number().positive().optional(),
+  currency: z.string().min(1).optional(),
+  description: clearableText,
+  source: clearableText,
+  category: clearableText,
+  notes: clearableText,
+  memberName: clearableText,
+  groupId: z.union([z.string().min(1), z.null()]).optional()
+});
+
 const transferSchema = z
   .object({
     fromGroupId: z.string().min(1).optional(),
@@ -70,6 +99,125 @@ const transferSchema = z
 const deleteTransferSchema = z.object({
   createdAt: z.string().min(1)
 });
+
+const createStatementSchema = z.object({
+  fileName: z.string().min(1),
+  contentType: z.string().min(1),
+  sourceType: z.enum(["BANK", "VENMO", "PAYPAL", "OTHER"])
+});
+
+const confirmTxnSchema = z.object({
+  txnDate: z.string().min(1),
+  type: z.enum(ledgerEntryTypes).optional(),
+  groupId: z.union([z.string().min(1), z.null()]).optional(),
+  description: z.string().min(1).optional(),
+  memberName: z.string().min(1).optional(),
+  notes: z.string().min(1).optional()
+});
+
+const dismissTxnSchema = z.object({
+  txnDate: z.string().min(1)
+});
+
+const bulkConfirmSchema = z
+  .object({
+    includeDuplicates: z.boolean().optional()
+  })
+  .nullish();
+
+/** Max entries created per bulk-confirm call (stays within the HTTP timeout). */
+const BULK_CONFIRM_CAP = 200;
+
+export const statementFileTypeFrom = (
+  fileName: string,
+  contentType: string
+): HarmonyStatementFileType => {
+  const lowerName = fileName.toLowerCase();
+  const lowerType = contentType.toLowerCase();
+  if (lowerType.includes("pdf") || lowerName.endsWith(".pdf")) {
+    return "PDF";
+  }
+  if (lowerType.includes("csv") || lowerName.endsWith(".csv")) {
+    return "CSV";
+  }
+  throw new ValidationError(
+    "Only PDF and CSV statements are supported right now."
+  );
+};
+
+export const entrySourceForStatement = (
+  sourceType: HarmonyStatementSourceType
+): string => {
+  switch (sourceType) {
+    case "VENMO":
+      return "Venmo";
+    case "PAYPAL":
+      return "PayPal";
+    case "BANK":
+      return "Bank import";
+    default:
+      return "Statement import";
+  }
+};
+
+export const allowedTypesForDirection = (
+  direction: HarmonyTxnDirection
+): HarmonyLedgerEntryType[] =>
+  direction === "OUT"
+    ? ["EXPENSE"]
+    : ["DONATION", "INCOME", "REIMBURSEMENT"];
+
+export const computeStagedCounts = (
+  txns: HarmonyStagedTransaction[]
+): HarmonyStatementCounts => ({
+  total: txns.length,
+  pending: txns.filter((txn) => txn.status === "PENDING").length,
+  confirmed: txns.filter((txn) => txn.status === "CONFIRMED").length,
+  dismissed: txns.filter((txn) => txn.status === "DISMISSED").length,
+  duplicates: txns.filter((txn) => Boolean(txn.duplicateOf)).length
+});
+
+export interface HarmonyStatementCreateResponse {
+  statement: HarmonyStatement;
+  uploadUrl: string;
+}
+
+export interface HarmonyStatementDetailResponse {
+  statement: HarmonyStatement;
+  transactions: HarmonyStagedTransaction[];
+  groups: HarmonyLedgerGroup[];
+}
+
+export interface HarmonyBulkConfirmResponse {
+  confirmed: number;
+  skipped: number;
+  remaining: number;
+  counts: HarmonyStatementCounts;
+}
+
+const createGroupSchema = z.object({
+  name: z.string().trim().min(1).max(40)
+});
+
+const updateGroupSchema = z
+  .object({
+    name: z.string().trim().min(1).max(40).optional(),
+    isActive: z.boolean().optional()
+  })
+  .refine((value) => value.name !== undefined || value.isActive !== undefined, {
+    message: "Provide a new name or an active flag."
+  });
+
+/** "Golden Ratio!" -> "golden-ratio". */
+export const slugifyGroupName = (name: string): string =>
+  name
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
 
 export interface HarmonyLedgerAccessResponse {
   allowed: boolean;
@@ -119,6 +267,7 @@ const displayNameFromProfile = (profile: UserProfile): string =>
 
 export class HarmonyLedgerService {
   private readonly store = new HarmonyLedgerStore();
+  private readonly statementStore = new HarmonyStatementStore();
   private readonly userStore = new UserStore();
   private bootstrapPromise: Promise<void> | null = null;
   private groupBootstrapPromise: Promise<void> | null = null;
@@ -405,33 +554,47 @@ export class HarmonyLedgerService {
     return entry;
   }
 
-  async updateEntryGroup(
+  /**
+   * Partial entry update. Text fields clear when explicitly null; `groupId`
+   * is tri-state (undefined = untouched, null = unallocate, id = reassign) —
+   * backward compatible with the old group-reallocation payloads.
+   */
+  async updateEntry(
     entryId: string,
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyLedgerEntry> {
     await this.requireAccess(auth);
-    const parsed = updateEntryGroupSchema.safeParse(body);
+    const parsed = updateEntrySchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
     }
 
-    const { recordedAt, groupId } = parsed.data;
-    if (!recordedAt) {
-      throw new ValidationError("recordedAt is required");
-    }
+    const { recordedAt, groupId, ...fields } = parsed.data;
 
-    let groupDetails: { groupId: string; groupName: string } | undefined;
-    if (groupId) {
+    let group: { groupId: string; groupName: string } | null | undefined;
+    if (groupId === null) {
+      group = null;
+    } else if (groupId) {
       await this.ensureDefaultGroups();
-      const group = await this.store.getGroup(groupId);
-      if (!group) {
+      const found = await this.store.getGroup(groupId);
+      if (!found) {
         throw new ValidationError("Unknown Harmony Collective group.");
       }
-      groupDetails = { groupId: group.groupId, groupName: group.name };
+      group = { groupId: found.groupId, groupName: found.name };
     }
 
-    return this.store.updateEntryGroup(entryId, recordedAt, groupDetails);
+    try {
+      return await this.store.updateEntry(entryId, recordedAt, {
+        ...fields,
+        group
+      });
+    } catch (error) {
+      if ((error as Error).name === "ConditionalCheckFailedException") {
+        throw new NotFoundError("Entry not found");
+      }
+      throw error;
+    }
   }
 
   async deleteEntry(
@@ -568,5 +731,514 @@ export class HarmonyLedgerService {
     await this.requireAccess(auth);
     await this.ensureDefaultGroups();
     return this.store.listGroups();
+  }
+
+  async createGroup(
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyLedgerGroup> {
+    const { profile } = await this.requireAdmin(auth);
+    const parsed = createGroupSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const name = parsed.data.name;
+    const groupId = slugifyGroupName(name);
+    if (!groupId) {
+      throw new ValidationError("Group names need at least one letter or number.");
+    }
+
+    await this.ensureDefaultGroups();
+    const existing = await this.store.getGroup(groupId);
+    if (existing) {
+      throw new ValidationError(
+        `A group with a similar name already exists (${existing.name}).`
+      );
+    }
+
+    const group: HarmonyLedgerGroup = {
+      groupId,
+      name,
+      isActive: true,
+      createdAt: isoNow(),
+      createdBy: profile.userId
+    };
+    await this.store.createGroup(group);
+    return group;
+  }
+
+  async updateGroup(
+    groupId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyLedgerGroup> {
+    await this.requireAdmin(auth);
+    const parsed = updateGroupSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const existing = await this.store.getGroup(groupId);
+    if (!existing) {
+      throw new NotFoundError("Group not found");
+    }
+
+    const group = await this.store.updateGroup(groupId, parsed.data);
+    // Entries and transfers snapshot the group name; keep history readable.
+    if (parsed.data.name !== undefined && parsed.data.name !== existing.name) {
+      await this.store.updateGroupNameReferences(groupId, parsed.data.name);
+    }
+    return group;
+  }
+
+  async createStatement(
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyStatementCreateResponse> {
+    const { profile } = await this.requireAccess(auth);
+    const parsed = createStatementSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const { fileName, contentType, sourceType } = parsed.data;
+    const fileType = statementFileTypeFrom(fileName, contentType);
+    const statementId = `stmt_${nanoid(10)}`;
+    const { storageKey, uploadUrl } = await generateStatementUpload(
+      statementId,
+      fileName,
+      contentType
+    );
+
+    const statement: HarmonyStatement = {
+      statementId,
+      fileName,
+      fileType,
+      contentType,
+      sourceType,
+      storageKey,
+      status: "PENDING_UPLOAD",
+      uploadedAt: isoNow(),
+      uploadedBy: profile.userId,
+      uploadedByName: displayNameFromProfile(profile)
+    };
+
+    await this.statementStore.createStatement(statement);
+    return { statement, uploadUrl };
+  }
+
+  async listStatements(auth: AuthContext): Promise<HarmonyStatement[]> {
+    await this.requireAccess(auth);
+    return this.statementStore.listStatements();
+  }
+
+  async getStatementDetail(
+    statementId: string,
+    auth: AuthContext
+  ): Promise<HarmonyStatementDetailResponse> {
+    await this.requireAccess(auth);
+    await this.ensureDefaultGroups();
+    const statement = await this.statementStore.getStatement(statementId);
+    if (!statement) {
+      throw new NotFoundError("Statement not found");
+    }
+    const [transactions, groups] = await Promise.all([
+      this.statementStore.listStagedTransactions(statementId),
+      this.store.listGroups()
+    ]);
+    return { statement, transactions, groups };
+  }
+
+  private async requirePendingStagedTxn(
+    statementId: string,
+    txnDate: string,
+    txnId: string
+  ): Promise<{ statement: HarmonyStatement; txn: HarmonyStagedTransaction }> {
+    const statement = await this.statementStore.getStatement(statementId);
+    if (!statement) {
+      throw new NotFoundError("Statement not found");
+    }
+    const txn = await this.statementStore.getStagedTransaction(
+      statementId,
+      txnDate,
+      txnId
+    );
+    if (!txn) {
+      throw new NotFoundError("Transaction not found");
+    }
+    if (txn.status !== "PENDING") {
+      throw new ValidationError("This transaction has already been reviewed.");
+    }
+    return { statement, txn };
+  }
+
+  private async createEntryFromStagedTxn(
+    statement: HarmonyStatement,
+    txn: HarmonyStagedTransaction,
+    profile: UserProfile,
+    overrides: {
+      type?: HarmonyLedgerEntryType;
+      group?: { groupId: string; groupName: string } | null;
+      description?: string;
+      memberName?: string;
+      notes?: string;
+    }
+  ): Promise<HarmonyLedgerEntry> {
+    const type = overrides.type ?? txn.suggestedType;
+    if (!allowedTypesForDirection(txn.direction).includes(type)) {
+      throw new ValidationError(
+        txn.direction === "OUT"
+          ? "Money going out must be recorded as an EXPENSE."
+          : "Money coming in must be a DONATION, INCOME, or REIMBURSEMENT."
+      );
+    }
+
+    // undefined = use the AI suggestion; null = explicitly unallocated.
+    let group: { groupId: string; groupName: string } | undefined;
+    if (overrides.group === undefined) {
+      if (txn.suggestedGroupId) {
+        const suggested = await this.store.getGroup(txn.suggestedGroupId);
+        if (suggested) {
+          group = { groupId: suggested.groupId, groupName: suggested.name };
+        }
+      }
+    } else if (overrides.group !== null) {
+      group = overrides.group;
+    }
+
+    const entry: HarmonyLedgerEntry = {
+      entryId: nanoid(12),
+      type,
+      amount: txn.amount,
+      currency: txn.currency,
+      description: overrides.description ?? txn.rawDescription,
+      source: entrySourceForStatement(statement.sourceType),
+      notes: overrides.notes,
+      memberName: overrides.memberName ?? txn.counterparty,
+      groupId: group?.groupId,
+      groupName: group?.groupName,
+      recordedAt: isoNow(),
+      recordedBy: profile.userId,
+      recordedByName: displayNameFromProfile(profile),
+      occurredAt: txn.txnDate,
+      importFingerprint: txn.fingerprint,
+      importStatementId: statement.statementId
+    };
+
+    await this.store.createEntry(entry);
+    if (!txn.duplicateOf) {
+      await this.statementStore.attachEntryToFingerprint(
+        txn.fingerprint,
+        entry.entryId
+      );
+    }
+    return entry;
+  }
+
+  private async refreshStatementCounts(
+    statementId: string
+  ): Promise<HarmonyStatementCounts> {
+    const txns = await this.statementStore.listStagedTransactions(statementId);
+    const counts = computeStagedCounts(txns);
+    await this.statementStore.updateStatementCounts(statementId, counts);
+    return counts;
+  }
+
+  async confirmStagedTransaction(
+    statementId: string,
+    txnId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<{ transaction: HarmonyStagedTransaction; entry: HarmonyLedgerEntry }> {
+    const { profile } = await this.requireAccess(auth);
+    const parsed = confirmTxnSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const payload = parsed.data;
+    const { statement, txn } = await this.requirePendingStagedTxn(
+      statementId,
+      payload.txnDate,
+      txnId
+    );
+
+    let groupOverride: { groupId: string; groupName: string } | null | undefined;
+    if (payload.groupId === null) {
+      groupOverride = null;
+    } else if (payload.groupId) {
+      await this.ensureDefaultGroups();
+      const group = await this.store.getGroup(payload.groupId);
+      if (!group) {
+        throw new ValidationError("Unknown Harmony Collective group.");
+      }
+      groupOverride = { groupId: group.groupId, groupName: group.name };
+    }
+
+    const entry = await this.createEntryFromStagedTxn(statement, txn, profile, {
+      type: payload.type,
+      group: groupOverride,
+      description: payload.description,
+      memberName: payload.memberName,
+      notes: payload.notes
+    });
+
+    const transaction = await this.statementStore.updateStagedTransaction(
+      statementId,
+      payload.txnDate,
+      txnId,
+      {
+        status: "CONFIRMED",
+        createdEntryId: entry.entryId,
+        createdEntryRecordedAt: entry.recordedAt,
+        reviewedAt: isoNow(),
+        reviewedBy: profile.userId
+      }
+    );
+
+    await this.refreshStatementCounts(statementId);
+    return { transaction, entry };
+  }
+
+  /**
+   * Undo a confirm: deletes the ledger entry that was created and puts the
+   * transaction back in the review queue.
+   */
+  async unconfirmStagedTransaction(
+    statementId: string,
+    txnId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyStagedTransaction> {
+    const { profile } = await this.requireAccess(auth);
+    const parsed = dismissTxnSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const txn = await this.statementStore.getStagedTransaction(
+      statementId,
+      parsed.data.txnDate,
+      txnId
+    );
+    if (!txn) {
+      throw new NotFoundError("Transaction not found");
+    }
+    if (txn.status !== "CONFIRMED") {
+      throw new ValidationError(
+        "Only confirmed transactions can be un-confirmed."
+      );
+    }
+
+    if (txn.createdEntryId && txn.createdEntryRecordedAt) {
+      await this.store.deleteEntry(
+        txn.createdEntryId,
+        txn.createdEntryRecordedAt
+      );
+      if (!txn.duplicateOf) {
+        await this.statementStore.clearEntryFromFingerprint(txn.fingerprint);
+      }
+    }
+
+    const transaction = await this.statementStore.updateStagedTransaction(
+      statementId,
+      parsed.data.txnDate,
+      txnId,
+      {
+        status: "PENDING",
+        reviewedAt: isoNow(),
+        reviewedBy: profile.userId,
+        clearCreatedEntry: true
+      }
+    );
+
+    await this.refreshStatementCounts(statementId);
+    return transaction;
+  }
+
+  /** Re-runs the parser on an already-uploaded statement that FAILED. */
+  async retryStatement(
+    statementId: string,
+    auth: AuthContext
+  ): Promise<HarmonyStatement> {
+    await this.requireAccess(auth);
+    const statement = await this.statementStore.getStatement(statementId);
+    if (!statement) {
+      throw new NotFoundError("Statement not found");
+    }
+    if (statement.status !== "FAILED") {
+      throw new ValidationError("Only failed statements can be retried.");
+    }
+
+    // Claim FAILED -> PROCESSING before invoking so duplicate retries no-op.
+    const claimed =
+      await this.statementStore.claimStatementForProcessing(statementId);
+    if (!claimed) {
+      throw new ValidationError("This statement is already being parsed.");
+    }
+
+    try {
+      await invokeStatementParser(statement.storageKey);
+    } catch (error) {
+      await this.statementStore.updateStatementStatus(statementId, {
+        status: "FAILED",
+        errorMessage: "Could not start the retry — try again."
+      });
+      throw error;
+    }
+
+    return { ...statement, status: "PROCESSING", errorMessage: undefined };
+  }
+
+  async dismissStagedTransaction(
+    statementId: string,
+    txnId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyStagedTransaction> {
+    const { profile } = await this.requireAccess(auth);
+    const parsed = dismissTxnSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    await this.requirePendingStagedTxn(statementId, parsed.data.txnDate, txnId);
+
+    const transaction = await this.statementStore.updateStagedTransaction(
+      statementId,
+      parsed.data.txnDate,
+      txnId,
+      {
+        status: "DISMISSED",
+        reviewedAt: isoNow(),
+        reviewedBy: profile.userId
+      }
+    );
+
+    await this.refreshStatementCounts(statementId);
+    return transaction;
+  }
+
+  /** Puts a dismissed transaction back in the review queue. */
+  async reopenStagedTransaction(
+    statementId: string,
+    txnId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyStagedTransaction> {
+    const { profile } = await this.requireAccess(auth);
+    const parsed = dismissTxnSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const txn = await this.statementStore.getStagedTransaction(
+      statementId,
+      parsed.data.txnDate,
+      txnId
+    );
+    if (!txn) {
+      throw new NotFoundError("Transaction not found");
+    }
+    if (txn.status !== "DISMISSED") {
+      throw new ValidationError(
+        "Only skipped transactions can be restored to the review queue."
+      );
+    }
+
+    const transaction = await this.statementStore.updateStagedTransaction(
+      statementId,
+      parsed.data.txnDate,
+      txnId,
+      {
+        status: "PENDING",
+        reviewedAt: isoNow(),
+        reviewedBy: profile.userId
+      }
+    );
+
+    await this.refreshStatementCounts(statementId);
+    return transaction;
+  }
+
+  async bulkConfirmStagedTransactions(
+    statementId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyBulkConfirmResponse> {
+    const { profile } = await this.requireAccess(auth);
+    const parsed = bulkConfirmSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+    const includeDuplicates = parsed.data?.includeDuplicates ?? false;
+
+    const statement = await this.statementStore.getStatement(statementId);
+    if (!statement) {
+      throw new NotFoundError("Statement not found");
+    }
+
+    await this.ensureDefaultGroups();
+    const txns = await this.statementStore.listStagedTransactions(statementId);
+    const pending = txns.filter((txn) => txn.status === "PENDING");
+    const eligible = pending.filter(
+      (txn) =>
+        !txn.isLikelyInternalTransfer &&
+        (includeDuplicates || !txn.duplicateOf)
+    );
+    const batch = eligible.slice(0, BULK_CONFIRM_CAP);
+
+    let confirmed = 0;
+    for (const txn of batch) {
+      const entry = await this.createEntryFromStagedTxn(
+        statement,
+        txn,
+        profile,
+        {}
+      );
+      await this.statementStore.updateStagedTransaction(
+        statementId,
+        txn.txnDate,
+        txn.txnId,
+        {
+          status: "CONFIRMED",
+          createdEntryId: entry.entryId,
+          createdEntryRecordedAt: entry.recordedAt,
+          reviewedAt: isoNow(),
+          reviewedBy: profile.userId
+        }
+      );
+      confirmed += 1;
+    }
+
+    const counts = await this.refreshStatementCounts(statementId);
+    return {
+      confirmed,
+      skipped: pending.length - eligible.length,
+      remaining: Math.max(0, eligible.length - batch.length),
+      counts
+    };
+  }
+
+  async deleteStatement(statementId: string, auth: AuthContext): Promise<void> {
+    await this.requireAccess(auth);
+    const statement = await this.statementStore.getStatement(statementId);
+    if (!statement) {
+      throw new NotFoundError("Statement not found");
+    }
+
+    // Fingerprint cleanup reads the staged transactions, so it must run first.
+    await this.statementStore.deleteFingerprintsForStatement(statementId);
+    await this.statementStore.deleteStagedTransactionsForStatement(statementId);
+    try {
+      await deleteObject(statement.storageKey);
+    } catch (error) {
+      console.warn("Failed to delete statement object", {
+        statementId,
+        error
+      });
+    }
+    await this.statementStore.deleteStatement(statementId);
   }
 }

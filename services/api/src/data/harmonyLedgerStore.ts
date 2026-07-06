@@ -349,31 +349,99 @@ export class HarmonyLedgerStore {
     return mapEntry(Item as Record<string, unknown>);
   }
 
-  async updateEntryGroup(
+  /**
+   * Partial entry update. Scalar fields set when provided; nullable text
+   * fields clear when explicitly null. `group` follows the same tri-state:
+   * undefined = untouched, null = unallocate, object = reassign.
+   */
+  async updateEntry(
     entryId: string,
     recordedAt: string,
-    group?: { groupId: string; groupName: string }
+    updates: {
+      type?: HarmonyLedgerEntry["type"];
+      amount?: number;
+      currency?: string;
+      description?: string | null;
+      source?: string | null;
+      category?: string | null;
+      notes?: string | null;
+      memberName?: string | null;
+      group?: { groupId: string; groupName: string } | null;
+    }
   ): Promise<HarmonyLedgerEntry> {
-    const key = {
-      PK: ENTRIES_PK,
-      SK: ENTRY_SK(recordedAt, entryId)
+    const sets: string[] = [];
+    const removes: string[] = [];
+    const names: Record<string, string> = {};
+    const values: Record<string, unknown> = {};
+
+    const applyScalar = (
+      field: "type" | "amount" | "currency",
+      value: unknown
+    ) => {
+      if (value === undefined) return;
+      names[`#${field}`] = field;
+      sets.push(`#${field} = :${field}`);
+      values[`:${field}`] = value;
     };
+    applyScalar("type", updates.type);
+    applyScalar("amount", updates.amount);
+    applyScalar("currency", updates.currency);
+
+    const applyClearable = (
+      field: "description" | "source" | "category" | "notes" | "memberName",
+      value: string | null | undefined
+    ) => {
+      if (value === undefined) return;
+      names[`#${field}`] = field;
+      if (value === null) {
+        removes.push(`#${field}`);
+      } else {
+        sets.push(`#${field} = :${field}`);
+        values[`:${field}`] = value;
+      }
+    };
+    applyClearable("description", updates.description);
+    applyClearable("source", updates.source);
+    applyClearable("category", updates.category);
+    applyClearable("notes", updates.notes);
+    applyClearable("memberName", updates.memberName);
+
+    if (updates.group === null) {
+      removes.push("groupId", "groupName");
+    } else if (updates.group) {
+      sets.push("groupId = :groupId", "groupName = :groupName");
+      values[":groupId"] = updates.group.groupId;
+      values[":groupName"] = updates.group.groupName;
+    }
+
+    if (!sets.length && !removes.length) {
+      const existing = await this.getEntry(entryId, recordedAt);
+      if (!existing) {
+        throw new Error("Entry not found");
+      }
+      return existing;
+    }
+
+    const expression =
+      (sets.length ? `SET ${sets.join(", ")}` : "") +
+      (removes.length ? ` REMOVE ${removes.join(", ")}` : "");
 
     const response = await this.docClient.send(
       new UpdateCommand({
         TableName: this.tableName,
-        Key: key,
-        ...(group
-          ? {
-              UpdateExpression: "SET groupId = :groupId, groupName = :groupName",
-              ExpressionAttributeValues: {
-                ":groupId": group.groupId,
-                ":groupName": group.groupName
-              }
-            }
-          : {
-              UpdateExpression: "REMOVE groupId, groupName"
-            }),
+        Key: {
+          PK: ENTRIES_PK,
+          SK: ENTRY_SK(recordedAt, entryId)
+        },
+        ConditionExpression:
+          "attribute_exists(PK) AND attribute_exists(SK)",
+        UpdateExpression: expression.trim(),
+        ...(Object.keys(names).length
+          ? { ExpressionAttributeNames: names }
+          : {}),
+        ...(Object.keys(values).length
+          ? { ExpressionAttributeValues: values }
+          : {}),
         ReturnValues: "ALL_NEW"
       })
     );
@@ -492,6 +560,98 @@ export class HarmonyLedgerStore {
       createdAt: entity.createdAt,
       createdBy: entity.createdBy
     } satisfies HarmonyLedgerGroup;
+  }
+
+  async updateGroup(
+    groupId: string,
+    updates: { name?: string; isActive?: boolean }
+  ): Promise<HarmonyLedgerGroup> {
+    const sets: string[] = [];
+    const names: Record<string, string> = {};
+    const values: Record<string, unknown> = {};
+    if (updates.name !== undefined) {
+      names["#name"] = "name";
+      sets.push("#name = :name");
+      values[":name"] = updates.name;
+    }
+    if (updates.isActive !== undefined) {
+      sets.push("isActive = :isActive");
+      values[":isActive"] = updates.isActive;
+    }
+
+    const response = await this.docClient.send(
+      new UpdateCommand({
+        TableName: this.tableName,
+        Key: { PK: GROUP_PK, SK: GROUP_SK(groupId) },
+        ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)",
+        UpdateExpression: `SET ${sets.join(", ")}`,
+        ...(Object.keys(names).length
+          ? { ExpressionAttributeNames: names }
+          : {}),
+        ExpressionAttributeValues: values,
+        ReturnValues: "ALL_NEW"
+      })
+    );
+
+    const entity = response.Attributes as GroupEntity;
+    return {
+      groupId: entity.groupId,
+      name: entity.name,
+      isActive: entity.isActive,
+      createdAt: entity.createdAt,
+      createdBy: entity.createdBy
+    } satisfies HarmonyLedgerGroup;
+  }
+
+  /**
+   * Rewrites the denormalized groupName on entries and transfers after a
+   * group rename, so historical rows show the current name.
+   */
+  async updateGroupNameReferences(
+    groupId: string,
+    newName: string
+  ): Promise<void> {
+    const [entries, transfers] = await Promise.all([
+      this.listEntries(),
+      this.listTransfers()
+    ]);
+
+    for (const entry of entries) {
+      if (entry.groupId !== groupId) continue;
+      await this.docClient.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: ENTRIES_PK,
+            SK: ENTRY_SK(entry.recordedAt, entry.entryId)
+          },
+          UpdateExpression: "SET groupName = :name",
+          ExpressionAttributeValues: { ":name": newName }
+        })
+      );
+    }
+
+    for (const transfer of transfers) {
+      const sets: string[] = [];
+      if (transfer.fromGroupId === groupId) {
+        sets.push("fromGroupName = :name");
+      }
+      if (transfer.toGroupId === groupId) {
+        sets.push("toGroupName = :name");
+      }
+      if (!sets.length) continue;
+      await this.docClient.send(
+        new UpdateCommand({
+          TableName: this.tableName,
+          Key: {
+            PK: TRANSFER_PK,
+            SK: TRANSFER_SK(transfer.createdAt, transfer.transferId)
+          },
+          UpdateExpression: `SET ${sets.join(", ")}`,
+          ExpressionAttributeValues: { ":name": newName }
+        })
+      );
+    }
   }
 
   async createGroup(group: HarmonyLedgerGroup): Promise<void> {

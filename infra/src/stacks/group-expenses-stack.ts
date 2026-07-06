@@ -117,6 +117,11 @@ export class GroupExpensesStack extends Stack {
           enabled: true,
           expiration: Duration.days(730),
           prefix: "trips/"
+        },
+        {
+          enabled: true,
+          expiration: Duration.days(730),
+          prefix: "harmony/"
         }
       ],
       removalPolicy: RemovalPolicy.RETAIN,
@@ -262,8 +267,51 @@ export class GroupExpensesStack extends Stack {
       }
     });
 
+    // Parses uploaded bank/Venmo/PayPal statements with Claude on Bedrock.
+    // Long timeout: a multi-page PDF statement is a single large model call.
+    const harmonyParserLambda = new NodejsFunction(
+      this,
+      "HarmonyStatementParser",
+      {
+        ...sharedFunctionProps,
+        timeout: Duration.minutes(5),
+        memorySize: 1024,
+        entry: path.join(
+          stackDir,
+          "../../../services/api/src/handlers/harmonyStatementParser.ts"
+        ),
+        logRetention: RetentionDays.ONE_WEEK,
+        environment: {
+          ...sharedEnvironment,
+          TABLE_NAME: table.tableName,
+          RECEIPT_BUCKET: receiptBucket.bucketName,
+          BEDROCK_MODEL_ID:
+            process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-haiku-4-5",
+          AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1"
+        }
+      }
+    );
+
+    harmonyParserLambda.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
+        resources: [
+          "arn:aws:bedrock:*::foundation-model/anthropic.*",
+          `arn:aws:bedrock:*:${this.account}:inference-profile/us.anthropic.*`
+        ]
+      })
+    );
+
     table.grantReadWriteData(httpLambda);
     table.grantReadWriteData(textractLambda);
+    table.grantReadWriteData(harmonyParserLambda);
+
+    // The /statements/{id}/retry endpoint re-invokes the parser directly.
+    httpLambda.addEnvironment(
+      "PARSER_FUNCTION_NAME",
+      harmonyParserLambda.functionName
+    );
+    harmonyParserLambda.grantInvoke(httpLambda);
     const postConfirmationLambda = new NodejsFunction(
       this,
       "PostConfirmationHandler",
@@ -285,7 +333,10 @@ export class GroupExpensesStack extends Stack {
     userPool.addTrigger(UserPoolOperation.POST_CONFIRMATION, postConfirmationLambda);
     receiptBucket.grantPut(httpLambda);
     receiptBucket.grantRead(httpLambda);
+    // Statement deletion removes the uploaded object.
+    receiptBucket.grantDelete(httpLambda);
     receiptBucket.grantRead(textractLambda);
+    receiptBucket.grantRead(harmonyParserLambda);
 
     const weeklyDigestLambda = new NodejsFunction(this, "WeeklyDigestHandler", {
       ...sharedFunctionProps,
@@ -396,6 +447,12 @@ export class GroupExpensesStack extends Stack {
       EventType.OBJECT_CREATED,
       new s3n.LambdaDestination(textractLambda),
       { prefix: "trips/" }
+    );
+
+    receiptBucket.addEventNotification(
+      EventType.OBJECT_CREATED,
+      new s3n.LambdaDestination(harmonyParserLambda),
+      { prefix: "harmony/statements/" }
     );
 
     const httpApi = new HttpApi(this, "GroupExpensesApi", {
@@ -577,6 +634,11 @@ export class GroupExpensesStack extends Stack {
       "TextractErrorsAlarm",
       textractLambda,
       "Receipt OCR processor is failing — scans will hang for users"
+    );
+    alarmOnErrors(
+      "HarmonyParserErrorsAlarm",
+      harmonyParserLambda,
+      "Harmony statement parser is failing — statement imports will hang"
     );
     alarmOnErrors(
       "RecurringErrorsAlarm",

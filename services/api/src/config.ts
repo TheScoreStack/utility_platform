@@ -8,6 +8,12 @@ export interface AppConfig {
   pushPlatformAppArn?: string;
   /** SNS platform application for FCM pushes; unset = Android pushes off. */
   pushPlatformAppArnAndroid?: string;
+  /** Bedrock model for statement parsing. */
+  bedrockModelId: string;
+  /** Region for Bedrock calls; defaults to the stack region. */
+  bedrockRegion?: string;
+  /** Statement parser Lambda name — enables the retry endpoint. */
+  parserFunctionName?: string;
 }
 
 const required = (value: string | undefined, name: string): string => {
@@ -34,7 +40,11 @@ const buildConfig = (): AppConfig => {
       : 900,
     pushPlatformAppArn: process.env.PUSH_PLATFORM_APP_ARN || undefined,
     pushPlatformAppArnAndroid:
-      process.env.PUSH_PLATFORM_APP_ARN_ANDROID || undefined
+      process.env.PUSH_PLATFORM_APP_ARN_ANDROID || undefined,
+    bedrockModelId:
+      process.env.BEDROCK_MODEL_ID || "anthropic.claude-haiku-4-5",
+    bedrockRegion: process.env.BEDROCK_REGION || undefined,
+    parserFunctionName: process.env.PARSER_FUNCTION_NAME || undefined
   };
 };
 

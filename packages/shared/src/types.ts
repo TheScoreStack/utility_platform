@@ -203,6 +203,10 @@ export interface HarmonyLedgerEntry {
   recordedAt: string;
   recordedBy: string;
   recordedByName?: string;
+  /** Actual transaction date (YYYY-MM-DD) for statement imports. */
+  occurredAt?: string;
+  importFingerprint?: string;
+  importStatementId?: string;
 }
 
 export interface HarmonyLedgerAccessRecord {
@@ -258,6 +262,75 @@ export interface HarmonyLedgerTransfer {
   createdAt: string;
   createdBy: string;
   createdByName?: string;
+}
+
+// Harmony statement import types
+
+export type HarmonyStatementSourceType = "BANK" | "VENMO" | "PAYPAL" | "OTHER";
+
+export type HarmonyStatementFileType = "PDF" | "CSV";
+
+export type HarmonyStatementStatus =
+  | "PENDING_UPLOAD"
+  | "PROCESSING"
+  | "PARSED"
+  | "FAILED";
+
+export interface HarmonyStatementCounts {
+  total: number;
+  pending: number;
+  confirmed: number;
+  dismissed: number;
+  duplicates: number;
+}
+
+export interface HarmonyStatement {
+  statementId: string;
+  fileName: string;
+  fileType: HarmonyStatementFileType;
+  contentType: string;
+  sourceType: HarmonyStatementSourceType;
+  storageKey: string;
+  status: HarmonyStatementStatus;
+  errorMessage?: string;
+  counts?: HarmonyStatementCounts;
+  uploadedAt: string;
+  uploadedBy: string;
+  uploadedByName?: string;
+  parsedAt?: string;
+}
+
+export type HarmonyStagedTxnStatus = "PENDING" | "CONFIRMED" | "DISMISSED";
+
+export type HarmonyTxnDirection = "IN" | "OUT";
+
+export interface HarmonyStagedTransaction {
+  txnId: string;
+  statementId: string;
+  /** Transaction date, YYYY-MM-DD. */
+  txnDate: string;
+  /** Always positive; see direction. */
+  amount: number;
+  currency: string;
+  direction: HarmonyTxnDirection;
+  rawDescription: string;
+  /** Other party for Venmo/PayPal transactions. */
+  counterparty?: string;
+  suggestedType: HarmonyLedgerEntryType;
+  suggestedGroupId?: string;
+  suggestedGroupName?: string;
+  /** AI hint: likely a transfer between the collective's own accounts. */
+  isLikelyInternalTransfer?: boolean;
+  /** 0..1 */
+  confidence?: number;
+  fingerprint: string;
+  duplicateOf?: { kind: "entry" | "staged"; id: string };
+  status: HarmonyStagedTxnStatus;
+  createdEntryId?: string;
+  /** recordedAt of the created entry — needed to delete it on un-confirm. */
+  createdEntryRecordedAt?: string;
+  reviewedAt?: string;
+  reviewedBy?: string;
 }
 
 // Stack Time Tracking types

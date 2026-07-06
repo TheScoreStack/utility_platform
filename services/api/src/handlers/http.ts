@@ -234,6 +234,26 @@ export const handler = async (
       return ok({ groups }, origin);
     }
 
+    if (path === "/harmony-ledger/groups" && method === "POST") {
+      const body = parseBody(event);
+      const group = await harmonyLedgerService.createGroup(body, auth);
+      return created(group, origin);
+    }
+
+    const harmonyGroupMatch = path.match(/^\/harmony-ledger\/groups\/([^/]+)$/);
+    if (harmonyGroupMatch && method === "PATCH") {
+      const body = parseBody(event);
+      if (!body) {
+        return handleError(new ValidationError("Request body required"), origin);
+      }
+      const group = await harmonyLedgerService.updateGroup(
+        decodeURIComponent(harmonyGroupMatch[1]),
+        body,
+        auth
+      );
+      return ok(group, origin);
+    }
+
     if (path === "/harmony-ledger/entries" && method === "GET") {
       const data = await harmonyLedgerService.getEntries(auth);
       return ok(data, origin);
@@ -257,7 +277,7 @@ export const handler = async (
       if (!body) {
         return handleError(new ValidationError("Request body required"), origin);
       }
-      const entry = await harmonyLedgerService.updateEntryGroup(entryId, body, auth);
+      const entry = await harmonyLedgerService.updateEntry(entryId, body, auth);
       return ok(entry, origin);
     }
 
@@ -286,6 +306,100 @@ export const handler = async (
       }
       await harmonyLedgerService.deleteTransfer(transferId, body, auth);
       return noContent(origin);
+    }
+
+    if (path === "/harmony-ledger/statements" && method === "POST") {
+      const body = parseBody(event);
+      const response = await harmonyLedgerService.createStatement(body, auth);
+      return created(response, origin);
+    }
+
+    if (path === "/harmony-ledger/statements" && method === "GET") {
+      const statements = await harmonyLedgerService.listStatements(auth);
+      return ok({ statements }, origin);
+    }
+
+    const statementMatch = path.match(/^\/harmony-ledger\/statements\/([^/]+)$/);
+    if (statementMatch && method === "GET") {
+      const detail = await harmonyLedgerService.getStatementDetail(
+        decodeURIComponent(statementMatch[1]),
+        auth
+      );
+      return ok(detail, origin);
+    }
+
+    if (statementMatch && method === "DELETE") {
+      await harmonyLedgerService.deleteStatement(
+        decodeURIComponent(statementMatch[1]),
+        auth
+      );
+      return noContent(origin);
+    }
+
+    const statementRetryMatch = path.match(
+      /^\/harmony-ledger\/statements\/([^/]+)\/retry$/
+    );
+    if (statementRetryMatch && method === "POST") {
+      const statement = await harmonyLedgerService.retryStatement(
+        decodeURIComponent(statementRetryMatch[1]),
+        auth
+      );
+      return ok({ statement }, origin);
+    }
+
+    const stagedTxnMatch = path.match(
+      /^\/harmony-ledger\/statements\/([^/]+)\/transactions\/([^/]+)\/(confirm|dismiss|reopen|unconfirm)$/
+    );
+    if (stagedTxnMatch && method === "POST") {
+      const statementId = decodeURIComponent(stagedTxnMatch[1]);
+      const txnId = decodeURIComponent(stagedTxnMatch[2]);
+      const body = parseBody(event);
+      if (!body) {
+        return handleError(new ValidationError("Request body required"), origin);
+      }
+      if (stagedTxnMatch[3] === "confirm") {
+        const result = await harmonyLedgerService.confirmStagedTransaction(
+          statementId,
+          txnId,
+          body,
+          auth
+        );
+        return ok(result, origin);
+      }
+      const transaction =
+        stagedTxnMatch[3] === "reopen"
+          ? await harmonyLedgerService.reopenStagedTransaction(
+              statementId,
+              txnId,
+              body,
+              auth
+            )
+          : stagedTxnMatch[3] === "unconfirm"
+            ? await harmonyLedgerService.unconfirmStagedTransaction(
+                statementId,
+                txnId,
+                body,
+                auth
+              )
+            : await harmonyLedgerService.dismissStagedTransaction(
+                statementId,
+                txnId,
+                body,
+                auth
+              );
+      return ok({ transaction }, origin);
+    }
+
+    const bulkConfirmMatch = path.match(
+      /^\/harmony-ledger\/statements\/([^/]+)\/confirm-all$/
+    );
+    if (bulkConfirmMatch && method === "POST") {
+      const result = await harmonyLedgerService.bulkConfirmStagedTransactions(
+        decodeURIComponent(bulkConfirmMatch[1]),
+        parseBody(event),
+        auth
+      );
+      return ok(result, origin);
     }
 
     // Stack Time routes

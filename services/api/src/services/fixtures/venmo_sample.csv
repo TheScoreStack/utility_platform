@@ -1,0 +1,13 @@
+Account Statement - (@harmony-collective) - June 1st to June 30th 2026
+Account Activity
+,ID,Datetime,Type,Status,Note,From,To,Amount (total),Amount (tip),Amount (tax),Amount (fee),Tax Rate,Tax Exempt,Funding Source,Destination,Beginning Balance,Ending Balance,Statement Period Venmo Fees,Terminal Location,Year to Date Venmo Fees,Disclaimer
+,,,,,,,,,,,,,,,,$120.00,,,,,
+,4021887321098765432,2026-06-02T18:04:22,Payment,Complete,Jazz night door,Maria Lopez,Harmony Collective,+ $25.00,,,,,,,Venmo balance,,,,Venmo,,
+,4021887321098765433,2026-06-02T18:11:45,Payment,Complete,jazz night!!,Devon Carter,Harmony Collective,+ $20.00,,,,,,,Venmo balance,,,,Venmo,,
+,4021887321098765440,2026-06-05T09:30:12,Payment,Complete,merch table sales,Harmony Collective,Harmony Collective,+ $86.50,,,,,,,Venmo balance,,,,Venmo,,
+,4021887321098765451,2026-06-08T14:22:01,Payment,Complete,PA cable replacement,Harmony Collective,Guitar Center,- $42.99,,,,,,Venmo balance,,,,,Venmo,,
+,4021887321098765460,2026-06-12T20:15:33,Payment,Complete,paying back for kitchen supplies,Sam Reyes,Harmony Collective,+ $33.75,,,,,,,Venmo balance,,,,Venmo,,
+,4021887321098765477,2026-06-20T11:02:09,Standard Transfer,Complete,,Harmony Collective,,- $150.00,,,,,,Venmo balance,Chase Checking x1234,,,,Venmo,,
+,4021887321098765481,2026-06-25T16:45:50,Payment,Complete,donation for community kitchen,Priya Natarajan,Harmony Collective,+ $60.00,,,,,,,Venmo balance,,,,Venmo,,
+,4021887321098765490,2026-06-28T10:05:14,Payment,Failed,vinyl preorder,Alex Kim,Harmony Collective,+ $30.00,,,,,,,Venmo balance,,,,Venmo,,
+,,,,,,,,,,,,,,,,,$172.26,,,,
