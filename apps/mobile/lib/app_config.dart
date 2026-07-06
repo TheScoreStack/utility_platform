@@ -25,19 +25,19 @@ class AppConfig {
   // All four empty = Android push registration quietly skips itself.
   static const String firebaseAndroidApiKey = String.fromEnvironment(
     'FIREBASE_ANDROID_API_KEY',
-    defaultValue: '',
+    defaultValue: 'AIzaSyBRCqL9zEa3FP0q41Oicq36b7T5U6vsTb4',
   );
   static const String firebaseAndroidAppId = String.fromEnvironment(
     'FIREBASE_ANDROID_APP_ID',
-    defaultValue: '',
+    defaultValue: '1:57581880967:android:da8f48332c46b520a55a22',
   );
   static const String firebaseMessagingSenderId = String.fromEnvironment(
     'FIREBASE_MESSAGING_SENDER_ID',
-    defaultValue: '',
+    defaultValue: '57581880967',
   );
   static const String firebaseProjectId = String.fromEnvironment(
     'FIREBASE_PROJECT_ID',
-    defaultValue: '',
+    defaultValue: 'thestackcore',
   );
 
   static bool get firebaseAndroidConfigured =>
@@ -50,11 +50,11 @@ class AppConfig {
   // Firebase project; each platform gets its own appId/apiKey.
   static const String firebaseIosApiKey = String.fromEnvironment(
     'FIREBASE_IOS_API_KEY',
-    defaultValue: '',
+    defaultValue: 'AIzaSyAogCgjxKdvYLI-dFK9lBKf8IiW754EqdA',
   );
   static const String firebaseIosAppId = String.fromEnvironment(
     'FIREBASE_IOS_APP_ID',
-    defaultValue: '',
+    defaultValue: '1:57581880967:ios:1fa3016343921988a55a22',
   );
 
   static bool get firebaseIosConfigured =>

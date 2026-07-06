@@ -201,10 +201,10 @@ export class GroupExpensesStack extends Stack {
     const pushPlatformAppArn =
       process.env.PUSH_PLATFORM_APP_ARN ??
       "arn:aws:sns:us-east-1:972890651266:app/APNS/stackcore-apns";
-    // Android counterpart (FCM). Defaulted here once the platform app is
-    // created the same way; empty string keeps Android pushes off.
+    // Android counterpart (FCM).
     const pushPlatformAppArnAndroid =
-      process.env.PUSH_PLATFORM_APP_ARN_ANDROID ?? "";
+      process.env.PUSH_PLATFORM_APP_ARN_ANDROID ??
+      "arn:aws:sns:us-east-1:972890651266:app/GCM/stackcore-fcm";
 
     const httpLambda = new NodejsFunction(this, "HttpHandler", {
       ...sharedFunctionProps,
