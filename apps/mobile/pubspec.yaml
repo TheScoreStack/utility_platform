@@ -46,6 +46,7 @@ dependencies:
   firebase_crashlytics: ^5.2.4
   meet_kit:
     path: ../../packages/meet_kit
+  file_picker: ^3.0.4
 
 dev_dependencies:
   flutter_test:

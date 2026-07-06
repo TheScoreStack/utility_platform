@@ -4,6 +4,7 @@ import 'package:meet_kit/meet_kit.dart';
 import '../app_config.dart';
 import '../core/auth_service.dart';
 import 'group_expenses/group_expenses_screen.dart';
+import 'harmony/harmony_module_screen.dart';
 
 class ModuleDefinition {
   final String id;
@@ -53,5 +54,15 @@ final List<ModuleDefinition> registeredModules = [
         shareBaseUrl: 'https://thestackcore.com/m/',
       ),
     ),
+  ),
+  ModuleDefinition(
+    id: 'harmony-ledger',
+    name: 'Harmony Collective',
+    description:
+        'Private ledger — cash entries, statement imports, and group balances.',
+    maturity: 'alpha',
+    tags: ['finance', 'ledger', 'private'],
+    icon: Icons.volunteer_activism_rounded,
+    builder: (_) => const HarmonyModuleScreen(),
   ),
 ];
