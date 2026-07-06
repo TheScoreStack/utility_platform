@@ -6,9 +6,11 @@ import 'package:flutter/material.dart';
 
 import '../core/auth_service.dart';
 import '../core/deep_links.dart';
+import '../core/share_service.dart';
 import '../modules/group_expenses/group_expenses_screen.dart';
 import '../modules/group_expenses/screens/sign_in_screen.dart';
 import '../modules/module_registry.dart';
+import 'import_destination_screen.dart';
 import 'module_hub.dart';
 
 /// App-level auth gate: sign-in happens at launch, before the module hub.
@@ -27,9 +29,13 @@ class _RootGateState extends State<RootGate> {
   String? _error;
   StreamSubscription<AuthHubEvent>? _authEvents;
   StreamSubscription<Uri>? _linkEvents;
+  StreamSubscription<SharedFile>? _sharedFileEvents;
 
   /// Invite id from a universal link, held until the user is signed in.
   String? _pendingInviteId;
+
+  /// File shared from the OS, held until the user is signed in.
+  SharedFile? _pendingSharedFile;
 
   @override
   void initState() {
@@ -44,10 +50,42 @@ class _RootGateState extends State<RootGate> {
       } else if (event.type == AuthHubEventType.signedIn) {
         setState(() => _signedIn = true);
         _maybeOpenPendingInvite();
+        _maybeOpenPendingSharedFile();
       }
     });
     _watchLinks();
+    _watchSharedFiles();
     _bootstrap();
+  }
+
+  Future<void> _watchSharedFiles() async {
+    ShareService.instance.init();
+    _sharedFileEvents = ShareService.instance.files.listen(_handleSharedFile);
+    // Cold start via a shared file.
+    final launchFile = await ShareService.instance.drainLaunchFile();
+    if (launchFile != null) _handleSharedFile(launchFile);
+  }
+
+  void _handleSharedFile(SharedFile file) {
+    _pendingSharedFile = file;
+    _maybeOpenPendingSharedFile();
+  }
+
+  /// Pushes the import destination picker once we're signed in and past
+  /// bootstrap — mirrors the pending-invite flow.
+  void _maybeOpenPendingSharedFile() {
+    final file = _pendingSharedFile;
+    if (file == null || !_signedIn || _checking || !mounted) return;
+    _pendingSharedFile = null;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ImportDestinationScreen(file: file),
+        ),
+      );
+    });
   }
 
   Future<void> _watchLinks() async {
@@ -90,6 +128,7 @@ class _RootGateState extends State<RootGate> {
   void dispose() {
     _authEvents?.cancel();
     _linkEvents?.cancel();
+    _sharedFileEvents?.cancel();
     super.dispose();
   }
 
@@ -107,6 +146,7 @@ class _RootGateState extends State<RootGate> {
         _checking = false;
       });
       _maybeOpenPendingInvite();
+      _maybeOpenPendingSharedFile();
     } catch (_) {
       if (!mounted) return;
       setState(() {

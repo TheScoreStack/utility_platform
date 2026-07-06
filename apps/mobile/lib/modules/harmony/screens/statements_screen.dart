@@ -8,14 +8,8 @@ import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
 import '../harmony_api.dart';
 import '../models/harmony_models.dart';
+import '../widgets/source_picker_sheet.dart';
 import 'statement_review_screen.dart';
-
-const _sourceOptions = [
-  (value: 'BANK', label: 'Bank statement', icon: Icons.account_balance_rounded),
-  (value: 'VENMO', label: 'Venmo statement', icon: Icons.swap_horiz_rounded),
-  (value: 'PAYPAL', label: 'PayPal statement', icon: Icons.payments_rounded),
-  (value: 'OTHER', label: 'Something else', icon: Icons.description_rounded),
-];
 
 /// Statement imports: upload a PDF/CSV, watch it parse, open the review queue.
 class StatementsScreen extends StatefulWidget {
@@ -121,31 +115,7 @@ class _StatementsScreenState extends State<StatementsScreen> {
   }
 
   Future<void> _import() async {
-    final source = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text(
-                'What are you importing?',
-                style: Theme.of(sheetContext).textTheme.titleMedium,
-              ),
-            ),
-            for (final option in _sourceOptions)
-              ListTile(
-                leading: Icon(option.icon),
-                title: Text(option.label),
-                onTap: () => Navigator.of(sheetContext).pop(option.value),
-              ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
+    final source = await showStatementSourceSheet(context);
     if (source == null || !mounted) return;
 
     // Second step: a document file, or a photo of a paper statement.
