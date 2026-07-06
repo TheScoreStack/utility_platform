@@ -1,4 +1,5 @@
 import { ReactNode, useState } from "react";
+import { useConfirm } from "../ConfirmDialog";
 
 interface RecentlyDeletedListProps {
   label: string;
@@ -23,6 +24,7 @@ export const RecentlyDeletedList = ({
   restoringId,
   purgingId
 }: RecentlyDeletedListProps) => {
+  const confirm = useConfirm();
   const [open, setOpen] = useState(false);
   if (items.length === 0) return null;
 
@@ -65,8 +67,14 @@ export const RecentlyDeletedList = ({
                   className="trash__row-purge"
                   disabled={purgingId === item.id}
                   title="Permanently delete — cannot be undone"
-                  onClick={() => {
-                    if (!window.confirm("Permanently delete? This cannot be undone.")) return;
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: "Delete forever?",
+                      body: "This permanently removes it — it can't be restored.",
+                      confirmLabel: "Delete forever",
+                      tone: "danger"
+                    });
+                    if (!ok) return;
                     onPurge(item.id).catch(() => {});
                   }}
                 >

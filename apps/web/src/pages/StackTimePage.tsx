@@ -967,7 +967,7 @@ const StackTimePage = () => {
                               background: proj.isActive
                                 ? "rgba(74, 222, 128, 0.15)"
                                 : "rgba(248, 113, 113, 0.15)",
-                              color: proj.isActive ? "#4ade80" : "#f87171"
+                              color: proj.isActive ? "var(--owed)" : "#f87171"
                             }}
                           >
                             {proj.isActive ? "Active" : "Inactive"}

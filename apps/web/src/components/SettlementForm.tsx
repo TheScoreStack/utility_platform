@@ -215,7 +215,7 @@ const SettlementForm = ({
       ref={formRef}
       style={{
         transition: "box-shadow 0.4s ease, background 0.4s ease",
-        boxShadow: flash ? "0 0 0 2px rgba(56,189,248,0.55)" : undefined,
+        boxShadow: flash ? "0 0 0 2px rgba(76,110,245,0.6)" : undefined,
         background: flash ? "rgba(56,189,248,0.07)" : undefined,
         borderRadius: "0.85rem",
         padding: flash ? "0.75rem" : undefined
@@ -234,7 +234,7 @@ const SettlementForm = ({
         {fromBalance !== undefined && (
           <p className="muted" style={{ margin: "0.3rem 0 0" }}>
             Balance:{" "}
-            <strong style={{ color: fromBalance >= 0 ? "#4ade80" : "#f87171" }}>
+            <strong style={{ color: fromBalance >= 0 ? "var(--owed)" : "var(--owe)" }}>
               {balanceFormatter.format(fromBalance)}
             </strong>
           </p>
@@ -254,7 +254,7 @@ const SettlementForm = ({
         {toBalance !== undefined && (
           <p className="muted" style={{ margin: "0.3rem 0 0" }}>
             Balance:{" "}
-            <strong style={{ color: toBalance >= 0 ? "#4ade80" : "#f87171" }}>
+            <strong style={{ color: toBalance >= 0 ? "var(--owed)" : "var(--owe)" }}>
               {balanceFormatter.format(toBalance)}
             </strong>
           </p>
@@ -293,7 +293,7 @@ const SettlementForm = ({
       </div>
 
       {availableMethodEntries.length > 0 ? (
-        <div className="card" style={{ padding: "0.75rem", background: "rgba(15,23,42,0.35)", border: "1px solid rgba(148,163,184,0.1)" }}>
+        <div className="card" style={{ padding: "0.75rem", background: "var(--inset)", border: "1px solid rgba(148,163,184,0.1)" }}>
           <p style={{ margin: "0 0 0.25rem", fontWeight: 600 }}>Pay {members.find((m) => m.memberId === toMemberId)?.displayName ?? "member"} via:</p>
           <ul style={{ margin: 0, paddingLeft: "1.1rem", color: "#e2e8f0" }}>
             {availableMethodEntries.map(([method, value]) => (
@@ -319,7 +319,7 @@ const SettlementForm = ({
       </button>
 
       {settlementSuggestions && settlementSuggestions.length > 0 && (
-        <div className="card" style={{ padding: "0.75rem", background: "rgba(15,23,42,0.35)", border: "1px solid rgba(148,163,184,0.1)" }}>
+        <div className="card" style={{ padding: "0.75rem", background: "var(--inset)", border: "1px solid rgba(148,163,184,0.1)" }}>
           <p style={{ margin: "0 0 0.5rem", fontWeight: 600 }}>Suggested payments</p>
           <div className="list" style={{ gap: "0.5rem" }}>
             {settlementSuggestions.map((suggestion) => (

@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { formatTripRange } from "../lib/tripFormat";
 import { useAuthenticator } from "@aws-amplify/ui-react";
 import { type CreateExpenseInput, type ExpensePrefill } from "../components/AddExpenseForm";
 import { type SettlementPrefill } from "../components/SettlementForm";
@@ -20,8 +21,11 @@ import type {
   Trip,
   PaymentMethods
 } from "../types";
+import { useConfirm } from "../components/ConfirmDialog";
 
 type TripTab = "overview" | "expenses" | "settlements" | "activity" | "people";
+
+const TRIP_TABS: readonly TripTab[] = ["overview", "expenses", "settlements", "activity", "people"];
 
 type TripDetailsFormState = {
   name: string;
@@ -66,7 +70,18 @@ const TripDetailPage = () => {
     user?.username ??
     undefined;
 
-  const [activeTab, setActiveTab] = useState<TripTab>("overview");
+  const confirm = useConfirm();
+  // Tab lives in the URL (?tab=...) so refreshes and shared links keep their place.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get("tab") as TripTab | null;
+  const activeTab: TripTab =
+    tabParam && TRIP_TABS.includes(tabParam) ? tabParam : "overview";
+  const setActiveTab = useCallback(
+    (tab: TripTab) => {
+      setSearchParams(tab === "overview" ? {} : { tab });
+    },
+    [setSearchParams]
+  );
   const [settlementPrefill, setSettlementPrefill] = useState<SettlementPrefill | null>(null);
   const [expensePrefill, setExpensePrefill] = useState<ExpensePrefill | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -115,7 +130,7 @@ const TripDetailPage = () => {
         void queryClient.refetchQueries({ queryKey, type: "active" });
       }
     },
-    [queryClient, queryKey, tripId]
+    [queryClient, queryKey, tripId, setActiveTab]
   );
 
   const handleUseSuggestion = useCallback(
@@ -128,7 +143,7 @@ const TripDetailPage = () => {
       });
       setActiveTab("settlements");
     },
-    []
+    [setActiveTab]
   );
 
   const buildExpensePrefill = useCallback((expense: Expense): ExpensePrefill => {
@@ -176,13 +191,13 @@ const TripDetailPage = () => {
     setEditingExpense(null);
     setExpensePrefill(buildExpensePrefill(expense));
     setActiveTab("expenses");
-  }, [buildExpensePrefill]);
+  }, [buildExpensePrefill, setActiveTab]);
 
   const handleEditExpense = useCallback((expense: Expense) => {
     setEditingExpense(expense);
     setExpensePrefill(buildExpensePrefill(expense));
     setActiveTab("expenses");
-  }, [buildExpensePrefill]);
+  }, [buildExpensePrefill, setActiveTab]);
 
   const createExpenseMutation = useMutation({
     mutationFn: (payload: CreateExpenseInput) =>
@@ -693,14 +708,21 @@ const TripDetailPage = () => {
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
-            gap: "1rem"
+            gap: "1rem",
+            flexWrap: "wrap"
           }}
         >
-          <div>
+          <div style={{ flex: "1 1 16rem", minWidth: 0 }}>
+            <button
+              type="button"
+              className="trip-back"
+              onClick={() => navigate("/group-expenses/trips")}
+            >
+              ← All trips
+            </button>
             <h2 style={{ margin: 0 }}>{trip.name}</h2>
             <p className="muted" style={{ margin: "0.5rem 0 0" }}>
-              {trip.startDate ? trip.startDate : "Flexible start"}
-              {trip.endDate ? ` → ${trip.endDate}` : ""}
+              {formatTripRange(trip.startDate, trip.endDate)}
             </p>
           </div>
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -725,21 +747,19 @@ const TripDetailPage = () => {
                 className="secondary"
                 title="Archive this trip — it'll move out of your active tabs but stays viewable."
                 disabled={archiveTripMutation.isPending}
-                onClick={() => {
-                  if (!window.confirm(`Archive “${trip.name}”? It'll move to the Archived list. You can unarchive it any time.`)) return;
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: `Archive “${trip.name}”?`,
+                    body: "It'll move to the Archived list. You can unarchive it any time.",
+                    confirmLabel: "Archive"
+                  });
+                  if (!ok) return;
                   archiveTripMutation.mutate();
                 }}
               >
                 {archiveTripMutation.isPending ? "Archiving…" : "Archive"}
               </button>
             )}
-            <button
-              type="button"
-              className="secondary"
-              onClick={() => navigate("/group-expenses/trips")}
-            >
-              Back to groups
-            </button>
           </div>
         </div>
         {canManageMembers && isEditingDetails && (
@@ -800,7 +820,7 @@ const TripDetailPage = () => {
           <p
             style={{
               margin: isEditingDetails ? "0" : "1rem 0 0",
-              color: detailsMessage.type === "error" ? "#f87171" : "#4ade80"
+              color: detailsMessage.type === "error" ? "#f87171" : "var(--owed)"
             }}
           >
             {detailsMessage.text}

@@ -45,8 +45,7 @@ export const ExpensesSidebar = ({
       padding: "1.1rem 1.3rem",
       borderRadius: "1rem",
       border: "1px solid rgba(148,163,184,0.12)",
-      background: "rgba(15,23,42,0.45)",
-      backdropFilter: "blur(10px)",
+      background: "var(--surface)",
       display: "flex",
       flexDirection: "column",
       gap: "1.1rem"
@@ -59,7 +58,7 @@ export const ExpensesSidebar = ({
       </p>
       <div className="list" style={{ marginTop: "0.75rem", gap: "0.55rem" }}>
         {sortedTotals.map((member) => {
-          const tone = member.net >= 0 ? "#4ade80" : "#f87171";
+          const tone = member.net >= 0 ? "var(--owed)" : "var(--owe)";
           return (
             <div
               key={member.memberId}
@@ -69,7 +68,7 @@ export const ExpensesSidebar = ({
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
-                background: "rgba(15,23,42,0.55)",
+                background: "var(--surface-2)",
                 borderRadius: "0.75rem",
                 border: "1px solid rgba(148,163,184,0.08)"
               }}
@@ -128,9 +127,9 @@ export const ExpensesSidebar = ({
             const attachedTo = receiptUsage.get(receipt.receiptId);
             const statusTone =
               receipt.status === "COMPLETED"
-                ? "#4ade80"
+                ? "var(--owed)"
                 : receipt.status === "PROCESSING"
-                ? "#facc15"
+                ? "var(--owe)"
                 : "#f87171";
             const receiptPreview = receiptPreviewCache[receipt.receiptId];
             const isExpanded = expandedReceiptId === receipt.receiptId;
@@ -143,7 +142,7 @@ export const ExpensesSidebar = ({
                   display: "flex",
                   flexDirection: "column",
                   gap: "0.65rem",
-                  background: "rgba(15,23,42,0.55)",
+                  background: "var(--surface-2)",
                   borderRadius: "0.75rem",
                   border: "1px solid rgba(148,163,184,0.08)"
                 }}
@@ -204,7 +203,7 @@ export const ExpensesSidebar = ({
                       border: "1px solid rgba(148,163,184,0.14)",
                       borderRadius: "0.65rem",
                       padding: "0.6rem",
-                      background: "rgba(15,23,42,0.45)"
+                      background: "var(--inset)"
                     }}
                   >
                     {receiptPreview ? (

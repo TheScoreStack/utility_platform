@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError, searchUsers as searchUsersRequest } from "../lib/api";
 import type { Trip, TripListResponse, UserProfile } from "../types";
 import { getInitials, seedAvatar } from "../lib/avatarPalette";
+import { formatTripRange, formatTripStamp } from "../lib/tripFormat";
 
 interface FormState {
   name: string;
@@ -30,49 +31,6 @@ const formatCurrencyValue = (value: number, currency: string) =>
     maximumFractionDigits: 2
   }).format(value);
 
-const formatStamp = (startDate?: string, endDate?: string): string | null => {
-  const fmt = (iso: string) => {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        month: "short",
-        day: "numeric"
-      })
-        .format(d)
-        .toUpperCase();
-    } catch {
-      return iso;
-    }
-  };
-  if (!startDate && !endDate) return null;
-  if (startDate && endDate && startDate !== endDate) {
-    return `${fmt(startDate)} – ${fmt(endDate)}`;
-  }
-  return fmt(startDate ?? endDate!);
-};
-
-const formatRange = (startDate?: string, endDate?: string): string => {
-  if (!startDate && !endDate) return "Flexible dates";
-  const fmt = (iso: string) => {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    try {
-      return new Intl.DateTimeFormat(undefined, {
-        month: "long",
-        day: "numeric",
-        year:
-          d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined
-      }).format(d);
-    } catch {
-      return iso;
-    }
-  };
-  if (startDate && endDate && startDate !== endDate) {
-    return `${fmt(startDate)} → ${fmt(endDate)}`;
-  }
-  return fmt(startDate ?? endDate!);
-};
 
 const tripTone = (trip: TripWithStatus): "owe" | "owed" | "neutral" => {
   if ((trip.outstandingBalance ?? 0) > 0) return "owe";
@@ -288,8 +246,8 @@ const TripListPage = () => {
             <div className="tl-list">
               {trips.map((trip, idx) => {
                 const tone = tripTone(trip);
-                const stamp = formatStamp(trip.startDate, trip.endDate);
-                const range = formatRange(trip.startDate, trip.endDate);
+                const stamp = formatTripStamp(trip.startDate, trip.endDate);
+                const range = formatTripRange(trip.startDate, trip.endDate);
                 return (
                   <Link
                     key={trip.tripId}
@@ -386,8 +344,8 @@ const TripListPage = () => {
               {archivedOpen && (
                 <div className="tl-archived__list">
                   {archivedTrips.map((trip) => {
-                    const stamp = formatStamp(trip.startDate, trip.endDate);
-                    const range = formatRange(trip.startDate, trip.endDate);
+                    const stamp = formatTripStamp(trip.startDate, trip.endDate);
+                    const range = formatTripRange(trip.startDate, trip.endDate);
                     return (
                       <Link
                         key={trip.tripId}

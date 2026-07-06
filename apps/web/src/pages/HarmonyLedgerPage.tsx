@@ -14,6 +14,7 @@ import {
   HarmonyLedgerTransfer
 } from "../types";
 import { useHarmonyLedgerAccess } from "../modules/useHarmonyLedgerAccess";
+import { useConfirm } from "../components/ConfirmDialog";
 
 interface EntryFormState {
   type: HarmonyLedgerEntryType;
@@ -89,6 +90,7 @@ const formatDateTime = (value: string) =>
   }).format(new Date(value));
 
 const HarmonyLedgerPage = () => {
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { data: accessData, isLoading: accessLoading } = useHarmonyLedgerAccess();
   const [entryForm, setEntryForm] = useState<EntryFormState>(defaultEntryForm);
@@ -278,10 +280,14 @@ const HarmonyLedgerPage = () => {
     setMenuEntryId(null);
   };
 
-  const handleDeleteEntry = (entry: HarmonyLedgerEntry) => {
-    if (!window.confirm(`Delete "${entry.description ?? "Untitled"}"? This cannot be undone.`)) {
-      return;
-    }
+  const handleDeleteEntry = async (entry: HarmonyLedgerEntry) => {
+    const ok = await confirm({
+      title: `Delete "${entry.description ?? "Untitled"}"?`,
+      body: "This cannot be undone.",
+      confirmLabel: "Delete",
+      tone: "danger"
+    });
+    if (!ok) return;
     deleteEntryMutation.mutate({
       entryId: entry.entryId,
       recordedAt: entry.recordedAt
@@ -289,10 +295,14 @@ const HarmonyLedgerPage = () => {
     setMenuEntryId(null);
   };
 
-  const handleDeleteTransfer = (transfer: HarmonyLedgerTransfer) => {
-    if (!window.confirm("Delete this transfer?")) {
-      return;
-    }
+  const handleDeleteTransfer = async (transfer: HarmonyLedgerTransfer) => {
+    const ok = await confirm({
+      title: "Delete this transfer?",
+      body: "This cannot be undone.",
+      confirmLabel: "Delete",
+      tone: "danger"
+    });
+    if (!ok) return;
     deleteTransferMutation.mutate({
       transferId: transfer.transferId,
       createdAt: transfer.createdAt

@@ -20,7 +20,7 @@ export const TripDetailSkeleton = () => (
     <div className="ov-grid">
       <section
         className="ov-hero"
-        style={{ gridColumn: "1 / -1", background: "rgba(15,23,42,0.7)" }}
+        style={{ gridColumn: "1 / -1", background: "var(--surface)" }}
       >
         <div className="skel-hero">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: "1.5rem" }}>

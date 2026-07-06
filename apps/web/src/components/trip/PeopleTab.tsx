@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { orderedPayableMethods } from "../../lib/paymentLinks";
 import { OvAvatar } from "./OvAvatar";
 import type { PaymentMethods, TripInvite, TripSummary, UserProfile } from "../../types";
+import { useConfirm } from "../ConfirmDialog";
 
 export type PaymentMethodsInput = {
   venmo?: string | null;
@@ -27,6 +28,7 @@ const InviteLinkBox = ({
   rotating,
   revoking
 }: InviteLinkBoxProps) => {
+  const confirm = useConfirm();
   const [copied, setCopied] = useState(false);
   const url =
     typeof window !== "undefined"
@@ -62,13 +64,13 @@ const InviteLinkBox = ({
             className="ppl-invite__action ppl-invite__action--rotate"
             disabled={rotating}
             title="Generate a fresh link — the current one stops working."
-            onClick={() => {
-              if (
-                !window.confirm(
-                  "Rotate the invite link? Anyone holding the old one won't be able to join."
-                )
-              )
-                return;
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Rotate the invite link?",
+                body: "Anyone holding the old link won't be able to join.",
+                confirmLabel: "Rotate link"
+              });
+              if (!ok) return;
               void onRotate();
             }}
           >
@@ -79,13 +81,14 @@ const InviteLinkBox = ({
             className="ppl-invite__action ppl-invite__action--revoke"
             disabled={revoking}
             title="Disable the link entirely."
-            onClick={() => {
-              if (
-                !window.confirm(
-                  "Revoke the invite link? No one new can join until you create another one."
-                )
-              )
-                return;
+            onClick={async () => {
+              const ok = await confirm({
+                title: "Revoke the invite link?",
+                body: "No one new can join until you create another one.",
+                confirmLabel: "Revoke",
+                tone: "danger"
+              });
+              if (!ok) return;
               void onRevoke();
             }}
           >
@@ -178,6 +181,7 @@ export const PeopleTab = ({
   inviteSaving,
   inviteRevoking
 }: PeopleTabProps) => {
+  const confirm = useConfirm();
   const editableMemberId = useMemo(
     () => members.find((member) => member.memberId === currentUserId)?.memberId,
     [members, currentUserId]
@@ -330,10 +334,14 @@ export const PeopleTab = ({
                         disabled={
                           removeLoading && removingMemberId === member.memberId
                         }
-                        onClick={() => {
-                          if (!window.confirm(`Remove ${label} from this trip?`)) {
-                            return;
-                          }
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: `Remove ${label}?`,
+                            body: "They'll be taken off this trip. Their past expenses stay on the books.",
+                            confirmLabel: "Remove",
+                            tone: "danger"
+                          });
+                          if (!ok) return;
                           onRemoveMember(member.memberId).catch(() => {});
                         }}
                       >

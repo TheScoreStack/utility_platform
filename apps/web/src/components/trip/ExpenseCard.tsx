@@ -70,9 +70,7 @@ export const ExpenseCard = ({
         padding: "1.35rem 1.6rem",
         borderRadius: "1.1rem",
         border: "1px solid rgba(148,163,184,0.12)",
-        background: "rgba(15,23,42,0.65)",
-        boxShadow: "0 25px 45px -35px rgba(15,15,35,0.75)",
-        backdropFilter: "blur(10px)",
+        background: "var(--surface-2)",
         display: "flex",
         flexDirection: "column",
         gap: "1rem"
@@ -130,7 +128,7 @@ export const ExpenseCard = ({
             border: "1px solid rgba(148,163,184,0.14)",
             borderRadius: "0.75rem",
             padding: "0.55rem 0.8rem",
-            background: "rgba(15,23,42,0.45)"
+            background: "var(--inset)"
           }}
         >
           <summary
@@ -340,7 +338,7 @@ export const ExpenseCard = ({
             border: "1px solid rgba(148,163,184,0.14)",
             borderRadius: "0.9rem",
             padding: "0.75rem",
-            background: "rgba(15,23,42,0.45)",
+            background: "var(--inset)",
             display: "flex",
             flexDirection: "column",
             gap: "0.75rem"

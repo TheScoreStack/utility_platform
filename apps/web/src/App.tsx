@@ -1,6 +1,7 @@
 import { Authenticator } from "@aws-amplify/ui-react";
+import { fetchUserAttributes } from "@aws-amplify/auth";
 import "@aws-amplify/ui-react/styles.css";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import {
   BrowserRouter,
   Routes,
@@ -28,6 +29,7 @@ import TripSummaryPrintPage from "./pages/TripSummaryPrintPage";
 import { useHarmonyLedgerAccess } from "./modules/useHarmonyLedgerAccess";
 import { useStackTimeAccess } from "./modules/useStackTimeAccess";
 import { getInitials, seedAvatar } from "./lib/avatarPalette";
+import { ConfirmDialogProvider } from "./components/ConfirmDialog";
 
 const queryClient = new QueryClient();
 const GroupExpensesModule = () => <Outlet />;
@@ -44,7 +46,19 @@ interface AppContentProps {
   signOut?: () => void;
 }
 
+/** "hunter.j.adam" -> "Hunter" — a presentable fallback while attributes load. */
+const nameFromEmail = (email?: string) => {
+  const local = email?.split("@")[0]?.split(/[._-]/)[0];
+  return local ? local.charAt(0).toUpperCase() + local.slice(1) : undefined;
+};
+
 const AppContent = ({ user, signOut }: AppContentProps) => {
+  // Amplify v6's Authenticator user has no attributes — fetch them ourselves.
+  const { data: attributes } = useQuery({
+    queryKey: ["user-attributes"],
+    queryFn: () => fetchUserAttributes(),
+    staleTime: Infinity
+  });
   const { data: harmonyAccess } = useHarmonyLedgerAccess();
   const { data: stackTimeAccess } = useStackTimeAccess();
 
@@ -63,21 +77,15 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
     });
   }, [harmonyAccess?.allowed, stackTimeAccess?.allowed]);
 
-  const fullName = [user?.attributes?.given_name, user?.attributes?.family_name]
+  const email = attributes?.email || user?.signInDetails?.loginId;
+  const fullName = [attributes?.given_name, attributes?.family_name]
     .filter(Boolean)
     .join(" ");
   const displayName =
-    fullName ||
-    user?.attributes?.name ||
-    user?.signInDetails?.loginId ||
-    user?.username;
+    fullName || attributes?.name || nameFromEmail(email) || user?.username;
 
-  const firstName = user?.attributes?.given_name;
-  const emailSeed =
-    user?.attributes?.email ||
-    user?.signInDetails?.loginId ||
-    displayName ||
-    "anon";
+  const firstName = attributes?.given_name || nameFromEmail(email);
+  const emailSeed = email || displayName || "anon";
   const avatarPalette = seedAvatar(emailSeed);
   const avatarInitials = getInitials(displayName ?? firstName ?? "?");
   const greeting = useMemo(() => {
@@ -91,6 +99,7 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
 
   return (
     <BrowserRouter>
+      <ConfirmDialogProvider>
       <main className="app-container">
         <header className="shell-header">
           <div className="shell-header__lockup">
@@ -187,6 +196,7 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
+      </ConfirmDialogProvider>
     </BrowserRouter>
   );
 };

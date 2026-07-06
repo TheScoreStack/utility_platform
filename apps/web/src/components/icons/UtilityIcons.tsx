@@ -19,8 +19,8 @@ export const WorkspaceBadgeIcon = ({
   >
     <defs>
       <linearGradient id="workspaceGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#38bdf8" />
-        <stop offset="100%" stopColor="#6366f1" />
+        <stop offset="0%" stopColor="#748ffc" />
+        <stop offset="100%" stopColor="#4c6ef5" />
       </linearGradient>
     </defs>
     <rect
@@ -37,8 +37,8 @@ export const WorkspaceBadgeIcon = ({
       stroke="url(#workspaceGradient)"
       d="M15 20h18M15 28h8M27 28h6M18 16l5.5-5 5.5 5"
     />
-    <circle cx="16" cy="32" r="3" fill="#38bdf8" opacity="0.9" />
-    <circle cx="32" cy="32" r="3" fill="#6366f1" opacity="0.9" />
+    <circle cx="16" cy="32" r="3" fill="#748ffc" opacity="0.9" />
+    <circle cx="32" cy="32" r="3" fill="#4c6ef5" opacity="0.9" />
   </svg>
 );
 
@@ -68,7 +68,7 @@ export const AutomationSparkIcon = ({
     <circle cx="20" cy="20" r="14" fill="rgba(14,165,233,0.15)" />
     <path
       {...gradientProps}
-      stroke="#38bdf8"
+      stroke="#748ffc"
       d="M12 20h16M20 12v16M15 15l10 10M25 15l-10 10"
       opacity="0.8"
     />
@@ -123,7 +123,7 @@ export const LedgerGlyphIcon = ({
   >
     <defs>
       <linearGradient id="ledgerGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-        <stop offset="0%" stopColor="#38bdf8" />
+        <stop offset="0%" stopColor="#748ffc" />
         <stop offset="100%" stopColor="#0ea5e9" />
       </linearGradient>
     </defs>
@@ -142,7 +142,7 @@ export const LedgerGlyphIcon = ({
       stroke="url(#ledgerGradient)"
       d="M16 16h16M16 22h12M16 28h16M16 34h10"
     />
-    <circle cx="30" cy="22" r="3" fill="#38bdf8" opacity="0.8" />
+    <circle cx="30" cy="22" r="3" fill="#748ffc" opacity="0.8" />
   </svg>
 );
 

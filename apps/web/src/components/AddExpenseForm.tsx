@@ -1396,7 +1396,7 @@ const AddExpenseForm = ({
           style={{
             transition: "box-shadow 0.4s ease, background 0.4s ease",
             boxShadow: prefillFlash
-              ? "0 0 0 2px rgba(56,189,248,0.55)"
+              ? "0 0 0 2px rgba(76,110,245,0.6)"
               : undefined,
             background: prefillFlash ? "rgba(56,189,248,0.06)" : undefined,
             borderRadius: "0.85rem"
@@ -1547,7 +1547,7 @@ const AddExpenseForm = ({
         ref={formRef}
         style={{
           transition: "box-shadow 0.4s ease, background 0.4s ease, padding 0.4s ease",
-          boxShadow: prefillFlash ? "0 0 0 2px rgba(56,189,248,0.55)" : undefined,
+          boxShadow: prefillFlash ? "0 0 0 2px rgba(76,110,245,0.6)" : undefined,
           background: prefillFlash ? "rgba(56,189,248,0.06)" : undefined,
           borderRadius: "0.85rem",
           padding: prefillFlash ? "0.85rem" : undefined
@@ -1762,7 +1762,7 @@ const AddExpenseForm = ({
                 border: "1px solid rgba(148,163,184,0.14)",
                 borderRadius: "0.75rem",
                 padding: "0.75rem",
-                background: "rgba(15,23,42,0.45)",
+                background: "var(--inset)",
                 display: "flex",
                 flexDirection: "column",
                 gap: "0.75rem"
@@ -1773,7 +1773,7 @@ const AddExpenseForm = ({
                   display: "flex",
                   justifyContent: "center",
                   alignItems: "center",
-                  background: "rgba(15,23,42,0.6)",
+                  background: "var(--inset)",
                   borderRadius: "0.5rem",
                   padding: receiptPreviewType === "application/pdf" ? "0" : "0.75rem",
                   minHeight: receiptPreviewType === "application/pdf" ? "220px" : "auto"

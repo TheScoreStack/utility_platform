@@ -8,7 +8,7 @@ export interface ExpenseCategory {
 export const EXPENSE_CATEGORIES: ExpenseCategory[] = [
   { id: "meals", label: "Meals", icon: "🍽", color: "#f9a8d4" },
   { id: "lodging", label: "Lodging", icon: "🏨", color: "#c4b5fd" },
-  { id: "transport", label: "Transport", icon: "🚗", color: "#7dd3fc" },
+  { id: "transport", label: "Transport", icon: "🚗", color: "#91a7ff" },
   { id: "fuel", label: "Fuel", icon: "⛽", color: "#fcd34d" },
   { id: "groceries", label: "Groceries", icon: "🛒", color: "#86efac" },
   { id: "activities", label: "Activities", icon: "🎟", color: "#fdba74" },

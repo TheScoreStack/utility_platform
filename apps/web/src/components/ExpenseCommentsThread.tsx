@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
 import { getInitials, seedAvatar } from "../lib/avatarPalette";
 import type { ExpenseComment } from "../types";
+import { useConfirm } from "./ConfirmDialog";
 
 interface Props {
   tripId: string;
@@ -34,6 +35,7 @@ const ExpenseCommentsThread = ({
   canDeleteAny,
   open
 }: Props) => {
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
   const queryKey = ["expense-comments", tripId, expenseId];
@@ -122,8 +124,13 @@ const ExpenseCommentsThread = ({
                           deleteMutation.isPending &&
                           deleteMutation.variables === comment.commentId
                         }
-                        onClick={() => {
-                          if (!window.confirm("Delete this comment?")) return;
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: "Delete this comment?",
+                            confirmLabel: "Delete",
+                            tone: "danger"
+                          });
+                          if (!ok) return;
                           deleteMutation.mutate(comment.commentId);
                         }}
                       >

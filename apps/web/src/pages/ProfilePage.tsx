@@ -184,7 +184,7 @@ const ProfilePage = () => {
             <p
               style={{
                 margin: 0,
-                color: /fail|cannot|error|unable|invalid/i.test(message) ? "#f87171" : "#4ade80"
+                color: /fail|cannot|error|unable|invalid/i.test(message) ? "#f87171" : "var(--owed)"
               }}
             >
               {message}

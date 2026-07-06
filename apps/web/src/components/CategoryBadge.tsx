@@ -16,7 +16,7 @@ export const CategoryBadge = ({ category, prefix }: CategoryBadgeProps) => {
     <span
       className="cat-badge"
       style={{
-        background: `color-mix(in srgb, ${color} 14%, rgba(15, 23, 42, 0.55))`,
+        background: `color-mix(in srgb, ${color} 16%, transparent)`,
         borderColor: `color-mix(in srgb, ${color} 36%, transparent)`,
         color
       }}

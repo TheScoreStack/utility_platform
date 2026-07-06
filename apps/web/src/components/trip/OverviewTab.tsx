@@ -406,8 +406,8 @@ export const OverviewTab = ({
                           background: isZero
                             ? "rgba(148,163,184,0.3)"
                             : positive
-                              ? "linear-gradient(90deg, var(--owed) 0%, rgba(52,211,153,0.55) 100%)"
-                              : "linear-gradient(90deg, var(--owe) 0%, rgba(251,146,60,0.55) 100%)"
+                              ? "var(--owed)"
+                              : "var(--owe)"
                         }}
                       />
                     </div>

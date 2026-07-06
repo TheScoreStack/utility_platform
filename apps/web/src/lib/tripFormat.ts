@@ -80,3 +80,61 @@ export const formatDayLabel = (isoString: string): { primary: string; secondary?
 
   return { primary: dateLabel, secondary };
 };
+
+
+/** Parse date-only strings ("2025-09-26") as local midnight, not UTC —
+ *  otherwise they render a day early in western timezones. */
+const parseLocalDay = (iso: string) =>
+  new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00:00` : iso);
+
+/** "SEP 25 – SEP 27" passport-stamp range for trip cards. */
+export const formatTripStamp = (
+  startDate?: string | null,
+  endDate?: string | null
+): string | null => {
+  const fmt = (iso: string) => {
+    const d = parseLocalDay(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "short",
+        day: "numeric"
+      })
+        .format(d)
+        .toUpperCase();
+    } catch {
+      return iso;
+    }
+  };
+  if (!startDate && !endDate) return null;
+  if (startDate && endDate && startDate !== endDate) {
+    return `${fmt(startDate)} – ${fmt(endDate)}`;
+  }
+  return fmt(startDate ?? endDate!);
+};
+
+/** "September 25 → September 27, 2025" long-form trip date range. */
+export const formatTripRange = (
+  startDate?: string | null,
+  endDate?: string | null
+): string => {
+  if (!startDate && !endDate) return "Flexible dates";
+  const fmt = (iso: string) => {
+    const d = parseLocalDay(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    try {
+      return new Intl.DateTimeFormat(undefined, {
+        month: "long",
+        day: "numeric",
+        year:
+          d.getFullYear() !== new Date().getFullYear() ? "numeric" : undefined
+      }).format(d);
+    } catch {
+      return iso;
+    }
+  };
+  if (startDate && endDate && startDate !== endDate) {
+    return `${fmt(startDate)} → ${fmt(endDate)}`;
+  }
+  return fmt(startDate ?? endDate!);
+};
