@@ -131,17 +131,59 @@ class HarmonyEntry {
   bool get isInflow => type != 'EXPENSE';
 }
 
+class HarmonyTransfer {
+  final String transferId;
+  final double amount;
+  final String currency;
+  final String? fromGroupId;
+  final String? fromGroupName;
+  final String? toGroupId;
+  final String? toGroupName;
+  final String? note;
+  final String createdAt;
+  final String? createdByName;
+
+  const HarmonyTransfer({
+    required this.transferId,
+    required this.amount,
+    required this.currency,
+    this.fromGroupId,
+    this.fromGroupName,
+    this.toGroupId,
+    this.toGroupName,
+    this.note,
+    required this.createdAt,
+    this.createdByName,
+  });
+
+  factory HarmonyTransfer.fromJson(Map<String, dynamic> json) =>
+      HarmonyTransfer(
+        transferId: json['transferId'] as String,
+        amount: _asDouble(json['amount']),
+        currency: (json['currency'] as String?) ?? 'USD',
+        fromGroupId: json['fromGroupId'] as String?,
+        fromGroupName: json['fromGroupName'] as String?,
+        toGroupId: json['toGroupId'] as String?,
+        toGroupName: json['toGroupName'] as String?,
+        note: json['note'] as String?,
+        createdAt: json['createdAt'] as String,
+        createdByName: json['createdByName'] as String?,
+      );
+}
+
 class HarmonyLedgerData {
   final List<HarmonyEntry> entries;
   final HarmonyTotals totals;
   final List<HarmonyGroup> groups;
   final List<HarmonyGroupSummary> groupSummaries;
+  final List<HarmonyTransfer> transfers;
 
   const HarmonyLedgerData({
     required this.entries,
     required this.totals,
     required this.groups,
     required this.groupSummaries,
+    required this.transfers,
   });
 
   factory HarmonyLedgerData.fromJson(Map<String, dynamic> json) =>
@@ -160,6 +202,10 @@ class HarmonyLedgerData {
         groupSummaries: [
           for (final summary in (json['groupSummaries'] as List? ?? []))
             HarmonyGroupSummary.fromJson(summary as Map<String, dynamic>),
+        ],
+        transfers: [
+          for (final transfer in (json['transfers'] as List? ?? []))
+            HarmonyTransfer.fromJson(transfer as Map<String, dynamic>),
         ],
       );
 }
@@ -246,6 +292,7 @@ class HarmonyStagedTxn {
   final String suggestedType;
   final String? suggestedGroupId;
   final String? suggestedGroupName;
+  final String? suggestedCategory;
   final bool isLikelyInternalTransfer;
   final bool isDuplicate;
   final String status;
@@ -262,6 +309,7 @@ class HarmonyStagedTxn {
     required this.suggestedType,
     this.suggestedGroupId,
     this.suggestedGroupName,
+    this.suggestedCategory,
     required this.isLikelyInternalTransfer,
     required this.isDuplicate,
     required this.status,
@@ -280,6 +328,7 @@ class HarmonyStagedTxn {
         suggestedType: json['suggestedType'] as String,
         suggestedGroupId: json['suggestedGroupId'] as String?,
         suggestedGroupName: json['suggestedGroupName'] as String?,
+        suggestedCategory: json['suggestedCategory'] as String?,
         isLikelyInternalTransfer: json['isLikelyInternalTransfer'] == true,
         isDuplicate: json['duplicateOf'] != null,
         status: json['status'] as String,

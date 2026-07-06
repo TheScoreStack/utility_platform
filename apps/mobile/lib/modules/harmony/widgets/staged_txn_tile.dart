@@ -116,6 +116,11 @@ class StagedTxnTile extends StatelessWidget {
                     visualDensity: VisualDensity.compact,
                     onPressed: reviewed || busy ? null : onGroupTap,
                   ),
+                  if (txn.suggestedCategory != null)
+                    _Badge(
+                      label: txn.suggestedCategory!,
+                      color: AppColors.accent,
+                    ),
                   if (txn.isDuplicate)
                     const _Badge(
                       label: 'Possible duplicate',

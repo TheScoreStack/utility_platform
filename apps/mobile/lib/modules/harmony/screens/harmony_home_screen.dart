@@ -7,6 +7,7 @@ import '../harmony_api.dart';
 import '../models/harmony_models.dart';
 import '../widgets/entry_sheet.dart';
 import 'statements_screen.dart';
+import 'transfers_screen.dart';
 
 /// Harmony Collective overview: net balance, group balances, recent entries,
 /// plus the cash quick-entry FAB and statement imports.
@@ -21,6 +22,7 @@ class HarmonyHomeScreen extends StatefulWidget {
 
 class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
   HarmonyLedgerData? _data;
+  List<HarmonyStatement>? _statements;
   bool _loading = true;
   String? _error;
 
@@ -33,10 +35,14 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
-      final data = await widget.api.getLedger();
+      final results = await Future.wait([
+        widget.api.getLedger(),
+        widget.api.listStatements(),
+      ]);
       if (!mounted) return;
       setState(() {
-        _data = data;
+        _data = results[0] as HarmonyLedgerData;
+        _statements = results[1] as List<HarmonyStatement>;
         _loading = false;
       });
     } on ApiException catch (error) {
@@ -178,6 +184,16 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
         .then((_) => _load());
   }
 
+  void _openTransfers() {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => TransfersScreen(api: widget.api),
+          ),
+        )
+        .then((_) => _load());
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = _data;
@@ -186,6 +202,11 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
       appBar: AppBar(
         title: const Text('Harmony Collective'),
         actions: [
+          IconButton(
+            tooltip: 'Group transfers',
+            icon: const Icon(Icons.swap_horiz_rounded),
+            onPressed: _openTransfers,
+          ),
           IconButton(
             tooltip: 'Statement imports',
             icon: const Icon(Icons.upload_file_rounded),
@@ -220,6 +241,7 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
                 children: [
                   if (data != null) ...[
                     _netCard(data.totals),
+                    ..._reviewNudge(),
                     const SizedBox(height: 16),
                     Text('GROUPS', style: eyebrowStyle()),
                     const SizedBox(height: 8),
@@ -248,6 +270,47 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
               ),
             ),
     );
+  }
+
+  /// "N transactions awaiting review" / "statement failed" banner, shown
+  /// only when a statement needs attention.
+  List<Widget> _reviewNudge() {
+    final statements = _statements ?? [];
+    final pending = statements
+        .where((s) => s.isParsed)
+        .fold<int>(0, (sum, s) => sum + (s.counts?.pending ?? 0));
+    final failed = statements.where((s) => s.isFailed).length;
+    if (pending == 0 && failed == 0) return const [];
+
+    final label = pending > 0
+        ? '$pending imported ${pending == 1 ? 'transaction' : 'transactions'} '
+              'awaiting review'
+        : '$failed ${failed == 1 ? 'statement' : 'statements'} failed to parse';
+
+    return [
+      const SizedBox(height: 12),
+      Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: BorderSide(
+            color: (pending > 0 ? AppColors.warning : AppColors.danger)
+                .withValues(alpha: 0.45),
+          ),
+        ),
+        child: ListTile(
+          dense: true,
+          leading: Icon(
+            pending > 0
+                ? Icons.rule_rounded
+                : Icons.error_outline_rounded,
+            color: pending > 0 ? AppColors.warning : AppColors.danger,
+          ),
+          title: Text(label, style: const TextStyle(fontSize: 13)),
+          trailing: const Icon(Icons.chevron_right_rounded),
+          onTap: _openStatements,
+        ),
+      ),
+    ];
   }
 
   Widget _netCard(HarmonyTotals totals) {

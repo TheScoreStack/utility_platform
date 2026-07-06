@@ -61,6 +61,28 @@ class HarmonyApi {
     {'recordedAt': recordedAt},
   );
 
+  /// Moves funds between groups; null group = the unallocated pool.
+  Future<HarmonyTransfer> createTransfer({
+    String? fromGroupId,
+    String? toGroupId,
+    required double amount,
+    String? note,
+  }) async {
+    final data = await _api.post('/harmony-ledger/transfers', {
+      if (fromGroupId != null) 'fromGroupId': fromGroupId,
+      if (toGroupId != null) 'toGroupId': toGroupId,
+      'amount': amount,
+      if (note != null && note.isNotEmpty) 'note': note,
+    });
+    return HarmonyTransfer.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> deleteTransfer(String transferId, String createdAt) =>
+      _api.delete(
+        '/harmony-ledger/transfers/$transferId',
+        {'createdAt': createdAt},
+      );
+
   /// Returns the created statement plus the presigned upload URL.
   Future<({HarmonyStatement statement, String uploadUrl})> createStatement({
     required String fileName,
