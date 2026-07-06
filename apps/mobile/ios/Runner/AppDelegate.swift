@@ -59,15 +59,10 @@ import UserNotifications
   }
 
   // "Copy to Stack Core" from the share sheet: the file lands in our Inbox;
-  // stage a stable copy in tmp and hand the path to Dart.
-  override func application(
-    _ app: UIApplication,
-    open url: URL,
-    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
-  ) -> Bool {
-    guard url.isFileURL else {
-      return super.application(app, open: url, options: options)
-    }
+  // stage a stable copy in tmp and hand the path to Dart. Called from the
+  // scene delegate — with UIScene enabled, application(_:open:) never fires.
+  func handleSharedFileURL(_ url: URL) {
+    guard url.isFileURL else { return }
 
     let scoped = url.startAccessingSecurityScopedResource()
     defer {
@@ -84,7 +79,7 @@ import UserNotifications
       try FileManager.default.copyItem(at: url, to: staged)
     } catch {
       NSLog("Failed to stage shared file: \(error)")
-      return true
+      return
     }
 
     let payload = ["path": staged.path, "name": url.lastPathComponent]
@@ -99,6 +94,18 @@ import UserNotifications
     } else {
       pendingSharedFile = payload
     }
+  }
+
+  // Non-scene fallback path; harmless when UIScene is active.
+  override func application(
+    _ app: UIApplication,
+    open url: URL,
+    options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+  ) -> Bool {
+    guard url.isFileURL else {
+      return super.application(app, open: url, options: options)
+    }
+    handleSharedFileURL(url)
     return true
   }
 
@@ -179,5 +186,43 @@ import UserNotifications
     } else {
       completionHandler([.alert, .sound, .badge])
     }
+  }
+}
+
+/// Scene delegate: with UIScene enabled, opened files arrive here (via
+/// openURLContexts, or connectionOptions on cold start) instead of the app
+/// delegate. File URLs route to AppDelegate.handleSharedFileURL; everything
+/// else falls through to Flutter's default handling.
+@objc(SceneDelegate) class SceneDelegate: FlutterSceneDelegate {
+  override func scene(
+    _ scene: UIScene,
+    willConnectTo session: UISceneSession,
+    options connectionOptions: UIScene.ConnectionOptions
+  ) {
+    super.scene(scene, willConnectTo: session, options: connectionOptions)
+    for context in connectionOptions.urlContexts where context.url.isFileURL {
+      Self.appDelegate?.handleSharedFileURL(context.url)
+    }
+  }
+
+  override func scene(
+    _ scene: UIScene,
+    openURLContexts URLContexts: Set<UIOpenURLContext>
+  ) {
+    var remaining = Set<UIOpenURLContext>()
+    for context in URLContexts {
+      if context.url.isFileURL {
+        Self.appDelegate?.handleSharedFileURL(context.url)
+      } else {
+        remaining.insert(context)
+      }
+    }
+    if !remaining.isEmpty {
+      super.scene(scene, openURLContexts: remaining)
+    }
+  }
+
+  private static var appDelegate: AppDelegate? {
+    UIApplication.shared.delegate as? AppDelegate
   }
 }

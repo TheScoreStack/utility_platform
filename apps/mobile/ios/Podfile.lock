@@ -211,13 +211,13 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/url_launcher_ios/ios"
 
 SPEC CHECKSUMS:
-  amplify_auth_cognito: e9a45113bed644b59cc097b71f859659ae3a8409
-  amplify_secure_storage: 650d7f0bae674e5a13e77fe36f9ea3516dcc096f
+  amplify_auth_cognito: a5d9cb77abfbe05e3501ad0c45dddc81503e7074
+  amplify_secure_storage: 3edc30177ffefbcee786c408a21c02f8ab9f168e
   app_links: a754cbec3c255bd4bbb4d236ecc06f28cd9a7ce8
   device_info_plus: 21fcca2080fbcd348be798aa36c3e5ed849eefbe
   DKImagePickerController: 946cec48c7873164274ecc4624d19e3da4c1ef3c
   DKPhotoGallery: b3834fecb755ee09a593d7c9e389d8b5d6deed60
-  file_picker: 63fd4aa4f1d59f2ef7acb1e026c41a22a3170fdc
+  file_picker: a0560bc09d61de87f12d246fc47d2119e6ef37be
   Firebase: a8539b633d474fbeb654c7043f9c1649e274045b
   firebase_core: fc23178af8ea070194d09031ae4198a9608a3d22
   firebase_crashlytics: 344bb168f55aee1086c6cdd0b105a9db018cd344
