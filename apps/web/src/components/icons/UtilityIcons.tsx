@@ -146,6 +146,50 @@ export const LedgerGlyphIcon = ({
   </svg>
 );
 
+export const MeetGlyphIcon = ({
+  className,
+  ...props
+}: SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 48 48"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    {...props}
+  >
+    <defs>
+      <linearGradient id="meetGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#34d399" />
+        <stop offset="100%" stopColor="#4c6ef5" />
+      </linearGradient>
+    </defs>
+    {/* Calendar plate */}
+    <rect
+      x="8"
+      y="10"
+      width="32"
+      height="30"
+      rx="6"
+      fill="rgba(52, 211, 153, 0.07)"
+      stroke="url(#meetGradient)"
+      strokeWidth="1.5"
+    />
+    <path {...gradientProps} stroke="url(#meetGradient)" d="M8 18h32" />
+    <path
+      {...gradientProps}
+      stroke="url(#meetGradient)"
+      d="M16 7v6M32 7v6"
+      strokeWidth="2"
+    />
+    {/* Availability heat cells */}
+    <rect x="14" y="23" width="6" height="6" rx="1.6" fill="#34d399" opacity="0.9" />
+    <rect x="21" y="23" width="6" height="6" rx="1.6" fill="#34d399" opacity="0.35" />
+    <rect x="28" y="23" width="6" height="6" rx="1.6" fill="#748ffc" opacity="0.55" />
+    <rect x="14" y="30" width="6" height="6" rx="1.6" fill="#748ffc" opacity="0.3" />
+    <rect x="21" y="30" width="6" height="6" rx="1.6" fill="#34d399" opacity="0.65" />
+    <rect x="28" y="30" width="6" height="6" rx="1.6" fill="#fbbf24" opacity="0.55" />
+  </svg>
+);
+
 export const TimeClockGlyphIcon = ({
   className,
   ...props

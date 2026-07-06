@@ -38,6 +38,7 @@ import {
 } from "aws-cdk-lib/aws-s3";
 import * as s3n from "aws-cdk-lib/aws-s3-notifications";
 import {
+  CfnStage,
   CorsHttpMethod,
   HttpApi,
   HttpMethod
@@ -472,6 +473,36 @@ export class GroupExpensesStack extends Stack {
       integration: httpIntegration,
       authorizer
     });
+
+    httpApi.addRoutes({
+      path: "/meet/{proxy+}",
+      methods: [
+        HttpMethod.GET,
+        HttpMethod.POST,
+        HttpMethod.PATCH,
+        HttpMethod.PUT,
+        HttpMethod.DELETE
+      ],
+      integration: httpIntegration,
+      authorizer
+    });
+
+    // Deliberately unauthenticated: meet respond links work without an
+    // account. Access control is capability-based (unguessable slug +
+    // per-participant secret) and enforced in the handler.
+    httpApi.addRoutes({
+      path: "/meet-public/{proxy+}",
+      methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT],
+      integration: httpIntegration
+    });
+
+    // The public meet routes are the API's first unauthenticated surface;
+    // HTTP APIs only throttle per stage, so cap the whole default stage.
+    const defaultStage = httpApi.defaultStage?.node.defaultChild as CfnStage;
+    defaultStage.defaultRouteSettings = {
+      throttlingRateLimit: 25,
+      throttlingBurstLimit: 100
+    };
 
     new CfnOutput(this, "ApiEndpoint", {
       value: httpApi.apiEndpoint

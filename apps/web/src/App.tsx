@@ -27,6 +27,10 @@ import StackTimePage from "./pages/StackTimePage";
 import ProfilePage from "./pages/ProfilePage";
 import JoinTripPage from "./pages/JoinTripPage";
 import TripSummaryPrintPage from "./pages/TripSummaryPrintPage";
+import MeetListPage from "./pages/MeetListPage";
+import MeetEventPage from "./pages/MeetEventPage";
+import MeetRespondPage from "./pages/MeetRespondPage";
+import MeetJoinPage from "./pages/MeetJoinPage";
 import { useHarmonyLedgerAccess } from "./modules/useHarmonyLedgerAccess";
 import { useStackTimeAccess } from "./modules/useStackTimeAccess";
 import { getInitials, seedAvatar } from "./lib/avatarPalette";
@@ -35,6 +39,7 @@ import { ConfirmDialogProvider } from "./components/ConfirmDialog";
 const queryClient = new QueryClient();
 const GroupExpensesModule = () => <Outlet />;
 const HarmonyModule = () => <Outlet />;
+const MeetModule = () => <Outlet />;
 
 interface AmplifyUser {
   attributes?: Record<string, string>;
@@ -188,6 +193,11 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
             <Route path="trips/:tripId/summary" element={<TripSummaryPrintPage />} />
             <Route path="join/:inviteId" element={<JoinTripPage />} />
           </Route>
+          <Route path="/meet" element={<MeetModule />}>
+            <Route index element={<MeetListPage />} />
+            <Route path="events/:eventId" element={<MeetEventPage />} />
+            <Route path="join/:slug" element={<MeetJoinPage />} />
+          </Route>
           <Route path="/harmony-ledger" element={<HarmonyModule />}>
             <Route index element={<Navigate to="overview" replace />} />
             <Route path="overview" element={<HarmonyOverviewPage />} />
@@ -253,6 +263,12 @@ const App = () => {
 
   // Public pages render outside the Authenticator — App Store reviewers
   // (and signed-out users) must be able to read these.
+  // Meet respond links (/m/<slug>) are answered by guests without accounts,
+  // so they get a standalone page with no Authenticator and no Router.
+  if (window.location.pathname.startsWith("/m/")) {
+    return <MeetRespondPage />;
+  }
+
   switch (window.location.pathname) {
     case "/privacy":
       return <PrivacyPage />;

@@ -5,6 +5,12 @@ export * from "@utility-platform/shared";
 
 import type {
   Expense,
+  MeetAvailability,
+  MeetEvent,
+  MeetMode,
+  MeetParticipant,
+  MeetStatus,
+  MeetSuggestion,
   RecurringExpense,
   HarmonyLedgerAccessRecord,
   HarmonyLedgerEntry,
@@ -64,6 +70,59 @@ export interface InvitePreview {
   alreadyMember: boolean;
   /** Unclaimed placeholder members the joiner might be. */
   placeholders?: Array<{ memberId: string; displayName: string }>;
+}
+
+/** Denormalized row from GET /meet/events (GSI1 participant projection). */
+export interface MeetEventSummary {
+  eventId: string;
+  title: string;
+  status: MeetStatus;
+  mode: MeetMode;
+  role: "organizer" | "participant";
+  firstDate?: string;
+  lastDate?: string;
+}
+
+export interface MeetListResponse {
+  events: MeetEventSummary[];
+}
+
+export interface MeetEventResponse {
+  event: MeetEvent;
+}
+
+export interface MeetEventDetailResponse {
+  event: MeetEvent;
+  participants: MeetParticipant[];
+  suggestions: MeetSuggestion[];
+}
+
+/** Sanitized participant shape returned by the public /meet-public routes. */
+export interface MeetPublicParticipant {
+  participantId: string;
+  displayName: string;
+  timezone?: string;
+  role: "organizer" | "participant";
+  availability: MeetAvailability;
+  respondedAt?: string;
+}
+
+export interface MeetPublicSnapshot {
+  event: MeetEvent;
+  participants: MeetPublicParticipant[];
+  suggestions: MeetSuggestion[];
+  version: number;
+}
+
+export interface MeetPublicPollResponse extends Partial<MeetPublicSnapshot> {
+  version: number;
+  unchanged?: boolean;
+}
+
+export interface MeetJoinResponse {
+  participant: MeetPublicParticipant;
+  /** Guest write credential — returned exactly once, persisted client-side. */
+  secret: string;
 }
 
 export interface HarmonyLedgerTotals {

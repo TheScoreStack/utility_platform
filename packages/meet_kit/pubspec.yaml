@@ -1,0 +1,26 @@
+name: meet_kit
+description: >-
+  Embeddable group-availability scheduling (When2Meet-style) UI for the
+  utility platform. Host apps inject configuration (API base URL, auth token
+  provider, share-link origin) via MeetKitConfig — the package has no
+  app-specific dependencies.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.9.2
+  flutter: '>=3.22.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Matches the HTTP client used by apps/mobile.
+  http: ^1.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

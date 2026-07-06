@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
-import { ExpensesGlyphIcon, LedgerGlyphIcon, TimeClockGlyphIcon } from "../components/icons/UtilityIcons";
+import {
+  ExpensesGlyphIcon,
+  LedgerGlyphIcon,
+  MeetGlyphIcon,
+  TimeClockGlyphIcon
+} from "../components/icons/UtilityIcons";
 
 export interface ModuleDefinition {
   id: string;
@@ -22,6 +27,16 @@ export const modules: ModuleDefinition[] = [
     tags: ["travel", "finance", "receipts"],
     maturity: "beta",
     icon: <ExpensesGlyphIcon />
+  },
+  {
+    id: "meet",
+    name: "Stack Meet",
+    description:
+      "Find a time everyone can make. Propose dates, share one link, and watch the group's availability light up.",
+    path: "/meet",
+    tags: ["scheduling", "groups", "time"],
+    maturity: "alpha",
+    icon: <MeetGlyphIcon />
   },
   {
     id: "harmony-ledger",

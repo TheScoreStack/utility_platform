@@ -44,6 +44,8 @@ dependencies:
   firebase_core: ^4.11.0
   firebase_messaging: ^16.4.1
   firebase_crashlytics: ^5.2.4
+  meet_kit:
+    path: ../../packages/meet_kit
 
 dev_dependencies:
   flutter_test:

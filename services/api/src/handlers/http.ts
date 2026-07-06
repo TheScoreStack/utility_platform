@@ -4,6 +4,7 @@ import { UserService } from "../services/userService.js";
 import { pushService } from "../services/pushService.js";
 import { HarmonyLedgerService } from "../services/harmonyLedgerService.js";
 import { StackTimeService } from "../services/stackTimeService.js";
+import { MeetService } from "../services/meetService.js";
 import { getAuthContext } from "../auth.js";
 import {
   handleError,
@@ -18,6 +19,7 @@ const tripService = new TripService();
 const userService = new UserService();
 const harmonyLedgerService = new HarmonyLedgerService();
 const stackTimeService = new StackTimeService();
+const meetService = new MeetService();
 const ok = (body: unknown, origin: string): APIGatewayProxyResultV2 =>
   json(200, body, origin);
 const created = (body: unknown, origin: string): APIGatewayProxyResultV2 =>
@@ -63,7 +65,102 @@ export const handler = async (
 
     const path = event.requestContext.http.path ?? event.rawPath;
     const method = event.requestContext.http.method;
+
+    // Public Meet respond-page routes have no gateway authorizer and must be
+    // dispatched before getAuthContext, which throws when unauthenticated.
+    const meetPublicMatch = path.match(/^\/meet-public\/([^/]+)(?:\/(.*))?$/);
+    if (meetPublicMatch) {
+      const slug = decodeURIComponent(meetPublicMatch[1]);
+      const remainder = meetPublicMatch[2] ? `/${meetPublicMatch[2]}` : "";
+
+      if (!remainder && method === "GET") {
+        const response = await meetService.getPublicEvent(
+          slug,
+          event.queryStringParameters?.since
+        );
+        return ok(response, origin);
+      }
+
+      if (remainder === "/participants" && method === "POST") {
+        const body = parseBody(event);
+        const response = await meetService.joinPublicEvent(slug, body);
+        return created(response, origin);
+      }
+
+      const guestAvailabilityMatch = remainder.match(
+        /^\/participants\/([^/]+)\/availability$/
+      );
+      if (guestAvailabilityMatch && method === "PUT") {
+        const participantId = decodeURIComponent(guestAvailabilityMatch[1]);
+        const body = parseBody(event);
+        const secret = event.headers?.["x-meet-participant-secret"];
+        const participant = await meetService.putGuestAvailability(
+          slug,
+          participantId,
+          secret,
+          body
+        );
+        return ok({ participant }, origin);
+      }
+
+      return json(404, { message: "Not Found" }, origin);
+    }
+
     const auth = getAuthContext(event);
+
+    if (path === "/meet/events" && method === "POST") {
+      const body = parseBody(event);
+      const meetEvent = await meetService.createEvent(body, auth);
+      return created({ event: meetEvent }, origin);
+    }
+
+    if (path === "/meet/events" && method === "GET") {
+      const events = await meetService.listEvents(auth);
+      return ok({ events }, origin);
+    }
+
+    const meetEventMatch = path.match(/^\/meet\/events\/([^/]+)(?:\/(.*))?$/);
+    if (meetEventMatch) {
+      const eventId = decodeURIComponent(meetEventMatch[1]);
+      const remainder = meetEventMatch[2] ? `/${meetEventMatch[2]}` : "";
+
+      if (!remainder && method === "GET") {
+        const detail = await meetService.getEvent(eventId, auth);
+        return ok(detail, origin);
+      }
+
+      if (!remainder && method === "PATCH") {
+        const body = parseBody(event);
+        const meetEvent = await meetService.updateEvent(eventId, body, auth);
+        return ok({ event: meetEvent }, origin);
+      }
+
+      if (!remainder && method === "DELETE") {
+        await meetService.deleteEvent(eventId, auth);
+        return noContent(origin);
+      }
+
+      if (remainder === "/finalize" && method === "POST") {
+        const body = parseBody(event);
+        const meetEvent = await meetService.finalizeEvent(eventId, body, auth);
+        return ok({ event: meetEvent }, origin);
+      }
+
+      if (remainder === "/reopen" && method === "POST") {
+        const meetEvent = await meetService.reopenEvent(eventId, auth);
+        return ok({ event: meetEvent }, origin);
+      }
+
+      if (remainder === "/availability" && method === "PUT") {
+        const body = parseBody(event);
+        const participant = await meetService.putMyAvailability(
+          eventId,
+          body,
+          auth
+        );
+        return ok({ participant }, origin);
+      }
+    }
 
     if (method === "GET" && path === "/users") {
       const users = await userService.searchUsers(

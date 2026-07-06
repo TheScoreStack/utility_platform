@@ -2,7 +2,12 @@ import type {
   APIGatewayProxyStructuredResultV2,
   APIGatewayProxyEventV2
 } from "aws-lambda";
-import { ForbiddenError, NotFoundError, ValidationError } from "./errors.js";
+import {
+  ConflictError,
+  ForbiddenError,
+  NotFoundError,
+  ValidationError
+} from "./errors.js";
 
 const buildHeaders = (origin: string) => ({
   "Content-Type": "application/json",
@@ -40,6 +45,10 @@ export const handleError = (
     console.warn("Request rejected (404)", { context, message: error.message });
     return json(404, { message: error.message }, origin);
   }
+  if (error instanceof ConflictError) {
+    console.warn("Request rejected (409)", { context, message: error.message });
+    return json(409, { message: error.message }, origin);
+  }
 
   console.error("Unhandled error", { context, error });
   return json(500, { message: "Internal server error" }, origin);
@@ -61,8 +70,9 @@ export const parseBody = <T = unknown>(
 export const corsHeaders = (origin: string) => ({
   "Access-Control-Allow-Origin": origin,
   "Access-Control-Allow-Credentials": "true",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization",
-  "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
+  "Access-Control-Allow-Headers":
+    "Content-Type,Authorization,x-meet-participant-secret",
+  "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
   Vary: "Origin"
 });
 

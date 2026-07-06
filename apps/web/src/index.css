@@ -5749,3 +5749,1291 @@ button.ghost {
 }
 
 .pub-footer a:hover { color: #e2e8f0; }
+
+/* ------------------------------------------------------------ Stack Meet */
+.meet-page {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+/* --- Hero (list page) --- */
+.meet-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 2.4rem 2rem 2.2rem;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background:
+    radial-gradient(38rem 16rem at 92% -20%, rgba(52, 211, 153, 0.09), transparent 65%),
+    var(--surface);
+  overflow: hidden;
+}
+
+.meet-hero__eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.meet-hero__title {
+  font-family: var(--serif);
+  font-size: clamp(2.4rem, 6.5vw, 4rem);
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+  color: #f8fafc;
+  margin: 0;
+  font-weight: 400;
+}
+
+.meet-hero__title em {
+  color: var(--owed);
+}
+
+.meet-hero__sub {
+  font-size: 1.18rem;
+  color: #94a3b8;
+  margin: 0;
+  max-width: 36rem;
+}
+
+.meet-hero__rule {
+  margin-top: 0.4rem;
+  width: 4rem;
+  height: 1px;
+  background: var(--border-strong);
+}
+
+.meet-hero__stamps {
+  display: flex;
+  gap: 1.25rem;
+  margin-top: 1rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.22);
+  flex-wrap: wrap;
+}
+
+.meet-hero__stamp {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  padding: 0.5rem 0.85rem 0.5rem 0.65rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.meet-hero__stamp--open { border-color: rgba(52, 211, 153, 0.32); background: rgba(52, 211, 153, 0.08); }
+.meet-hero__stamp--done { border-color: rgba(116, 143, 252, 0.32); background: rgba(76, 110, 245, 0.1); }
+
+.meet-hero__stamp-num {
+  font-family: var(--serif);
+  font-size: 1.55rem;
+  line-height: 1;
+  color: #f8fafc;
+  font-variant-numeric: tabular-nums;
+}
+
+.meet-hero__stamp--open .meet-hero__stamp-num { color: var(--owed); }
+.meet-hero__stamp--done .meet-hero__stamp-num { color: var(--accent-bright); }
+
+.meet-hero__stamp-label {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+/* --- Columns --- */
+.meet-columns {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 960px) {
+  .meet-columns {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    align-items: start;
+  }
+  .meet-columns--detail {
+    grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+  }
+}
+
+.meet-section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-bottom: 0.6rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.meet-section-head__title {
+  font-family: var(--serif);
+  font-size: 1.4rem;
+  color: #f8fafc;
+  margin: 0;
+  letter-spacing: -0.015em;
+  font-weight: 400;
+}
+
+.meet-section-head__count {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+}
+
+/* --- Meet cards (list) --- */
+.meet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.meet-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 1.25rem 1.4rem 1.4rem;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  overflow: hidden;
+  transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1), border-color 200ms ease, background 200ms ease;
+  animation: ovRise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.meet-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(52, 211, 153, 0.45);
+  background: var(--surface-2);
+}
+
+.meet-card--finalized:hover {
+  border-color: rgba(116, 143, 252, 0.5);
+}
+
+.meet-card__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.meet-card__stamp {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.meet-card__title {
+  font-family: var(--serif);
+  font-size: 1.45rem;
+  color: #f8fafc;
+  margin: 0;
+  letter-spacing: -0.015em;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.meet-card__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.2rem;
+}
+
+.meet-card__role {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.meet-card__open {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.meet-card:hover .meet-card__open {
+  color: var(--owed);
+  transform: translateX(2px);
+}
+
+.meet-card__stripe {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--owed), var(--accent));
+  opacity: 0.7;
+}
+
+.meet-card--finalized .meet-card__stripe {
+  background: var(--accent-bright);
+}
+
+.meet-card--skeleton {
+  gap: 0.7rem;
+  pointer-events: none;
+}
+
+/* --- Status pills --- */
+.meet-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.meet-pill--open {
+  background: rgba(52, 211, 153, 0.12);
+  color: var(--owed);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.meet-pill__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--owed);
+  animation: meetPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes meetPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.meet-pill--finalized {
+  background: rgba(76, 110, 245, 0.16);
+  color: #bac8ff;
+  border: 1px solid rgba(116, 143, 252, 0.4);
+}
+
+.meet-pill--locked {
+  background: rgba(251, 191, 36, 0.1);
+  color: var(--owe);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.meet-detail-head__pills {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* --- Aside / panels / forms --- */
+.meet-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.meet-aside__head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.meet-aside__title {
+  font-family: var(--serif);
+  font-size: 1.85rem;
+  line-height: 1.05;
+  color: #f8fafc;
+  margin: 0;
+  letter-spacing: -0.015em;
+  font-weight: 400;
+}
+
+.meet-aside__title em {
+  color: var(--owed);
+}
+
+.meet-aside__sub {
+  font-size: 0.98rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.meet-panel,
+aside.meet-aside > .meet-aside__head,
+.meet-form {
+  border-radius: 16px;
+}
+
+.meet-panel {
+  padding: 1.5rem 1.6rem;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: var(--surface);
+}
+
+.meet-panel__hint {
+  margin: -0.4rem 0 0.8rem;
+  font-size: 0.88rem;
+}
+
+aside.meet-aside > .meet-aside__head,
+aside.meet-aside > .meet-form {
+  padding: 1.5rem 1.6rem;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: var(--surface);
+}
+
+aside.meet-aside > .meet-aside__head {
+  padding-bottom: 0;
+  border-bottom: none;
+  border-radius: 16px 16px 0 0;
+}
+
+aside.meet-aside > .meet-form {
+  border-top: none;
+  border-radius: 0 0 16px 16px;
+  margin-top: -1.25rem;
+  padding-top: 1rem;
+}
+
+.meet-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.meet-form__error {
+  margin: 0;
+  color: #fda4af;
+  font-size: 0.9rem;
+}
+
+.meet-form__submit {
+  align-self: flex-start;
+}
+
+.meet-check {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  font-size: 0.92rem;
+  color: #cbd5f5;
+  cursor: pointer;
+}
+
+.meet-check input {
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+}
+
+.meet-check__hint {
+  display: block;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+/* --- Segmented control + brush --- */
+.meet-seg {
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: var(--inset);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  gap: 0.2rem;
+}
+
+.meet-seg__btn {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  padding: 0.4rem 0.95rem;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.meet-seg__btn--on {
+  background: var(--accent);
+  color: #fff;
+}
+
+.meet-brush {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.meet-brush__btn {
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.meet-brush__btn--yes {
+  border: 1px solid rgba(52, 211, 153, 0.35);
+  color: var(--owed);
+}
+
+.meet-brush__btn--yes.meet-brush__btn--on {
+  background: rgba(52, 211, 153, 0.18);
+  border-color: var(--owed);
+}
+
+.meet-brush__btn--inb {
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  color: var(--owe);
+}
+
+.meet-brush__btn--inb.meet-brush__btn--on {
+  background: rgba(251, 191, 36, 0.16);
+  border-color: var(--owe);
+}
+
+.meet-savestate {
+  font-size: 0.78rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+  min-width: 4rem;
+  text-align: right;
+}
+
+.meet-savestate--error {
+  color: #fda4af;
+}
+
+/* --- Date picker --- */
+.meet-datepick {
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 12px;
+  background: var(--inset);
+  padding: 0.7rem 0.75rem 0.4rem;
+}
+
+.meet-datepick__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.meet-datepick__month {
+  font-family: var(--serif);
+  font-size: 1.02rem;
+  color: #f1f5f9;
+}
+
+.meet-datepick__nav {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: transparent;
+  color: #cbd5f5;
+  border-radius: 8px;
+  width: 1.8rem;
+  height: 1.8rem;
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.meet-datepick__nav:hover {
+  border-color: rgba(76, 110, 245, 0.5);
+}
+
+.meet-datepick__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.2rem;
+}
+
+.meet-datepick__weekday {
+  text-align: center;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  font-weight: 600;
+  padding-bottom: 0.15rem;
+}
+
+.meet-datepick__day {
+  border: 1px solid transparent;
+  background: transparent;
+  color: #cbd5f5;
+  border-radius: 8px;
+  aspect-ratio: 1;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.meet-datepick__day:hover {
+  background: rgba(76, 110, 245, 0.14);
+}
+
+.meet-datepick__day--today {
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+.meet-datepick__day--on {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.meet-datepick__day--on:hover {
+  background: var(--accent-bright);
+}
+
+.meet-datepick__day:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.meet-datepick__nav:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+/* Keyboard focus — same convention as inputs (cf. :focus-visible above). */
+.meet-seg__btn:focus-visible,
+.meet-brush__btn:focus-visible,
+.meet-datepick__day:focus-visible,
+.meet-datepick__nav:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.55);
+}
+
+.meet-seg__btn--on:focus-visible {
+  box-shadow:
+    0 0 0 2px rgba(15, 23, 42, 0.9),
+    0 0 0 4px rgba(116, 143, 252, 0.8);
+}
+
+.meet-datepick__hint {
+  margin: 0.5rem 0 0.3rem;
+  font-size: 0.78rem;
+}
+
+/* --- Detail header --- */
+.meet-detail-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1.9rem 2rem;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: var(--surface);
+}
+
+.meet-detail-head__top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.meet-backlink {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  text-decoration: none;
+}
+
+.meet-backlink:hover {
+  color: #e2e8f0;
+}
+
+.meet-detail-head__title {
+  font-family: var(--serif);
+  font-size: clamp(1.9rem, 4.5vw, 2.8rem);
+  line-height: 1.05;
+  color: #f8fafc;
+  margin: 0;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+}
+
+.meet-detail-head__desc {
+  color: #a7b3c9;
+  margin: 0;
+  max-width: 42rem;
+}
+
+.meet-detail-head__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.1rem;
+  font-size: 0.88rem;
+  color: #94a3b8;
+}
+
+.meet-tz {
+  color: #bac8ff;
+  font-weight: 600;
+}
+
+.meet-detail-head__actions {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
+.meet-danger {
+  color: #fda4af;
+}
+
+/* --- Finalized banner --- */
+.meet-final {
+  padding: 1.6rem 2rem;
+  border-radius: 16px;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  background:
+    radial-gradient(30rem 12rem at 15% 0%, rgba(52, 211, 153, 0.16), transparent 70%),
+    var(--surface);
+}
+
+.meet-final__eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--owed);
+  font-weight: 600;
+}
+
+.meet-final__when {
+  font-family: var(--serif);
+  font-size: clamp(1.5rem, 4vw, 2.2rem);
+  color: #f8fafc;
+  margin: 0.35rem 0 0.2rem;
+  letter-spacing: -0.015em;
+}
+
+.meet-final__tz {
+  margin: 0;
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.meet-final--pub {
+  margin: 1.6rem 0;
+}
+
+/* --- Grid card --- */
+.meet-gridcard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  padding: 1.4rem 1.5rem 1.6rem;
+  border-radius: 16px;
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background: var(--surface);
+}
+
+.meet-gridcard__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.meet-gridcard__tools {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.meet-gridcard__note {
+  margin: 0;
+  font-size: 0.85rem;
+}
+
+/* --- Availability grid --- */
+.meet-grid-scroll {
+  overflow-x: auto;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: var(--inset);
+}
+
+.meet-grid {
+  display: grid;
+  gap: 2px;
+  padding: 0.55rem;
+  min-width: min-content;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Touch scrolls by default — painting arms only after a long-press, at
+   which point the component adds --painting and the pan is suppressed.
+   Mouse strokes are unaffected (pointerdown paints immediately). */
+.meet-grid--paint .meet-cell {
+  touch-action: pan-y;
+}
+
+.meet-grid--paint.meet-grid--painting .meet-cell {
+  touch-action: none;
+}
+
+/* Rows exist for the ARIA grid; layout stays on the parent grid. */
+.meet-grid__row {
+  display: contents;
+}
+
+.meet-grid__corner {
+  position: sticky;
+  left: 0.55rem;
+  background: var(--inset);
+  z-index: 2;
+}
+
+.meet-grid__day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.05rem;
+  padding: 0.2rem 0.15rem 0.4rem;
+}
+
+.meet-grid__day-weekday {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.meet-grid__day-date {
+  font-size: 0.72rem;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.meet-grid__time {
+  position: sticky;
+  left: 0.55rem;
+  z-index: 2;
+  background: var(--inset);
+  font-size: 0.66rem;
+  color: #64748b;
+  text-align: right;
+  padding-right: 0.45rem;
+  transform: translateY(-0.5em);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.meet-cell {
+  min-height: 1.25rem;
+  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.07);
+  border: 1px solid transparent;
+  transition: background 100ms ease;
+}
+
+.meet-cell--hour {
+  box-shadow: inset 0 1px 0 rgba(148, 163, 184, 0.22);
+}
+
+.meet-grid--paint .meet-cell {
+  cursor: crosshair;
+}
+
+.meet-cell--l1 {
+  background: rgba(251, 191, 36, 0.5);
+}
+
+.meet-cell--l2 {
+  background: rgba(52, 211, 153, 0.75);
+}
+
+.meet-cell--locked {
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.meet-cell--heat {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.meet-cell--heat:hover {
+  border-color: rgba(226, 232, 240, 0.45);
+}
+
+/* Count inside heat cells — a colorblind-safe second channel. */
+.meet-cell__count {
+  font-size: 0.58rem;
+  line-height: 1;
+  font-weight: 600;
+  color: rgba(226, 232, 240, 0.82);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* Keyboard focus ring for grid + heat cells: accent ring with a dark halo
+   so it reads on slate, emerald, and amber fills alike. */
+.meet-cell:focus-visible,
+.meet-allday-tile:focus-visible {
+  outline: none;
+  position: relative;
+  z-index: 1;
+  box-shadow:
+    0 0 0 2px #748ffc,
+    0 0 0 4px rgba(15, 23, 42, 0.9);
+}
+
+/* Long-press armed the touch brush — a quick pop confirms it. */
+@keyframes meetCellArm {
+  0% {
+    transform: scale(0.82);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.meet-cell--armed {
+  animation: meetCellArm 180ms ease-out;
+}
+
+.meet-cell--selected {
+  border-color: #e2e8f0;
+  box-shadow: 0 0 0 1px rgba(226, 232, 240, 0.4);
+}
+
+.meet-cell--final {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: -1px;
+}
+
+/* --- All-day tiles --- */
+.meet-alldays {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.4rem, 1fr));
+  gap: 0.45rem;
+  padding: 0.55rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: var(--inset);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.meet-alldays--paint .meet-allday-tile {
+  touch-action: pan-y;
+}
+
+.meet-alldays--paint.meet-alldays--painting .meet-allday-tile {
+  touch-action: none;
+}
+
+.meet-alldays__row {
+  display: contents;
+}
+
+.meet-allday-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.1rem;
+  padding: 0.6rem 0.3rem 0.55rem;
+  border-radius: 10px;
+  min-height: unset;
+}
+
+.meet-allday-tile__weekday {
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.meet-allday-tile__day {
+  font-family: var(--serif);
+  font-size: 1.35rem;
+  line-height: 1.1;
+  color: #f1f5f9;
+}
+
+.meet-allday-tile__month {
+  font-size: 0.68rem;
+  color: #64748b;
+}
+
+.meet-allday-tile__count {
+  font-size: 0.72rem;
+  color: #e2e8f0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.meet-allday-tile.meet-cell--l2 .meet-allday-tile__day,
+.meet-allday-tile.meet-cell--l2 .meet-allday-tile__weekday {
+  color: #052e22;
+}
+
+.meet-allday-tile.meet-cell--l1 .meet-allday-tile__day,
+.meet-allday-tile.meet-cell--l1 .meet-allday-tile__weekday {
+  color: #3b2a05;
+}
+
+/* Heat fills past ~half alpha need dark ink, mirroring the paint levels. */
+.meet-heat--ink-yes .meet-cell__count,
+.meet-heat--ink-yes .meet-allday-tile__weekday,
+.meet-heat--ink-yes .meet-allday-tile__day,
+.meet-heat--ink-yes .meet-allday-tile__month,
+.meet-heat--ink-yes .meet-allday-tile__count {
+  color: #052e22;
+}
+
+.meet-heat--ink-inb .meet-cell__count,
+.meet-heat--ink-inb .meet-allday-tile__weekday,
+.meet-heat--ink-inb .meet-allday-tile__day,
+.meet-heat--ink-inb .meet-allday-tile__month,
+.meet-heat--ink-inb .meet-allday-tile__count {
+  color: #3b2a05;
+}
+
+/* --- Legend / slot info --- */
+.meet-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+.meet-legend__swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
+}
+
+.meet-legend__swatch--low {
+  background: rgba(52, 211, 153, 0.18);
+}
+
+.meet-legend__swatch--high {
+  background: rgba(52, 211, 153, 0.8);
+}
+
+.meet-legend__swatch--inb {
+  background: rgba(251, 191, 36, 0.5);
+}
+
+.meet-slotinfo {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
+  border: 1px dashed rgba(148, 163, 184, 0.25);
+  font-size: 0.88rem;
+  min-height: 2.4rem;
+}
+
+.meet-slotinfo__when {
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+.meet-slotinfo__names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.meet-namechip {
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.meet-namechip--yes {
+  background: rgba(52, 211, 153, 0.14);
+  color: var(--owed);
+  border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.meet-namechip--inb {
+  background: rgba(251, 191, 36, 0.12);
+  color: var(--owe);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+/* --- Suggestions --- */
+.meet-suggest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.meet-suggest {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  background: var(--surface-2);
+}
+
+.meet-suggest__rank {
+  font-family: var(--serif);
+  font-size: 1.3rem;
+  line-height: 1;
+  color: var(--owed);
+  min-width: 1.1rem;
+  padding-top: 0.1rem;
+}
+
+.meet-suggest__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.meet-suggest__when {
+  font-weight: 600;
+  color: #f1f5f9;
+  font-size: 0.95rem;
+}
+
+.meet-suggest__who {
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.meet-suggest__names {
+  font-size: 0.78rem;
+}
+
+.meet-suggest__pick {
+  flex-shrink: 0;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.82rem;
+}
+
+.meet-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed rgba(148, 163, 184, 0.22);
+}
+
+.meet-custom__label {
+  margin: 0;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.meet-custom select {
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 0.5rem 0.6rem;
+  background: var(--inset);
+  color: #f8fafc;
+  font-family: inherit;
+  width: 100%;
+}
+
+/* --- Share --- */
+.meet-share {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.meet-share input {
+  flex: 1;
+  min-width: 0;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 0.55rem 0.75rem;
+  background: var(--inset);
+  color: #bac8ff;
+  font-family: inherit;
+  font-size: 0.85rem;
+}
+
+/* --- People --- */
+.meet-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.meet-person {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0.75rem 0.3rem 0.3rem;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: var(--surface-2);
+  font-size: 0.85rem;
+  color: #e2e8f0;
+}
+
+.meet-person--waiting {
+  opacity: 0.55;
+}
+
+.meet-person__avatar {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+}
+
+.meet-person__role {
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #818cf8;
+  font-weight: 600;
+}
+
+/* --- Public respond page --- */
+.meet-pub__inner {
+  max-width: 64rem;
+}
+
+.meet-pub {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4rem;
+}
+
+.meet-pub__title {
+  margin-bottom: 0.2rem;
+  overflow-wrap: anywhere;
+}
+
+.meet-pub__meta {
+  margin-top: -0.4rem;
+}
+
+.meet-pub__roster {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.meet-pub__roster-count {
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.meet-pub__applink {
+  margin: -0.4rem 0 0;
+  font-size: 0.82rem;
+}
+
+.meet-pub__applink a {
+  color: #94a3b8;
+  text-decoration: none;
+  border-bottom: 1px dotted rgba(148, 163, 184, 0.45);
+  transition: color 140ms ease, border-color 140ms ease;
+}
+
+.meet-pub__applink a:hover {
+  color: #bac8ff;
+  border-color: rgba(116, 143, 252, 0.6);
+}
+
+.meet-pub__join {
+  margin-top: 0.4rem;
+}
+
+.meet-join {
+  display: flex;
+  gap: 0.9rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.meet-join__field {
+  flex: 1;
+  min-width: 14rem;
+}
+
+.meet-pub__grids {
+  display: grid;
+  gap: 1.3rem;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+@media (min-width: 960px) {
+  .meet-pub__grids {
+    grid-template-columns: 1fr 1fr;
+  }
+  .meet-pub__grids--single {
+    grid-template-columns: 1fr;
+  }
+}
+
+.meet-pub__loading {
+  padding: 3rem 0;
+}
+
+.meet-pub__suggest {
+  margin-bottom: 1rem;
+}
+
+@media (max-width: 640px) {
+  .meet-hero {
+    padding: 2rem 1.4rem 1.85rem;
+  }
+  .meet-detail-head {
+    padding: 1.5rem 1.3rem;
+  }
+  .meet-gridcard {
+    padding: 1.1rem 0.9rem 1.2rem;
+  }
+  .meet-final {
+    padding: 1.3rem 1.4rem;
+  }
+}
