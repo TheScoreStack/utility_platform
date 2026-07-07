@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/formatters.dart';
 import '../harmony_api.dart';
 import '../models/harmony_models.dart';
+import '../widgets/entry_row.dart';
 import '../widgets/entry_sheet.dart';
+import 'group_detail_screen.dart';
 import 'statements_screen.dart';
 import 'transfers_screen.dart';
 
@@ -79,126 +80,30 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
     }
   }
 
-  Future<void> _editEntry(HarmonyEntry entry) async {
+  Future<void> _entryActions(HarmonyEntry entry) async {
     final data = _data;
     if (data == null) return;
-    final updated = await showHarmonyEntrySheet(
+    final changed = await showHarmonyEntryActions(
       context: context,
       api: widget.api,
       groups: data.groups,
-      initialEntry: entry,
+      entry: entry,
     );
-    if (updated != null && mounted) {
-      showAppSnackBar(context, 'Entry updated.', success: true);
-      await _load();
-    }
+    if (changed && mounted) await _load();
   }
 
-  Future<void> _deleteEntry(HarmonyEntry entry) async {
-    final proceed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Delete this entry?'),
-        content: Text(
-          '${formatCurrency(entry.amount, entry.currency)} '
-          '${entry.description ?? entry.type.toLowerCase()} will be removed '
-          'from the ledger.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('Cancel'),
+  void _openGroup(HarmonyGroupSummary summary) {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute<void>(
+            builder: (_) => GroupDetailScreen(
+              api: widget.api,
+              groupId: summary.groupId,
+              groupName: summary.name,
+            ),
           ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.danger),
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (proceed != true || !mounted) return;
-    try {
-      await widget.api.deleteEntry(entry.entryId, entry.recordedAt);
-      if (!mounted) return;
-      showAppSnackBar(context, 'Entry deleted.', success: true);
-      await _load();
-    } on ApiException catch (error) {
-      if (mounted) showAppSnackBar(context, error.message, error: true);
-    }
-  }
-
-  Future<void> _showEntryActions(HarmonyEntry entry) async {
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => SafeArea(
-        child: ListView(
-          shrinkWrap: true,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-              child: Text(
-                entry.description ?? entry.type,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(sheetContext).textTheme.titleMedium,
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.edit_outlined),
-              title: const Text('Edit entry'),
-              onTap: () => Navigator.of(sheetContext).pop('edit'),
-            ),
-            if (entry.importStatementId != null)
-              ListTile(
-                leading: const Icon(Icons.attachment_rounded),
-                title: const Text('View source statement'),
-                onTap: () => Navigator.of(sheetContext).pop('source'),
-              ),
-            ListTile(
-              leading: const Icon(
-                Icons.delete_outline_rounded,
-                color: AppColors.danger,
-              ),
-              title: const Text(
-                'Delete entry',
-                style: TextStyle(color: AppColors.danger),
-              ),
-              onTap: () => Navigator.of(sheetContext).pop('delete'),
-            ),
-            const SizedBox(height: 8),
-          ],
-        ),
-      ),
-    );
-    if (!mounted) return;
-    if (action == 'edit') {
-      await _editEntry(entry);
-    } else if (action == 'delete') {
-      await _deleteEntry(entry);
-    } else if (action == 'source') {
-      await _viewSourceStatement(entry);
-    }
-  }
-
-  /// Opens the original uploaded file behind an imported entry.
-  Future<void> _viewSourceStatement(HarmonyEntry entry) async {
-    final statementId = entry.importStatementId;
-    if (statementId == null) return;
-    try {
-      final url = await widget.api.getStatementFileUrl(statementId);
-      if (!mounted) return;
-      final launched = await launchUrl(
-        Uri.parse(url),
-        mode: LaunchMode.externalApplication,
-      );
-      if (!launched && mounted) {
-        showAppSnackBar(context, 'Could not open the file.', error: true);
-      }
-    } on ApiException catch (error) {
-      if (mounted) showAppSnackBar(context, error.message, error: true);
-    }
+        )
+        .then((_) => _load());
   }
 
   void _openStatements() {
@@ -405,61 +310,32 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
       ),
       child: ListTile(
         dense: true,
+        onTap: () => _openGroup(summary),
         title: Text(summary.name),
         subtitle: Text(
           'in ${formatCurrency(summary.inflow, 'USD')} · '
           'out ${formatCurrency(summary.outflow, 'USD')}',
           style: const TextStyle(fontSize: 12, color: Colors.white54),
         ),
-        trailing: Text(
-          formatCurrency(summary.net, 'USD'),
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontFeatures: kTabularFigures,
-            color: positive ? AppColors.positive : AppColors.danger,
-          ),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              formatCurrency(summary.net, 'USD'),
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontFeatures: kTabularFigures,
+                color: positive ? AppColors.positive : AppColors.danger,
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+          ],
         ),
       ),
     );
   }
 
   Widget _entryRow(HarmonyEntry entry) {
-    final inflow = entry.isInflow;
-    return ListTile(
-      dense: true,
-      contentPadding: EdgeInsets.zero,
-      onTap: () => _showEntryActions(entry),
-      leading: Icon(
-        switch (entry.type) {
-          'DONATION' => Icons.volunteer_activism_rounded,
-          'INCOME' => Icons.trending_up_rounded,
-          'REIMBURSEMENT' => Icons.replay_rounded,
-          _ => Icons.trending_down_rounded,
-        },
-        size: 20,
-        color: inflow ? AppColors.positive : AppColors.danger,
-      ),
-      title: Text(
-        entry.description ?? entry.source ?? entry.type,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        [
-          (entry.occurredAt ?? entry.recordedAt).split('T').first,
-          if (entry.groupName != null) entry.groupName!,
-          if (entry.source != null) entry.source!,
-        ].join(' · '),
-        style: const TextStyle(fontSize: 12, color: Colors.white54),
-      ),
-      trailing: Text(
-        '${inflow ? '+' : '−'}${formatCurrency(entry.amount, entry.currency)}',
-        style: TextStyle(
-          fontWeight: FontWeight.w600,
-          fontFeatures: kTabularFigures,
-          color: inflow ? AppColors.positive : AppColors.danger,
-        ),
-      ),
-    );
+    return HarmonyEntryRow(entry: entry, onTap: () => _entryActions(entry));
   }
 }

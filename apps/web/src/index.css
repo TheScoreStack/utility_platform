@@ -219,6 +219,26 @@ td {
   background: var(--surface);
 }
 
+/* Summary cards rendered as links drill into the filtered ledger. */
+a.group-summary-card {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+a.group-summary-card:hover {
+  background: var(--surface-2);
+  border-color: rgba(148, 163, 184, 0.35);
+}
+
+a.group-summary-card:focus-visible {
+  outline: none;
+  border-color: rgba(76, 110, 245, 0.6);
+  box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.22);
+}
+
 .group-summary-details {
   display: flex;
   justify-content: space-between;
@@ -4466,6 +4486,19 @@ button.ghost {
 .hl-group:hover {
   background: var(--surface-2);
   border-color: rgba(148, 163, 184, 0.24);
+}
+
+/* Group cards rendered as links drill into the ledger filtered to that group. */
+a.hl-group {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.hl-group:focus-visible {
+  outline: none;
+  border-color: rgba(76, 110, 245, 0.6);
+  box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.22);
 }
 
 .hl-group--owed { --hl-tint: var(--owed); }

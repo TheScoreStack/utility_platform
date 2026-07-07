@@ -28,6 +28,8 @@ Future<HarmonyEntry?> showHarmonyEntrySheet({
   required HarmonyApi api,
   required List<HarmonyGroup> groups,
   HarmonyEntry? initialEntry,
+  /// Preselects a group when creating (e.g. recording from a group screen).
+  String? initialGroupId,
 }) {
   return showModalBottomSheet<HarmonyEntry>(
     context: context,
@@ -37,6 +39,7 @@ Future<HarmonyEntry?> showHarmonyEntrySheet({
       api: api,
       groups: groups,
       initialEntry: initialEntry,
+      initialGroupId: initialGroupId,
     ),
   );
 }
@@ -45,11 +48,13 @@ class _EntrySheet extends StatefulWidget {
   final HarmonyApi api;
   final List<HarmonyGroup> groups;
   final HarmonyEntry? initialEntry;
+  final String? initialGroupId;
 
   const _EntrySheet({
     required this.api,
     required this.groups,
     this.initialEntry,
+    this.initialGroupId,
   });
 
   @override
@@ -81,7 +86,7 @@ class _EntrySheetState extends State<_EntrySheet> {
     super.initState();
     final initial = widget.initialEntry;
     _type = initial?.type ?? 'DONATION';
-    _groupId = initial?.groupId;
+    _groupId = initial?.groupId ?? widget.initialGroupId;
     final initialSource = initial?.source;
     if (initial != null) {
       _amountController.text = initial.amount.toStringAsFixed(2);

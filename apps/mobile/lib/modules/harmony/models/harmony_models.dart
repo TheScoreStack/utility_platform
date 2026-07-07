@@ -62,32 +62,40 @@ class HarmonyGroupSummary {
   final String groupId;
   final String name;
   final double net;
-  final double inflow;
-  final double outflow;
+  final double donations;
+  final double income;
+  final double reimbursements;
+  final double expenses;
+  final double transfersIn;
+  final double transfersOut;
 
   const HarmonyGroupSummary({
     required this.groupId,
     required this.name,
     required this.net,
-    required this.inflow,
-    required this.outflow,
+    required this.donations,
+    required this.income,
+    required this.reimbursements,
+    required this.expenses,
+    required this.transfersIn,
+    required this.transfersOut,
   });
 
-  factory HarmonyGroupSummary.fromJson(Map<String, dynamic> json) {
-    final donations = _asDouble(json['donations']);
-    final income = _asDouble(json['income']);
-    final reimbursements = _asDouble(json['reimbursements']);
-    final transfersIn = _asDouble(json['transfersIn']);
-    final expenses = _asDouble(json['expenses']);
-    final transfersOut = _asDouble(json['transfersOut']);
-    return HarmonyGroupSummary(
-      groupId: json['groupId'] as String,
-      name: json['name'] as String,
-      net: _asDouble(json['net']),
-      inflow: donations + income + reimbursements + transfersIn,
-      outflow: expenses + transfersOut,
-    );
-  }
+  double get inflow => donations + income + reimbursements + transfersIn;
+  double get outflow => expenses + transfersOut;
+
+  factory HarmonyGroupSummary.fromJson(Map<String, dynamic> json) =>
+      HarmonyGroupSummary(
+        groupId: json['groupId'] as String,
+        name: json['name'] as String,
+        net: _asDouble(json['net']),
+        donations: _asDouble(json['donations']),
+        income: _asDouble(json['income']),
+        reimbursements: _asDouble(json['reimbursements']),
+        expenses: _asDouble(json['expenses']),
+        transfersIn: _asDouble(json['transfersIn']),
+        transfersOut: _asDouble(json['transfersOut']),
+      );
 }
 
 class HarmonyEntry {

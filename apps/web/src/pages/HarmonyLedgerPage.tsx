@@ -1,4 +1,5 @@
 import { FormEvent, Fragment, useMemo, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
 import HarmonySubNav from "../components/HarmonySubNav";
@@ -100,6 +101,9 @@ const entryTypeCopy: Record<
   }
 };
 
+/** Sentinel `group` search-param value for entries with no group allocation. */
+const UNALLOCATED_GROUP = "__unallocated";
+
 const formatCurrencyValue = (value: number, currency: string) =>
   new Intl.NumberFormat(undefined, {
     style: "currency",
@@ -160,6 +164,8 @@ const HarmonyLedgerPage = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [monthFilter, setMonthFilter] = useState("");
   const [searchText, setSearchText] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const groupFilter = searchParams.get("group") ?? "";
   const [newGroupName, setNewGroupName] = useState("");
   const [addGroupError, setAddGroupError] = useState<string | null>(null);
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
@@ -446,11 +452,48 @@ const HarmonyLedgerPage = () => {
     return [...keys].sort().reverse();
   }, [entries]);
   const normalizedSearch = searchText.trim().toLowerCase();
-  const filtersActive = monthFilter !== "" || normalizedSearch !== "";
+  const setGroupFilter = (value: string) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        if (value) {
+          next.set("group", value);
+        } else {
+          next.delete("group");
+        }
+        return next;
+      },
+      { replace: true }
+    );
+  };
+  // Groups worth filtering by: active ones, plus archived ones that still own entries.
+  const groupFilterOptions = useMemo(() => {
+    const entryGroupIds = new Set<string>();
+    for (const entry of entries) {
+      if (entry.groupId) entryGroupIds.add(entry.groupId);
+    }
+    return groups.filter(
+      (group) => group.isActive || entryGroupIds.has(group.groupId)
+    );
+  }, [entries, groups]);
+  const groupFilterLabel =
+    groupFilter === UNALLOCATED_GROUP
+      ? "Unallocated"
+      : groupFilter
+        ? groups.find((group) => group.groupId === groupFilter)?.name ??
+          "Unknown group"
+        : "";
+  const filtersActive =
+    monthFilter !== "" || normalizedSearch !== "" || groupFilter !== "";
   const filteredEntries = useMemo(() => {
     if (!filtersActive) return entries;
     return entries.filter((entry) => {
       if (monthFilter && entryDateOf(entry).slice(0, 7) !== monthFilter) {
+        return false;
+      }
+      if (groupFilter === UNALLOCATED_GROUP) {
+        if (entry.groupId) return false;
+      } else if (groupFilter && entry.groupId !== groupFilter) {
         return false;
       }
       if (!normalizedSearch) return true;
@@ -464,7 +507,7 @@ const HarmonyLedgerPage = () => {
         entryTypeCopy[entry.type].label
       ].some((value) => value?.toLowerCase().includes(normalizedSearch));
     });
-  }, [entries, filtersActive, monthFilter, normalizedSearch]);
+  }, [entries, filtersActive, groupFilter, monthFilter, normalizedSearch]);
   const filteredTotals = useMemo(() => {
     const sums = { donations: 0, income: 0, expenses: 0, reimbursements: 0, net: 0 };
     for (const entry of filteredEntries) {
@@ -651,6 +694,7 @@ const HarmonyLedgerPage = () => {
   const clearFilters = () => {
     setMonthFilter("");
     setSearchText("");
+    setGroupFilter("");
   };
 
   const handleExportCsv = () => {
@@ -1039,7 +1083,10 @@ const HarmonyLedgerPage = () => {
         </div>
         {unallocated ? (
           <div className="group-summary-grid">
-            <div className="group-summary-card">
+            <Link
+              to={`/harmony-ledger/ledger?group=${UNALLOCATED_GROUP}`}
+              className="group-summary-card"
+            >
               <div className="group-summary-details">
                 <span>Inflow</span>
                 <strong>{formatCurrencyValue(unallocatedInflow, metricsCurrency)}</strong>
@@ -1051,7 +1098,7 @@ const HarmonyLedgerPage = () => {
               <p className="muted" style={{ marginTop: "0.5rem" }}>
                 Use the group selector in the table below to allocate any of these entries.
               </p>
-            </div>
+            </Link>
           </div>
         ) : (
           <p className="muted">No unallocated entries yet.</p>
@@ -1153,8 +1200,9 @@ const HarmonyLedgerPage = () => {
                   ? "hl-group--owe"
                   : "hl-group--neutral";
               return (
-                <article
+                <Link
                   key={group.groupId}
+                  to={`/harmony-ledger/ledger?group=${encodeURIComponent(group.groupId)}`}
                   className={`hl-group ${tintClass}`}
                   style={{ animationDelay: `${0.06 * idx}s` }}
                 >
@@ -1183,7 +1231,7 @@ const HarmonyLedgerPage = () => {
                       {formatCurrencyValue(group.net, metricsCurrency)}
                     </span>
                   </div>
-                </article>
+                </Link>
               );
             })}
           </div>
@@ -1527,6 +1575,29 @@ const HarmonyLedgerPage = () => {
                 </option>
               ))}
             </select>
+            <select
+              value={groupFilter}
+              onChange={(event) => setGroupFilter(event.target.value)}
+              aria-label="Filter by group"
+            >
+              <option value="">All groups</option>
+              <option value={UNALLOCATED_GROUP}>Unallocated</option>
+              {groupFilterOptions.map((group) => (
+                <option key={group.groupId} value={group.groupId}>
+                  {group.isActive ? group.name : `${group.name} (archived)`}
+                </option>
+              ))}
+              {groupFilter &&
+                groupFilter !== UNALLOCATED_GROUP &&
+                !groupFilterOptions.some(
+                  (group) => group.groupId === groupFilter
+                ) && (
+                  <option value={groupFilter}>
+                    {(groups.find((group) => group.groupId === groupFilter)
+                      ?.name ?? "Unknown group") + " (archived)"}
+                  </option>
+                )}
+            </select>
             <input
               type="search"
               value={searchText}
@@ -1545,6 +1616,7 @@ const HarmonyLedgerPage = () => {
           <p className="hl-filter-summary">
             <strong>
               Filtered · {monthFilter ? formatMonthLabel(monthFilter) : "All time"}
+              {groupFilterLabel ? ` · ${groupFilterLabel}` : ""}
               {normalizedSearch ? ` · “${searchText.trim()}”` : ""} ·{" "}
               {filteredEntries.length}{" "}
               {filteredEntries.length === 1 ? "entry" : "entries"}

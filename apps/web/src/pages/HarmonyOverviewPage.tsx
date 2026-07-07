@@ -281,8 +281,9 @@ const HarmonyOverviewPage = () => {
                   ? "hl-group--owe"
                   : "hl-group--neutral";
               return (
-                <article
+                <Link
                   key={group.groupId}
+                  to={`/harmony-ledger/ledger?group=${encodeURIComponent(group.groupId)}`}
                   className={`hl-group ${tintClass}`}
                   style={{ animationDelay: `${0.08 * idx}s` }}
                 >
@@ -317,7 +318,7 @@ const HarmonyOverviewPage = () => {
                       style={{ width: `${barWidth}%` }}
                     />
                   </div>
-                </article>
+                </Link>
               );
             })}
           </div>
