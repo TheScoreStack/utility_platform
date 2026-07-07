@@ -145,6 +145,14 @@ class HarmonyApi {
   Future<void> deleteStatement(String statementId) =>
       _api.delete('/harmony-ledger/statements/$statementId');
 
+  /// Short-lived download URL for a statement's original file.
+  Future<String> getStatementFileUrl(String statementId) async {
+    final data =
+        await _api.get('/harmony-ledger/statements/$statementId/file')
+            as Map<String, dynamic>;
+    return data['url'] as String;
+  }
+
   /// Re-parses a FAILED statement. Returns it in PROCESSING state.
   Future<HarmonyStatement> retryStatement(String statementId) async {
     final data =

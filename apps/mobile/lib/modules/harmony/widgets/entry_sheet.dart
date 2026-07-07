@@ -8,10 +8,13 @@ import '../harmony_api.dart';
 import '../models/harmony_models.dart';
 import 'staged_txn_tile.dart' show kEntryTypeLabels;
 
-/// Quick ledger-entry sheet. Without [initialEntry] it records a new cash
-/// movement (any of the four entry types, source "Cash"); with it, it edits
-/// the entry in place via PATCH (source left untouched). Resolves to the
-/// created/updated entry, or null when dismissed.
+const _sourceOptions = ['Cash', 'Check', 'Direct deposit', 'Venmo', 'Other'];
+
+/// Quick ledger-entry sheet. Without [initialEntry] it records a new money
+/// movement (any of the four entry types, with a source chip — cash, check,
+/// direct deposit, …); with it, it edits the entry in place via PATCH
+/// (source left untouched). Resolves to the created/updated entry, or null
+/// when dismissed.
 Future<HarmonyEntry?> showHarmonyEntrySheet({
   required BuildContext context,
   required HarmonyApi api,
@@ -50,6 +53,7 @@ class _EntrySheetState extends State<_EntrySheet> {
   final _descriptionController = TextEditingController();
   late String _type;
   String? _groupId;
+  String _source = 'Cash';
   bool _saving = false;
   String? _error;
 
@@ -114,7 +118,7 @@ class _EntrySheetState extends State<_EntrySheet> {
           type: _type,
           amount: amount,
           description: description.isEmpty ? null : description,
-          source: 'Cash',
+          source: _source == 'Other' ? null : _source,
           groupId: _groupId,
         );
         if (_cadence != 'none') {
@@ -168,7 +172,7 @@ class _EntrySheetState extends State<_EntrySheet> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                _isEditing ? 'Edit entry' : 'Record cash',
+                _isEditing ? 'Edit entry' : 'Record money',
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 4),
@@ -176,8 +180,8 @@ class _EntrySheetState extends State<_EntrySheet> {
                 _isEditing
                     ? 'Changes apply straight to the ledger.'
                     : outflow
-                    ? 'Cash the collective paid out.'
-                    : 'Cash the collective took in.',
+                    ? 'Money the collective paid out.'
+                    : 'Money the collective took in.',
                 style: const TextStyle(fontSize: 12, color: Colors.white70),
               ),
               const SizedBox(height: 16),
@@ -236,6 +240,29 @@ class _EntrySheetState extends State<_EntrySheet> {
                     ),
                 ],
               ),
+              if (!_isEditing) ...[
+                const SizedBox(height: 14),
+                Text('VIA', style: eyebrowStyle()),
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 2,
+                  children: [
+                    for (final source in _sourceOptions)
+                      ChoiceChip(
+                        label: Text(source),
+                        selected: _source == source,
+                        visualDensity: VisualDensity.compact,
+                        onSelected: _saving
+                            ? null
+                            : (_) {
+                                HapticFeedback.selectionClick();
+                                setState(() => _source = source);
+                              },
+                      ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 14),
               Text('GROUP', style: eyebrowStyle()),
               const SizedBox(height: 6),

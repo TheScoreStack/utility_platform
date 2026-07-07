@@ -11,6 +11,7 @@ import {
 } from "../lib/errors.js";
 import {
   deleteObject,
+  generateReceiptDownloadUrl,
   generateStatementUpload
 } from "./uploadService.js";
 import { invokeStatementParser } from "./invokeStatementParser.js";
@@ -1036,6 +1037,24 @@ export class HarmonyLedgerService {
       this.store.listGroups()
     ]);
     return { statement, transactions, groups };
+  }
+
+  /** Short-lived download URL for the originally uploaded statement file. */
+  async getStatementFileUrl(
+    statementId: string,
+    auth: AuthContext
+  ): Promise<{ url: string; fileName: string; contentType: string }> {
+    await this.requireAccess(auth);
+    const statement = await this.statementStore.getStatement(statementId);
+    if (!statement) {
+      throw new NotFoundError("Statement not found");
+    }
+    const url = await generateReceiptDownloadUrl(statement.storageKey);
+    return {
+      url,
+      fileName: statement.fileName,
+      contentType: statement.contentType
+    };
   }
 
   private async requirePendingStagedTxn(

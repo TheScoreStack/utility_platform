@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
@@ -149,6 +150,12 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
               title: const Text('Edit entry'),
               onTap: () => Navigator.of(sheetContext).pop('edit'),
             ),
+            if (entry.importStatementId != null)
+              ListTile(
+                leading: const Icon(Icons.attachment_rounded),
+                title: const Text('View source statement'),
+                onTap: () => Navigator.of(sheetContext).pop('source'),
+              ),
             ListTile(
               leading: const Icon(
                 Icons.delete_outline_rounded,
@@ -170,6 +177,27 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
       await _editEntry(entry);
     } else if (action == 'delete') {
       await _deleteEntry(entry);
+    } else if (action == 'source') {
+      await _viewSourceStatement(entry);
+    }
+  }
+
+  /// Opens the original uploaded file behind an imported entry.
+  Future<void> _viewSourceStatement(HarmonyEntry entry) async {
+    final statementId = entry.importStatementId;
+    if (statementId == null) return;
+    try {
+      final url = await widget.api.getStatementFileUrl(statementId);
+      if (!mounted) return;
+      final launched = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        showAppSnackBar(context, 'Could not open the file.', error: true);
+      }
+    } on ApiException catch (error) {
+      if (mounted) showAppSnackBar(context, error.message, error: true);
     }
   }
 
@@ -219,7 +247,7 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
           : FloatingActionButton.extended(
               onPressed: _recordCash,
               icon: const Icon(Icons.payments_rounded),
-              label: const Text('Record cash'),
+              label: const Text('Record'),
             ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())

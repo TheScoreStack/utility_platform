@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../core/api_client.dart';
 import '../../../core/app_theme.dart';
@@ -265,6 +266,24 @@ class _StatementReviewScreenState extends State<StatementReviewScreen> {
     }
   }
 
+  /// Opens the originally uploaded file (image/PDF/CSV) in the browser via
+  /// a short-lived presigned URL.
+  Future<void> _viewOriginal() async {
+    try {
+      final url = await widget.api.getStatementFileUrl(widget.statementId);
+      if (!mounted) return;
+      final launched = await launchUrl(
+        Uri.parse(url),
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && mounted) {
+        showAppSnackBar(context, 'Could not open the file.', error: true);
+      }
+    } on ApiException catch (error) {
+      if (mounted) showAppSnackBar(context, error.message, error: true);
+    }
+  }
+
   Future<void> _confirmAll() async {
     final detail = _detail;
     if (detail == null) return;
@@ -336,6 +355,12 @@ class _StatementReviewScreenState extends State<StatementReviewScreen> {
       appBar: AppBar(
         title: Text(detail?.statement.fileName ?? 'Review statement'),
         actions: [
+          if (detail != null)
+            IconButton(
+              tooltip: 'View original file',
+              icon: const Icon(Icons.attachment_rounded),
+              onPressed: _viewOriginal,
+            ),
           if (pending.isNotEmpty)
             TextButton(
               onPressed: _bulkRunning ? null : _confirmAll,

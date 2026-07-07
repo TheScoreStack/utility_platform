@@ -372,6 +372,17 @@ export const handler = async (
       return noContent(origin);
     }
 
+    const statementFileMatch = path.match(
+      /^\/harmony-ledger\/statements\/([^/]+)\/file$/
+    );
+    if (statementFileMatch && method === "GET") {
+      const file = await harmonyLedgerService.getStatementFileUrl(
+        decodeURIComponent(statementFileMatch[1]),
+        auth
+      );
+      return ok(file, origin);
+    }
+
     const statementRetryMatch = path.match(
       /^\/harmony-ledger\/statements\/([^/]+)\/retry$/
     );

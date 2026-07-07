@@ -330,9 +330,11 @@ class _StatementsScreenState extends State<StatementsScreen> {
                             child: Padding(
                               padding: EdgeInsets.symmetric(horizontal: 32),
                               child: Text(
-                                'Upload a bank, Venmo, or PayPal statement '
-                                '(PDF, CSV, or a photo) and the transactions '
-                                'get mapped to groups for you.',
+                                'Upload a bank, Venmo, or PayPal statement — '
+                                'or a single transaction, even a screenshot '
+                                '(PDF, CSV, or photo) — and it gets mapped '
+                                'to groups for you. The original file stays '
+                                'on record.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(color: Colors.white70),
                               ),

@@ -169,7 +169,7 @@ Rules:
 - For photos of statements, read every visible row carefully; skip rows that are cut off or unreadable rather than guessing amounts.
 - amount is always positive; use direction IN for money in and OUT for money out.
 - date is the transaction date in YYYY-MM-DD.
-- Flag transfers between the collective's own accounts (e.g. "Transfer to Savings", Venmo-to-bank cashouts, PayPal withdrawals to bank) with isLikelyInternalTransfer=true.
+- Flag transfers between the collective's own accounts with isLikelyInternalTransfer=true. This covers BOTH sides of the same movement: outgoing cashouts/withdrawals on Venmo or PayPal (e.g. "Standard Transfer", "Transfer to bank"), AND incoming bank deposits that originate from the collective's own Venmo/PayPal/Zelle/Cash App balance (e.g. "VENMO CASHOUT", "PAYPAL TRANSFER", "FROM VENMO"). Money is recorded once at its source; counting the deposit again would double-count it. A payment from another person via Venmo/Zelle directly INTO the bank account is real money coming in, not an internal transfer.
 - suggestedGroupId must be one of the provided group ids, or null when unsure.
 - suggestedCategory is a short lowercase bookkeeping category (one or two words, e.g. "supplies", "equipment", "food", "venue", "fees", "merch", "door"). Prefer a category already used in the ledger when one fits; null when unsure.
 - For Venmo/PayPal, put the other party's name in counterparty and use the memo or note to infer the entry type and group.

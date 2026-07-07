@@ -341,8 +341,9 @@ const HarmonyStatementsPage = () => {
           <div>
             <h2>Import a Statement</h2>
             <p className="muted">
-              Upload a bank, Venmo, or PayPal export — or a photo of a statement —
-              and let AI turn it into ledger entries.
+              Upload a bank, Venmo, or PayPal export — a whole statement or a
+              single transaction, even a screenshot — and let AI turn it into
+              ledger entries. The original file stays on record.
             </p>
           </div>
         </div>

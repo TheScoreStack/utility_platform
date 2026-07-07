@@ -483,14 +483,36 @@ const HarmonyStatementReviewPage = () => {
                 : ""}
             </p>
           </div>
-          <button
-            type="button"
-            className="primary"
-            onClick={handleConfirmAll}
-            disabled={bulkBusy || counts.pending === 0}
-          >
-            {bulkBusy ? "Confirming…" : "Accept all suggestions"}
-          </button>
+          <div className="hl-txn-actions">
+            <button
+              type="button"
+              className="ghost"
+              onClick={async () => {
+                try {
+                  const file = await api.get<{ url: string }>(
+                    `/harmony-ledger/statements/${statement.statementId}/file`
+                  );
+                  window.open(file.url, "_blank", "noopener");
+                } catch (error) {
+                  setBulkResult(
+                    error instanceof ApiError
+                      ? error.message
+                      : "Could not open the original file."
+                  );
+                }
+              }}
+            >
+              View original
+            </button>
+            <button
+              type="button"
+              className="primary"
+              onClick={handleConfirmAll}
+              disabled={bulkBusy || counts.pending === 0}
+            >
+              {bulkBusy ? "Confirming…" : "Accept all suggestions"}
+            </button>
+          </div>
         </div>
         {bulkResult && <p className="muted" style={{ margin: 0 }}>{bulkResult}</p>}
       </section>

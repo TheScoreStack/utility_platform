@@ -102,6 +102,10 @@ class HarmonyEntry {
   final String recordedAt;
   final String? occurredAt;
 
+  /// Set when this entry came from a statement import — links back to the
+  /// original uploaded file.
+  final String? importStatementId;
+
   const HarmonyEntry({
     required this.entryId,
     required this.type,
@@ -113,6 +117,7 @@ class HarmonyEntry {
     this.groupName,
     required this.recordedAt,
     this.occurredAt,
+    this.importStatementId,
   });
 
   factory HarmonyEntry.fromJson(Map<String, dynamic> json) => HarmonyEntry(
@@ -126,6 +131,7 @@ class HarmonyEntry {
     groupName: json['groupName'] as String?,
     recordedAt: json['recordedAt'] as String,
     occurredAt: json['occurredAt'] as String?,
+    importStatementId: json['importStatementId'] as String?,
   );
 
   bool get isInflow => type != 'EXPENSE';
