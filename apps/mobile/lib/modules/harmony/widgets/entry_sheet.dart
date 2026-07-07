@@ -8,7 +8,14 @@ import '../harmony_api.dart';
 import '../models/harmony_models.dart';
 import 'staged_txn_tile.dart' show kEntryTypeLabels;
 
-const _sourceOptions = ['Cash', 'Check', 'Direct deposit', 'Venmo', 'Other'];
+const _sourceOptions = [
+  'Cash',
+  'Debit',
+  'Check',
+  'Direct deposit',
+  'Venmo',
+  'Other',
+];
 
 /// Quick ledger-entry sheet. Without [initialEntry] it records a new money
 /// movement (any of the four entry types, with a source chip — cash, check,
@@ -63,16 +70,28 @@ class _EntrySheetState extends State<_EntrySheet> {
 
   bool get _isEditing => widget.initialEntry != null;
 
+  /// Chips shown in the VIA row — the standard options plus, when editing
+  /// an entry whose source isn't one of them (e.g. "Bank import"), that
+  /// source so it stays selectable.
+  late final List<String> _sourceChips;
+
   @override
   void initState() {
     super.initState();
     final initial = widget.initialEntry;
     _type = initial?.type ?? 'DONATION';
     _groupId = initial?.groupId;
+    final initialSource = initial?.source;
     if (initial != null) {
       _amountController.text = initial.amount.toStringAsFixed(2);
       _descriptionController.text = initial.description ?? '';
+      _source = initialSource ?? 'Other';
     }
+    _sourceChips = [
+      if (initialSource != null && !_sourceOptions.contains(initialSource))
+        initialSource,
+      ..._sourceOptions,
+    ];
   }
 
   @override
@@ -96,12 +115,14 @@ class _EntrySheetState extends State<_EntrySheet> {
       final HarmonyEntry entry;
       if (_isEditing) {
         final initial = widget.initialEntry!;
+        final newSource = _source == 'Other' ? null : _source;
         // PATCH only what changed; null clears a previously-set field.
         final changes = <String, dynamic>{
           if (_type != initial.type) 'type': _type,
           if (amount != initial.amount) 'amount': amount,
           if (description != (initial.description ?? ''))
             'description': description.isEmpty ? null : description,
+          if (newSource != initial.source) 'source': newSource,
           if (_groupId != initial.groupId) 'groupId': _groupId,
         };
         if (changes.isEmpty) {
@@ -240,29 +261,27 @@ class _EntrySheetState extends State<_EntrySheet> {
                     ),
                 ],
               ),
-              if (!_isEditing) ...[
-                const SizedBox(height: 14),
-                Text('VIA', style: eyebrowStyle()),
-                const SizedBox(height: 6),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 2,
-                  children: [
-                    for (final source in _sourceOptions)
-                      ChoiceChip(
-                        label: Text(source),
-                        selected: _source == source,
-                        visualDensity: VisualDensity.compact,
-                        onSelected: _saving
-                            ? null
-                            : (_) {
-                                HapticFeedback.selectionClick();
-                                setState(() => _source = source);
-                              },
-                      ),
-                  ],
-                ),
-              ],
+              const SizedBox(height: 14),
+              Text('VIA', style: eyebrowStyle()),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 2,
+                children: [
+                  for (final source in _sourceChips)
+                    ChoiceChip(
+                      label: Text(source),
+                      selected: _source == source,
+                      visualDensity: VisualDensity.compact,
+                      onSelected: _saving
+                          ? null
+                          : (_) {
+                              HapticFeedback.selectionClick();
+                              setState(() => _source = source);
+                            },
+                    ),
+                ],
+              ),
               const SizedBox(height: 14),
               Text('GROUP', style: eyebrowStyle()),
               const SizedBox(height: 6),
