@@ -14,6 +14,7 @@ const _sourceOptions = [
   'Check',
   'Direct deposit',
   'Venmo',
+  'PayPal',
   'Other',
 ];
 
