@@ -482,9 +482,12 @@ const AddExpenseForm = ({
         })),
         tax: taxValue,
         tip: tipValue,
-        extrasSplitMode
+        extrasSplitMode,
+        // Unassigned items ride with the payer (same rule the server
+        // applies) — they can be claimed later via the split link.
+        unassignedMemberId: paidBy || undefined
       }),
-    [itemRows, taxValue, tipValue, extrasSplitMode]
+    [itemRows, taxValue, tipValue, extrasSplitMode, paidBy]
   );
 
   const unassignedItemCount = useMemo(
@@ -1150,11 +1153,6 @@ const AddExpenseForm = ({
         );
         return null;
       }
-      if (rows.some((row) => row.assignedMemberIds.length === 0)) {
-        setError("Assign at least one person to every item.");
-        return null;
-      }
-
       lineItemsPayload = rows.map((row, index) => ({
         description: row.description.trim() || `Item ${index + 1}`,
         quantity: row.quantity,
@@ -1165,6 +1163,11 @@ const AddExpenseForm = ({
       const assignedUnion = new Set(
         rows.flatMap((row) => row.assignedMemberIds)
       );
+      // Unassigned items ride with the payer until someone claims them
+      // (via editing or a split link), so the payer is always in the split.
+      if (rows.some((row) => row.assignedMemberIds.length === 0)) {
+        assignedUnion.add(paidBy);
+      }
       sharedWithPayload = members
         .map((member) => member.memberId)
         .filter((memberId) => assignedUnion.has(memberId));
@@ -1890,8 +1893,10 @@ const AddExpenseForm = ({
         </div>
         {splitMode === "items" && (
           <p className="muted" style={{ marginTop: "0.35rem" }}>
-            Assign each line item to the people who shared it. Scanning a
-            receipt above fills the items in automatically.
+            Assign each line item to the people who shared it — or leave
+            items unassigned and share a split link afterward so everyone
+            claims their own. Scanning a receipt above fills the items in
+            automatically.
           </p>
         )}
       </div>
@@ -2377,21 +2382,28 @@ const AddExpenseForm = ({
           splitMode === "custom" &&
           Math.abs(allocationDelta) > 0.01 &&
           grossTotal > 0;
-        const itemsOff = splitMode === "items" && unassignedItemCount > 0;
-        const blocked = allocationOff || itemsOff;
+        const blocked = allocationOff;
+        const unassignedNote =
+          splitMode === "items" && unassignedItemCount > 0;
         const buttonLabel = isSubmitting
           ? "Saving…"
           : allocationOff
             ? `Allocations off by ${formatAmount(Math.abs(allocationDelta))}`
-            : itemsOff
-              ? `Assign people to ${unassignedItemCount} ${
-                  unassignedItemCount === 1 ? "item" : "items"
-                }`
-              : editingLabel
-                ? "Save changes"
-                : "Add expense";
+            : editingLabel
+              ? "Save changes"
+              : "Add expense";
         const canSaveDraft = !editingLabel || editingIsDraft;
         return (
+          <>
+          {unassignedNote && (
+            <p className="muted" style={{ margin: "0 0 0.5rem" }}>
+              {unassignedItemCount}{" "}
+              {unassignedItemCount === 1 ? "item stays" : "items stay"} with{" "}
+              {membersById[paidBy]?.displayName?.split(/\s+/)[0] ?? "the payer"}{" "}
+              until claimed — share a split link after saving so people can
+              pick their own items.
+            </p>
+          )}
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button
               type="submit"
@@ -2406,9 +2418,7 @@ const AddExpenseForm = ({
               title={
                 allocationOff
                   ? "Adjust the per-person amounts so they match the total before saving."
-                  : itemsOff
-                    ? "Every item needs at least one person assigned before saving."
-                    : undefined
+                  : undefined
               }
             >
               {buttonLabel}
@@ -2432,6 +2442,7 @@ const AddExpenseForm = ({
               </button>
             )}
           </div>
+          </>
         );
       })()}
 

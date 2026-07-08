@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { CategoryBadge } from "../CategoryBadge";
 import ExpenseCommentsThread from "../ExpenseCommentsThread";
+import { useConfirm } from "../ConfirmDialog";
 import { formatDate } from "../../lib/tripFormat";
+import { splitLinkApi, splitLinkUrl } from "../../lib/splitLinkApi";
 import type { Expense } from "../../types";
 
 export type ReceiptPreviewData = { url: string; title: string; type: string | null };
@@ -47,6 +50,67 @@ export const ExpenseCard = ({
   hasReceiptStorage,
   onViewReceipt
 }: ExpenseCardProps) => {
+  const confirm = useConfirm();
+  const [splitUrl, setSplitUrl] = useState<string | null>(null);
+  const [splitBusy, setSplitBusy] = useState<"open" | "revoke" | null>(null);
+  const [splitCopied, setSplitCopied] = useState(false);
+  const [splitError, setSplitError] = useState<string | null>(null);
+
+  const handleSplitLink = async () => {
+    if (splitUrl) {
+      setSplitUrl(null);
+      return;
+    }
+    setSplitBusy("open");
+    setSplitError(null);
+    try {
+      // Fetch-or-create, like the trip invite link.
+      const { link } = await splitLinkApi.getOrCreate(
+        tripId,
+        expense.expenseId
+      );
+      setSplitUrl(splitLinkUrl(link.shareId));
+    } catch {
+      setSplitError("Couldn't get the split link — try again.");
+    } finally {
+      setSplitBusy(null);
+    }
+  };
+
+  const handleCopySplitLink = async () => {
+    if (!splitUrl) return;
+    try {
+      await navigator.clipboard.writeText(splitUrl);
+      setSplitCopied(true);
+      setTimeout(() => setSplitCopied(false), 2000);
+    } catch {
+      // Clipboard can be blocked (permissions, non-HTTPS) — fall back to
+      // showing the link so it can be copied by hand.
+      window.prompt("Copy your split link:", splitUrl);
+    }
+  };
+
+  const handleRevokeSplitLink = async () => {
+    const ok = await confirm({
+      title: "Revoke this split link?",
+      body:
+        "The current link stops working everywhere it was shared. Claims " +
+        "and recorded payments stay. Sharing again creates a fresh link.",
+      confirmLabel: "Revoke"
+    });
+    if (!ok) return;
+    setSplitBusy("revoke");
+    setSplitError(null);
+    try {
+      await splitLinkApi.revoke(tripId, expense.expenseId);
+      setSplitUrl(null);
+    } catch {
+      setSplitError("Couldn't revoke the link — try again.");
+    } finally {
+      setSplitBusy(null);
+    }
+  };
+
   // Mirrors the server's ownership rule: the person who entered the expense
   // (payer for legacy expenses without createdBy) or the trip owner.
   const canModify =
@@ -170,14 +234,16 @@ export const ExpenseCard = ({
                     className="muted"
                     style={{ fontSize: "0.78rem", marginLeft: "0.4rem" }}
                   >
-                    {item.assignedMemberIds
-                      .map(
-                        (memberId) =>
-                          (membersById[memberId] ?? memberId).split(
-                            /\s+/
-                          )[0]
-                      )
-                      .join(", ")}
+                    {item.assignedMemberIds.length > 0
+                      ? item.assignedMemberIds
+                          .map(
+                            (memberId) =>
+                              (membersById[memberId] ?? memberId).split(
+                                /\s+/
+                              )[0]
+                          )
+                          .join(", ")
+                      : "unclaimed"}
                   </span>
                 </span>
                 <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>
@@ -256,6 +322,31 @@ export const ExpenseCard = ({
                 : "Load preview"}
             </button>
           )}
+          {expense.lineItems && expense.lineItems.length > 0 && (
+            <button
+              type="button"
+              className="secondary"
+              style={{
+                paddingInline: "0.7rem",
+                fontSize: "0.85rem",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.3rem"
+              }}
+              disabled={splitBusy === "open"}
+              title="A link where anyone can claim their items and pay — no account needed"
+              onClick={() => void handleSplitLink()}
+              aria-expanded={Boolean(splitUrl)}
+            >
+              {splitBusy === "open" ? (
+                "Getting link…"
+              ) : (
+                <>
+                  <span aria-hidden="true">🔗</span> Split link
+                </>
+              )}
+            </button>
+          )}
           <button
             type="button"
             className="secondary"
@@ -324,6 +415,65 @@ export const ExpenseCard = ({
           )}
         </div>
       </div>
+      {(splitUrl || splitError) && (
+        <div
+          style={{
+            border: "1px solid rgba(148,163,184,0.14)",
+            borderRadius: "0.9rem",
+            padding: "0.75rem 0.9rem",
+            background: "var(--inset)",
+            display: "flex",
+            flexDirection: "column",
+            gap: "0.6rem"
+          }}
+        >
+          {splitError ? (
+            <p style={{ margin: 0, color: "#f87171", fontSize: "0.85rem" }}>
+              {splitError}
+            </p>
+          ) : (
+            <>
+              <span
+                style={{
+                  fontSize: "0.85rem",
+                  color: "#a5b4fc",
+                  wordBreak: "break-all"
+                }}
+              >
+                {splitUrl}
+              </span>
+              <span className="muted" style={{ fontSize: "0.8rem" }}>
+                Anyone with this link can claim their items, see their share
+                of tax &amp; tip, and pay — no account needed.
+              </span>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="primary"
+                  style={{ paddingInline: "0.8rem", fontSize: "0.85rem" }}
+                  onClick={() => void handleCopySplitLink()}
+                >
+                  {splitCopied ? "Copied ✓" : "Copy link"}
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  style={{
+                    paddingInline: "0.8rem",
+                    fontSize: "0.85rem",
+                    opacity: 0.75
+                  }}
+                  disabled={splitBusy === "revoke"}
+                  title="Kills the link everywhere it was shared; claims and payments stay"
+                  onClick={() => void handleRevokeSplitLink()}
+                >
+                  {splitBusy === "revoke" ? "Revoking…" : "Revoke link"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
       <ExpenseCommentsThread
         tripId={tripId}
         expenseId={expense.expenseId}

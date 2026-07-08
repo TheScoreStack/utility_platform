@@ -326,6 +326,7 @@ export class TripStore {
       createdAt: item.createdAt,
       createdBy: item.createdBy,
       confirmedAt: item.confirmedAt,
+      splitShareId: item.splitShareId,
       deletedAt: item.deletedAt,
       deletedBy: item.deletedBy
     }));

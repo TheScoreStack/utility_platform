@@ -130,6 +130,43 @@ describe("buildItemizedAllocations", () => {
     expect(result.allocations).toEqual([{ memberId: "a", amount: 10 }]);
   });
 
+  it("attributes unassigned items to unassignedMemberId when provided", () => {
+    const result = buildItemizedAllocations({
+      lineItems: [
+        { total: 10, assignedMemberIds: ["a"] },
+        { total: 30, assignedMemberIds: [] }
+      ],
+      unassignedMemberId: "payer"
+    });
+
+    expect(result.itemsSubtotal).toBe(40);
+    expect(result.allocations).toEqual([
+      { memberId: "a", amount: 10 },
+      { memberId: "payer", amount: 30 }
+    ]);
+  });
+
+  it("pro-rates extras against the full bill when unclaimed items ride with the payer", () => {
+    // The split-link rule: a claims 25 of the 100 in items, so their
+    // tax+tip share is exactly 25% — no matter how much is still unclaimed.
+    const result = buildItemizedAllocations({
+      lineItems: [
+        { total: 25, assignedMemberIds: ["a"] },
+        { total: 75, assignedMemberIds: [] }
+      ],
+      tax: 8,
+      tip: 12,
+      extrasSplitMode: "proportional",
+      unassignedMemberId: "payer"
+    });
+
+    expect(result.allocations).toEqual([
+      { memberId: "a", amount: 30 },
+      { memberId: "payer", amount: 90 }
+    ]);
+    expect(sum(result.allocations)).toBe(120);
+  });
+
   it("falls back to an even extras split when items subtotal is zero", () => {
     const result = buildItemizedAllocations({
       lineItems: [{ total: 0, assignedMemberIds: ["a", "b"] }],

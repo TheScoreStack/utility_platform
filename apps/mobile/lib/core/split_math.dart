@@ -99,6 +99,11 @@ ItemizedAllocationResult buildItemizedAllocations({
   double tax = 0,
   double tip = 0,
   String extrasSplitMode = 'proportional',
+  // Items with no assignees are attributed to this member (typically the
+  // payer) instead of being skipped — mirrors the shared TS implementation,
+  // used for split-link expenses where unclaimed items stay with whoever
+  // fronted the bill.
+  String? unassignedMemberId,
 }) {
   // Member order is first appearance across items so results are stable.
   final memberOrder = <String>[];
@@ -113,7 +118,9 @@ ItemizedAllocationResult buildItemizedAllocations({
   var itemsSubtotalCents = 0;
   for (var itemIndex = 0; itemIndex < lineItems.length; itemIndex += 1) {
     final item = lineItems[itemIndex];
-    final assigned = item.assignedMemberIds;
+    final assigned = item.assignedMemberIds.isNotEmpty
+        ? item.assignedMemberIds
+        : (unassignedMemberId != null ? [unassignedMemberId] : const <String>[]);
     if (assigned.isEmpty) continue;
     final cents = _toCents(item.total);
     itemsSubtotalCents += cents;

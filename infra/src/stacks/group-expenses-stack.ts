@@ -597,7 +597,24 @@ export class GroupExpensesStack extends Stack {
       integration: httpIntegration
     });
 
-    // The public meet routes are the API's first unauthenticated surface;
+    // Deliberately unauthenticated: split links let guests claim receipt
+    // items and mark payment without an account. Same capability model —
+    // unguessable shareId + per-guest secret, enforced in the handler.
+    httpApi.addRoutes({
+      path: "/split-public/{proxy+}",
+      methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PUT],
+      integration: httpIntegration
+    });
+
+    // Signed-in split-link join ("Continue as <you>" on the claim page).
+    httpApi.addRoutes({
+      path: "/split-links/{proxy+}",
+      methods: [HttpMethod.POST],
+      integration: httpIntegration,
+      authorizer
+    });
+
+    // The public meet/split routes are unauthenticated surfaces;
     // HTTP APIs only throttle per stage, so cap the whole default stage.
     const defaultStage = httpApi.defaultStage?.node.defaultChild as CfnStage;
     defaultStage.defaultRouteSettings = {

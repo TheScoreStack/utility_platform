@@ -159,6 +159,9 @@ export interface Settlement {
   createdAt: string;
   confirmedAt?: string;
   createdBy: string;
+  /** Set when a guest recorded this through a split link — deleting or
+   *  restoring the settlement keeps their claim session in sync. */
+  splitShareId?: string;
   deletedAt?: string;
   deletedBy?: string;
 }

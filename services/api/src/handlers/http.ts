@@ -5,6 +5,7 @@ import { pushService } from "../services/pushService.js";
 import { HarmonyLedgerService } from "../services/harmonyLedgerService.js";
 import { StackTimeService } from "../services/stackTimeService.js";
 import { MeetService } from "../services/meetService.js";
+import { SplitLinkService } from "../services/splitLinkService.js";
 import { getAuthContext } from "../auth.js";
 import {
   handleError,
@@ -20,6 +21,7 @@ const userService = new UserService();
 const harmonyLedgerService = new HarmonyLedgerService();
 const stackTimeService = new StackTimeService();
 const meetService = new MeetService();
+const splitLinkService = new SplitLinkService();
 const ok = (body: unknown, origin: string): APIGatewayProxyResultV2 =>
   json(200, body, origin);
 const created = (body: unknown, origin: string): APIGatewayProxyResultV2 =>
@@ -106,7 +108,69 @@ export const handler = async (
       return json(404, { message: "Not Found" }, origin);
     }
 
+    // Public split-link routes: guests claim receipt items and mark payment
+    // without an account. Same capability model as meet-public — unguessable
+    // shareId to read, per-guest secret to write.
+    const splitPublicMatch = path.match(/^\/split-public\/([^/]+)(?:\/(.*))?$/);
+    if (splitPublicMatch) {
+      const shareId = decodeURIComponent(splitPublicMatch[1]);
+      const remainder = splitPublicMatch[2] ? `/${splitPublicMatch[2]}` : "";
+      const guestSecret = event.headers?.["x-split-guest-secret"];
+
+      if (!remainder && method === "GET") {
+        const snapshot = await splitLinkService.getPublicSnapshot(shareId);
+        return ok(snapshot, origin);
+      }
+
+      if (remainder === "/guests" && method === "POST") {
+        const body = parseBody(event);
+        const response = await splitLinkService.join(shareId, body);
+        return created(response, origin);
+      }
+
+      const guestClaimsMatch = remainder.match(/^\/guests\/([^/]+)\/claims$/);
+      if (guestClaimsMatch && method === "PUT") {
+        const memberId = decodeURIComponent(guestClaimsMatch[1]);
+        const body = parseBody(event);
+        const snapshot = await splitLinkService.updateClaims(
+          shareId,
+          memberId,
+          guestSecret,
+          body
+        );
+        return ok(snapshot, origin);
+      }
+
+      const guestCompleteMatch = remainder.match(
+        /^\/guests\/([^/]+)\/(complete|uncomplete)$/
+      );
+      if (guestCompleteMatch && method === "POST") {
+        const memberId = decodeURIComponent(guestCompleteMatch[1]);
+        const snapshot =
+          guestCompleteMatch[2] === "complete"
+            ? await splitLinkService.complete(shareId, memberId, guestSecret)
+            : await splitLinkService.uncomplete(shareId, memberId, guestSecret);
+        return ok(snapshot, origin);
+      }
+
+      return json(404, { message: "Not Found" }, origin);
+    }
+
     const auth = getAuthContext(event);
+
+    // Signed-in split-link join: binds the claim session to the caller's
+    // account (adding them to the trip first if needed).
+    const splitSessionMatch = path.match(/^\/split-links\/([^/]+)\/session$/);
+    if (splitSessionMatch && method === "POST") {
+      const shareId = decodeURIComponent(splitSessionMatch[1]);
+      const body = parseBody(event);
+      const response = await splitLinkService.joinWithAccount(
+        shareId,
+        body,
+        auth
+      );
+      return created(response, origin);
+    }
 
     if (path === "/meet/events" && method === "POST") {
       const body = parseBody(event);
@@ -651,6 +715,23 @@ export const handler = async (
       if (expensePurgeMatch && method === "DELETE") {
         const expenseId = decodeURIComponent(expensePurgeMatch[1]);
         await tripService.purgeExpense(tripId, expenseId, auth);
+        return noContent(origin);
+      }
+
+      const splitLinkMatch = remainder.match(/^\/expenses\/([^/]+)\/split-link$/);
+      if (splitLinkMatch && method === "GET") {
+        // Fetch-or-create, like the trip invite link.
+        const expenseId = decodeURIComponent(splitLinkMatch[1]);
+        const link = await splitLinkService.getOrCreateSplitLink(
+          tripId,
+          expenseId,
+          auth
+        );
+        return ok({ link }, origin);
+      }
+      if (splitLinkMatch && method === "DELETE") {
+        const expenseId = decodeURIComponent(splitLinkMatch[1]);
+        await splitLinkService.revokeSplitLink(tripId, expenseId, auth);
         return noContent(origin);
       }
 

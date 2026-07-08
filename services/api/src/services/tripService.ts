@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { nanoid } from "nanoid";
 import { z } from "zod";
 import { TripStore, type TripDetails } from "../data/tripStore.js";
+import { SplitLinkStore } from "../data/splitLinkStore.js";
 import { UserStore } from "../data/userStore.js";
 import {
   Trip,
@@ -45,6 +46,59 @@ const getUserStore = (): UserStore => {
     userStoreInstance = new UserStore();
   }
   return userStoreInstance;
+};
+
+let splitLinkStoreInstance: SplitLinkStore | null = null;
+
+const getSplitLinkStore = (): SplitLinkStore => {
+  if (!splitLinkStoreInstance) {
+    splitLinkStoreInstance = new SplitLinkStore();
+  }
+  return splitLinkStoreInstance;
+};
+
+/** Settlements recorded through a split link mirror into the guest's claim
+ *  session: deleting one reopens their claims on the public page, restoring
+ *  re-locks them. Best-effort — the settlement operation itself must not
+ *  fail over a stale mirror (e.g. a since-revoked link). */
+const syncSplitLinkCompletion = async (
+  settlement: Settlement,
+  mode: "clear" | "restore"
+): Promise<void> => {
+  if (!settlement.splitShareId) return;
+  try {
+    const store = getSplitLinkStore();
+    const guest = await store.getGuest(
+      settlement.splitShareId,
+      settlement.fromMemberId
+    );
+    if (!guest) return;
+    if (mode === "clear") {
+      // Only reopen if the guest's completion still points at THIS
+      // settlement — they may have re-completed since.
+      if (guest.settlementId !== settlement.settlementId) return;
+      await store.clearGuestCompletion(
+        settlement.splitShareId,
+        settlement.fromMemberId
+      );
+    } else {
+      await store.markGuestCompleted(
+        settlement.splitShareId,
+        settlement.fromMemberId,
+        {
+          completedAt: settlement.createdAt,
+          settlementId: settlement.settlementId,
+          completedAmount: settlement.amount
+        }
+      );
+    }
+  } catch (error) {
+    console.warn("Failed to sync split-link completion", {
+      settlementId: settlement.settlementId,
+      mode,
+      error
+    });
+  }
 };
 
 const isoNow = () => new Date().toISOString();
@@ -109,7 +163,9 @@ const lineItemSchema = z.object({
   quantity: z.number().positive().optional(),
   unitPrice: z.number().nonnegative().optional(),
   total: z.number().nonnegative(),
-  assignedMemberIds: z.array(z.string().min(1)).nonempty()
+  // Empty means unclaimed: the item's cost rides with the payer until
+  // someone picks it up (in the form or via a split link).
+  assignedMemberIds: z.array(z.string().min(1))
 });
 
 const extrasSplitModeSchema = z.enum(["proportional", "even"]);
@@ -1160,7 +1216,8 @@ export class TripService {
         lineItems,
         tax: parsed.data.tax,
         tip: parsed.data.tip,
-        extrasSplitMode: parsed.data.extrasSplitMode
+        extrasSplitMode: parsed.data.extrasSplitMode,
+        unassignedMemberId: parsed.data.paidByMemberId
       }).allocations;
     } else if (parsed.data.splitEvenly || !allocations.length) {
       const remainderTarget = resolveRemainderTarget(
@@ -1326,7 +1383,9 @@ export class TripService {
         tax: parsed.data.tax ?? expense.tax,
         tip: parsed.data.tip ?? expense.tip,
         extrasSplitMode:
-          parsed.data.extrasSplitMode ?? expense.extrasSplitMode
+          parsed.data.extrasSplitMode ?? expense.extrasSplitMode,
+        unassignedMemberId:
+          parsed.data.paidByMemberId ?? expense.paidByMemberId
       }).allocations;
     } else if (parsed.data.allocations) {
       allocations = parsed.data.allocations;
@@ -1900,6 +1959,7 @@ export class TripService {
     }
 
     await getTripStore().softDeleteSettlement(tripId, settlementId, auth.userId);
+    await syncSplitLinkCompletion(settlement, "clear");
   }
 
   async restoreSettlement(
@@ -1924,6 +1984,7 @@ export class TripService {
       throw new ForbiddenError("Not authorized to restore this settlement");
     }
     await getTripStore().restoreSettlement(tripId, settlementId);
+    await syncSplitLinkCompletion(settlement, "restore");
   }
 
   async purgeSettlement(
@@ -1948,6 +2009,7 @@ export class TripService {
       throw new ForbiddenError("Not authorized to permanently delete this settlement");
     }
     await getTripStore().purgeSettlement(tripId, settlementId);
+    await syncSplitLinkCompletion(settlement, "clear");
   }
 
   async analyzeReceiptLive(

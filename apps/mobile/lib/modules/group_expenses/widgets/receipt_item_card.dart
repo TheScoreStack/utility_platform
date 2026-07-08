@@ -161,7 +161,8 @@ class ReceiptItemCard extends StatelessWidget {
               const SizedBox(height: 6),
               if (needsAssignees)
                 Text(
-                  'Pick who shared this',
+                  'Unclaimed — stays with the payer until someone picks it '
+                  '(here or via a split link)',
                   style: TextStyle(fontSize: 12, color: amber),
                 )
               else if (shareCount > 0 && item.amount > 0)

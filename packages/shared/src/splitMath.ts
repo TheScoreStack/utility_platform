@@ -10,6 +10,10 @@ export interface ItemizedAllocationInput {
   tax?: number;
   tip?: number;
   extrasSplitMode?: ExtrasSplitMode;
+  /** Items with no assignees are attributed to this member (typically the
+   *  payer) instead of being skipped — used for split-link expenses where
+   *  unclaimed items stay with whoever fronted the bill. */
+  unassignedMemberId?: string;
 }
 
 export interface ItemizedAllocationDetail {
@@ -45,7 +49,13 @@ const toCents = (value: number): number => Math.round(value * 100);
 export const buildItemizedAllocations = (
   input: ItemizedAllocationInput
 ): ItemizedAllocationResult => {
-  const { lineItems, tax = 0, tip = 0, extrasSplitMode = "proportional" } = input;
+  const {
+    lineItems,
+    tax = 0,
+    tip = 0,
+    extrasSplitMode = "proportional",
+    unassignedMemberId
+  } = input;
 
   // Member order is first appearance across items so results are stable.
   const memberOrder: string[] = [];
@@ -59,7 +69,11 @@ export const buildItemizedAllocations = (
 
   let itemsSubtotalCents = 0;
   lineItems.forEach((item, itemIndex) => {
-    const assigned = item.assignedMemberIds;
+    const assigned = item.assignedMemberIds.length
+      ? item.assignedMemberIds
+      : unassignedMemberId
+        ? [unassignedMemberId]
+        : [];
     if (!assigned.length) return;
     const cents = toCents(item.total);
     itemsSubtotalCents += cents;

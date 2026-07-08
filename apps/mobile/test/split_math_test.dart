@@ -1,4 +1,4 @@
-// Ports all 9 cases from services/api/src/lib/splitMath.test.ts so the Dart
+// Ports all cases from services/api/src/lib/splitMath.test.ts so the Dart
 // port and the API's TypeScript implementation can never drift apart.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:platform_mobile/core/split_math.dart';
@@ -149,6 +149,43 @@ void main() {
       expect(result.allocations.length, 1);
       expect(result.allocations.single.memberId, 'a');
       expect(result.allocations.single.amount, 10);
+    });
+
+    test('attributes unassigned items to unassignedMemberId when provided',
+        () {
+      final result = buildItemizedAllocations(
+        lineItems: const [
+          ItemizedLineItem(total: 10, assignedMemberIds: ['a']),
+          ItemizedLineItem(total: 30, assignedMemberIds: []),
+        ],
+        unassignedMemberId: 'payer',
+      );
+
+      expect(result.itemsSubtotal, 40);
+      final amounts = amountsByMember(result.allocations);
+      expect(amounts['a'], 10);
+      expect(amounts['payer'], 30);
+    });
+
+    test(
+        'pro-rates extras against the full bill when unclaimed items ride '
+        'with the payer', () {
+      // The split-link rule: a claims 25 of the 100 in items, so their
+      // tax+tip share is exactly 25% — no matter how much is still unclaimed.
+      final result = buildItemizedAllocations(
+        lineItems: const [
+          ItemizedLineItem(total: 25, assignedMemberIds: ['a']),
+          ItemizedLineItem(total: 75, assignedMemberIds: []),
+        ],
+        tax: 8,
+        tip: 12,
+        unassignedMemberId: 'payer',
+      );
+
+      final amounts = amountsByMember(result.allocations);
+      expect(amounts['a'], 30);
+      expect(amounts['payer'], 90);
+      expect(sumAllocations(result.allocations), 120);
     });
 
     test('falls back to an even extras split when items subtotal is zero', () {

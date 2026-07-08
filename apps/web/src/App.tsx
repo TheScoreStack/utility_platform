@@ -33,6 +33,7 @@ import MeetListPage from "./pages/MeetListPage";
 import MeetEventPage from "./pages/MeetEventPage";
 import MeetRespondPage from "./pages/MeetRespondPage";
 import MeetJoinPage from "./pages/MeetJoinPage";
+import SplitClaimPage from "./pages/SplitClaimPage";
 import { useHarmonyLedgerAccess } from "./modules/useHarmonyLedgerAccess";
 import { useStackTimeAccess } from "./modules/useStackTimeAccess";
 import { getInitials, seedAvatar } from "./lib/avatarPalette";
@@ -274,6 +275,12 @@ const App = () => {
   // so they get a standalone page with no Authenticator and no Router.
   if (window.location.pathname.startsWith("/m/")) {
     return <MeetRespondPage />;
+  }
+
+  // Split links (/s/<shareId>) work the same way: guests claim their receipt
+  // items and pay without an account, so no Authenticator and no Router.
+  if (window.location.pathname.startsWith("/s/")) {
+    return <SplitClaimPage />;
   }
 
   switch (window.location.pathname) {

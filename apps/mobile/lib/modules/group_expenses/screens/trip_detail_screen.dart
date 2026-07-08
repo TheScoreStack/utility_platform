@@ -386,6 +386,113 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     }
   }
 
+  /// Fetches (auto-creating on first use, like the invite) the expense's
+  /// split link — the public page where guests claim their items and pay
+  /// without an account — and offers it for copying.
+  Future<void> _shareSplitLink(Expense expense) async {
+    try {
+      final data =
+          await widget.api.get(
+                '/trips/${widget.tripId}/expenses/${expense.expenseId}/split-link',
+              )
+              as Map<String, dynamic>;
+      final link = data['link'] as Map<String, dynamic>?;
+      final shareId = link?['shareId'] as String?;
+      if (shareId == null || shareId.isEmpty) {
+        throw const ApiException('Split link is unavailable', 500);
+      }
+      if (!mounted) return;
+
+      // Same claim route as the web app (App.tsx: /s/<shareId>).
+      final splitUrl = '$_appBaseUrl/s/$shareId';
+      final action = await showModalBottomSheet<String>(
+        context: context,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Split ${expense.description}',
+                  style: Theme.of(sheetContext).textTheme.titleMedium,
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Anyone with this link can pick the items they had, see '
+                  'their share of tax & tip, and pay you — no account or '
+                  'app needed.',
+                  style: TextStyle(fontSize: 13, color: Colors.white70),
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: AppColors.scaffold,
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Text(
+                    splitUrl,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFFA5B4FC),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton.icon(
+                  onPressed: () async {
+                    await Clipboard.setData(ClipboardData(text: splitUrl));
+                    if (sheetContext.mounted) {
+                      Navigator.of(sheetContext).pop('copied');
+                    }
+                  },
+                  icon: const Icon(Icons.copy_rounded, size: 18),
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                  ),
+                  label: const Text('Copy link'),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(sheetContext).pop('revoke'),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.danger,
+                  ),
+                  child: const Text(
+                    'Revoke link — the current link stops working',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      if (!mounted) return;
+      if (action == 'copied') {
+        showAppSnackBar(context, 'Split link copied', success: true);
+      } else if (action == 'revoke') {
+        await widget.api.delete(
+          '/trips/${widget.tripId}/expenses/${expense.expenseId}/split-link',
+        );
+        if (!mounted) return;
+        showAppSnackBar(
+          context,
+          'Split link revoked — sharing again creates a fresh one',
+          success: true,
+        );
+      }
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not load the split link.', error: true);
+    }
+  }
+
   /// Adds a member — `{'userId': …}` for someone already on the app, or
   /// `{'name': …}` for a placeholder they can claim later via the invite link.
   Future<void> _addMember(Map<String, dynamic> entry, String displayName) async {
@@ -793,6 +900,16 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 title: const Text('View receipt'),
                 onTap: () => Navigator.of(sheetContext).pop('receipt'),
               ),
+            if (expense.lineItems?.isNotEmpty ?? false)
+              ListTile(
+                leading: const Icon(Icons.link_rounded),
+                title: const Text('Split link'),
+                subtitle: const Text(
+                  'Let anyone claim their items and pay — no account needed.',
+                  style: TextStyle(fontSize: 12, color: Colors.white54),
+                ),
+                onTap: () => Navigator.of(sheetContext).pop('split-link'),
+              ),
             // Anyone can duplicate — it creates their own new expense.
             ListTile(
               leading: const Icon(Icons.copy_all_rounded),
@@ -838,6 +955,8 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
     if (action == null || !mounted) return;
     if (action == 'receipt') {
       await _openReceipt(expense);
+    } else if (action == 'split-link') {
+      await _shareSplitLink(expense);
     } else if (action == 'duplicate') {
       await _duplicateExpense(expense);
     } else if (action == 'edit') {
@@ -1747,9 +1866,11 @@ class _ExpenseCardState extends State<_ExpenseCard> {
                                 style: const TextStyle(fontSize: 13),
                               ),
                               Text(
-                                item.assignedMemberIds
-                                    .map(_memberName)
-                                    .join(', '),
+                                item.assignedMemberIds.isEmpty
+                                    ? 'unclaimed'
+                                    : item.assignedMemberIds
+                                          .map(_memberName)
+                                          .join(', '),
                                 style: const TextStyle(
                                   fontSize: 12,
                                   color: Colors.white54,

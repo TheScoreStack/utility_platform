@@ -305,7 +305,19 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   double _parseAmount(TextEditingController controller) =>
       double.tryParse(controller.text.trim().replaceAll(',', '.')) ?? 0;
 
-  ItemizedAllocationResult _computeResult() {
+  /// Best guess at the payer before the confirm sheet asks: the recorded
+  /// payer when editing, otherwise the signed-in user. Unassigned items are
+  /// previewed against this member.
+  String get _previewPayerId {
+    final memberIds = _members.map((member) => member.memberId).toSet();
+    final initial = widget.initialExpense?.paidByMemberId;
+    if (initial != null && memberIds.contains(initial)) return initial;
+    return memberIds.contains(widget.summary.currentUserId)
+        ? widget.summary.currentUserId
+        : _members.first.memberId;
+  }
+
+  ItemizedAllocationResult _computeResult({String? payerId}) {
     return buildItemizedAllocations(
       lineItems: _items
           .map(
@@ -318,20 +330,22 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       tax: _parseAmount(_taxController),
       tip: _parseAmount(_tipController),
       extrasSplitMode: _extrasSplitMode,
+      // Unassigned items ride with the payer (same rule the server applies)
+      // until someone claims them via the split link.
+      unassignedMemberId: payerId ?? _previewPayerId,
     );
   }
 
   /// Null when saving is allowed; otherwise the reason shown on the button.
   String? _saveBlockedReason(ItemizedAllocationResult result) {
     if (_items.isEmpty) return 'Add at least one item';
-    if (_items.any(
-      (item) => item.amount > 0 && item.assignedMemberIds.isEmpty,
-    )) {
-      return 'Assign everyone to their items first';
-    }
     if (result.grandTotal <= 0) return 'Enter item amounts';
     return null;
   }
+
+  int get _unassignedItemCount => _items
+      .where((item) => item.amount > 0 && item.assignedMemberIds.isEmpty)
+      .length;
 
   void _assignAll(bool everyone) {
     setState(() {
@@ -367,6 +381,8 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     final description = _descriptionController.text.trim();
     final sharedWith = <String>{
       for (final item in _items) ...item.assignedMemberIds,
+      // Unassigned items ride with the payer until claimed via split link.
+      if (_unassignedItemCount > 0) payerId,
     };
 
     return {
@@ -387,8 +403,10 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       'allocations': result.allocations
           .map((a) => {'memberId': a.memberId, 'amount': a.amount})
           .toList(),
+      // Unassigned items are sent too — they stay with the payer until
+      // someone claims them (blank never-filled rows are dropped).
       'lineItems': _items
-          .where((item) => item.assignedMemberIds.isNotEmpty)
+          .where((item) => item.amount > 0 || item.description.isNotEmpty)
           .map(
             (item) => {
               'description': item.description.isEmpty
@@ -415,7 +433,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     required void Function(String) onProgress,
   }) async {
     final tripId = widget.summary.trip.tripId;
-    final result = _computeResult();
+    final result = _computeResult(payerId: payerId);
 
     // The photo normally uploads up front during analysis; this covers the
     // analyze-failed → save-anyway path. Receipts always upload as drafts —
@@ -475,7 +493,8 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       showDragHandle: true,
       builder: (_) => _ConfirmSheet(
         summary: widget.summary,
-        result: _computeResult(),
+        // Recomputed per payer choice: unassigned items follow the payer.
+        resultFor: (payerId) => _computeResult(payerId: payerId),
         currency: _currency,
         onSave: _save,
         editing: _isEditing,
@@ -752,6 +771,17 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                   },
                 ),
               ),
+              if (_unassignedItemCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2, bottom: 6),
+                  child: Text(
+                    '$_unassignedItemCount '
+                    '${_unassignedItemCount == 1 ? 'item stays' : 'items stay'} '
+                    'with the payer until claimed — share a split link after '
+                    'saving so people can pick their own items.',
+                    style: const TextStyle(fontSize: 12, color: Colors.white70),
+                  ),
+                ),
               OutlinedButton.icon(
                 onPressed: _addItem,
                 icon: const Icon(Icons.add_rounded),
@@ -892,7 +922,7 @@ enum _SavePhase { idle, working, failed }
 /// then upload + save with inline progress and retry.
 class _ConfirmSheet extends StatefulWidget {
   final TripSummary summary;
-  final ItemizedAllocationResult result;
+  final ItemizedAllocationResult Function(String payerId) resultFor;
   final String currency;
   final Future<ScanSaveResult> Function({
     required String payerId,
@@ -906,7 +936,7 @@ class _ConfirmSheet extends StatefulWidget {
 
   const _ConfirmSheet({
     required this.summary,
-    required this.result,
+    required this.resultFor,
     required this.currency,
     required this.onSave,
     this.editing = false,
@@ -983,6 +1013,7 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
     final membersById = {
       for (final member in widget.summary.members) member.memberId: member,
     };
+    final result = widget.resultFor(_payerId);
     final working = _phase == _SavePhase.working;
 
     return SafeArea(
@@ -1046,7 +1077,7 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
             Flexible(
               child: ListView(
                 shrinkWrap: true,
-                children: widget.result.allocations.map((allocation) {
+                children: result.allocations.map((allocation) {
                   final member = membersById[allocation.memberId];
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 6),
@@ -1094,7 +1125,7 @@ class _ConfirmSheetState extends State<_ConfirmSheet> {
                   style: TextStyle(fontWeight: FontWeight.w600),
                 ),
                 Text(
-                  formatCurrency(widget.result.grandTotal, widget.currency),
+                  formatCurrency(result.grandTotal, widget.currency),
                   style: const TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
