@@ -708,6 +708,15 @@ class _QuickExpenseSheetState extends State<_QuickExpenseSheet> {
                   style: TextStyle(fontSize: 12, color: Colors.white70),
                 ),
               ],
+              const SizedBox(height: 4),
+              TextButton(
+                onPressed: _saving
+                    ? null
+                    : () => Navigator.of(context).pop(),
+                child: Text(
+                  _isEditing ? 'Cancel — keep it as it was' : 'Cancel',
+                ),
+              ),
             ],
           ),
         ),

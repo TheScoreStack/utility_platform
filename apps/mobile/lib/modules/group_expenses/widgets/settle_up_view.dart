@@ -45,10 +45,12 @@ class SettleUpView extends StatelessWidget {
         summary.trip.ownerId == userId;
   }
 
+  /// Without [suggestion] the sheet is free-form: pick who pays whom and
+  /// any amount — for money that moved outside the suggested pairings.
   Future<void> _recordSettlement(
-    BuildContext context,
-    SettlementSuggestion suggestion,
-  ) async {
+    BuildContext context, [
+    SettlementSuggestion? suggestion,
+  ]) async {
     final recorded = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
@@ -448,6 +450,20 @@ class SettleUpView extends StatelessWidget {
               const SizedBox(height: 12),
             ],
           ],
+          // Free-form escape hatch: any payer, any recipient, any amount —
+          // for money that moved outside the suggested pairings.
+          if (summary.members.length > 1) ...[
+            OutlinedButton.icon(
+              onPressed: () => _recordSettlement(context),
+              icon: const Icon(Icons.add_rounded, size: 18),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                side: const BorderSide(color: Colors.white10),
+              ),
+              label: const Text('Record a different payment'),
+            ),
+            const SizedBox(height: 16),
+          ],
           if (confirmed.isNotEmpty) ...[
             Text('History', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
@@ -659,8 +675,9 @@ class _PendingSettlementCard extends StatelessWidget {
   }
 }
 
-/// Records a new settlement from a [suggestion], or — with [initial] — edits
-/// an existing one via PATCH (amount + note; participants stay fixed).
+/// Records a new settlement from a [suggestion], edits an existing one with
+/// [initial] (amount + note; participants stay fixed), or — with neither —
+/// records a free-form payment between any two members.
 class _RecordSettlementSheet extends StatefulWidget {
   final ApiClient api;
   final TripSummary summary;
@@ -677,7 +694,7 @@ class _RecordSettlementSheet extends StatefulWidget {
     this.suggestion,
     this.initial,
     this.onPay,
-  }) : assert(suggestion != null || initial != null);
+  });
 
   @override
   State<_RecordSettlementSheet> createState() => _RecordSettlementSheetState();
@@ -686,22 +703,44 @@ class _RecordSettlementSheet extends StatefulWidget {
 class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
   late final TextEditingController _amountController;
   late final TextEditingController _noteController;
+  late String _fromMemberId;
+  late String _toMemberId;
   bool _saving = false;
   String? _error;
 
   bool get _isEditing => widget.initial != null;
 
-  String get _fromMemberId =>
-      widget.initial?.fromMemberId ?? widget.suggestion!.from;
-
-  String get _toMemberId => widget.initial?.toMemberId ?? widget.suggestion!.to;
+  /// No suggestion, no existing settlement: the caller picks who pays whom.
+  bool get _isFreeForm => widget.initial == null && widget.suggestion == null;
 
   @override
   void initState() {
     super.initState();
-    final amount = widget.initial?.amount ?? widget.suggestion!.amount;
+    final members = widget.summary.members;
+    if (widget.initial != null) {
+      _fromMemberId = widget.initial!.fromMemberId;
+      _toMemberId = widget.initial!.toMemberId;
+    } else if (widget.suggestion != null) {
+      _fromMemberId = widget.suggestion!.from;
+      _toMemberId = widget.suggestion!.to;
+    } else {
+      // Default to "I pay someone" — the most common way people reach for a
+      // custom settlement.
+      final currentUserId = widget.summary.currentUserId;
+      _fromMemberId =
+          members.any((m) => m.memberId == currentUserId)
+          ? currentUserId
+          : members.first.memberId;
+      _toMemberId = members
+          .firstWhere(
+            (m) => m.memberId != _fromMemberId,
+            orElse: () => members.first,
+          )
+          .memberId;
+    }
+    final amount = widget.initial?.amount ?? widget.suggestion?.amount;
     _amountController = TextEditingController(
-      text: amount.toStringAsFixed(2),
+      text: amount?.toStringAsFixed(2) ?? '',
     );
     _noteController = TextEditingController(text: widget.initial?.note ?? '');
   }
@@ -722,6 +761,52 @@ class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
 
   double get _enteredAmount =>
       double.tryParse(_amountController.text.trim().replaceAll(',', '.')) ?? 0;
+
+  Widget _memberDropdown({
+    required String label,
+    required String value,
+    required void Function(String) onChanged,
+  }) {
+    return Row(
+      children: [
+        SizedBox(width: 52, child: Text(label, style: eyebrowStyle())),
+        Expanded(
+          child: DropdownButton<String>(
+            value: value,
+            isExpanded: true,
+            onChanged: _saving
+                ? null
+                : (next) {
+                    if (next != null) onChanged(next);
+                  },
+            items: widget.summary.members
+                .map(
+                  (member) => DropdownMenuItem(
+                    value: member.memberId,
+                    child: Row(
+                      children: [
+                        MemberAvatar(
+                          memberId: member.memberId,
+                          displayName: member.displayName,
+                          radius: 11,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            member.displayName,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
+      ],
+    );
+  }
 
   /// "Pay first, then record" — shown when the signed-in user is the payer
   /// and the recipient has payment handles. Preferred method leads.
@@ -820,6 +905,10 @@ class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
       setState(() => _error = 'Enter an amount greater than zero.');
       return;
     }
+    if (_fromMemberId == _toMemberId) {
+      setState(() => _error = 'Pick two different people.');
+      return;
+    }
     final note = _noteController.text.trim();
 
     setState(() {
@@ -879,10 +968,29 @@ class _RecordSettlementSheetState extends State<_RecordSettlementSheet> {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 4),
-            Text(
-              '${_name(_fromMemberId)} pays ${_name(_toMemberId)}',
-              style: const TextStyle(fontSize: 13, color: Colors.white70),
-            ),
+            if (_isFreeForm) ...[
+              const Text(
+                'Any amount, between anyone — useful when money moved '
+                'outside the suggestions.',
+                style: TextStyle(fontSize: 13, color: Colors.white70),
+              ),
+              const SizedBox(height: 12),
+              _memberDropdown(
+                label: 'FROM',
+                value: _fromMemberId,
+                onChanged: (value) => setState(() => _fromMemberId = value),
+              ),
+              const SizedBox(height: 8),
+              _memberDropdown(
+                label: 'TO',
+                value: _toMemberId,
+                onChanged: (value) => setState(() => _toMemberId = value),
+              ),
+            ] else
+              Text(
+                '${_name(_fromMemberId)} pays ${_name(_toMemberId)}',
+                style: const TextStyle(fontSize: 13, color: Colors.white70),
+              ),
             if (_isEditing && widget.initial!.confirmedAt != null) ...[
               const SizedBox(height: 6),
               const Text(

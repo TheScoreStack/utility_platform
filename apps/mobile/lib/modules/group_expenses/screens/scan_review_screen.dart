@@ -527,6 +527,16 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
               : (_isManual ? 'New itemized expense' : 'Scan receipt'),
         ),
         centerTitle: false,
+        // Editing gets an explicit way out; scan mode can't have one here —
+        // the floating receipt thumbnail overlaps the actions area.
+        actions: _isEditing
+            ? [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+              ]
+            : null,
       ),
       body: LayoutBuilder(
         builder: (context, constraints) => Stack(
