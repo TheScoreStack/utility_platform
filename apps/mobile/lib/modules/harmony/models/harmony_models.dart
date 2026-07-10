@@ -12,11 +12,17 @@ class HarmonyAccess {
   final bool canWrite;
   final bool isAdmin;
 
+  /// The caller's own access record id (to mark "you" in the member list).
+  final String? currentAccessId;
+  final List<HarmonyMember> members;
+
   const HarmonyAccess({
     required this.allowed,
     this.role,
     required this.canWrite,
     required this.isAdmin,
+    this.currentAccessId,
+    this.members = const [],
   });
 
   factory HarmonyAccess.fromJson(Map<String, dynamic> json) => HarmonyAccess(
@@ -25,7 +31,63 @@ class HarmonyAccess {
     // Older API responses predate canWrite; treat missing as writable.
     canWrite: json['canWrite'] != false,
     isAdmin: json['isAdmin'] == true,
+    currentAccessId: json['currentAccessId'] as String?,
+    members: [
+      for (final member in (json['members'] as List? ?? []))
+        HarmonyMember.fromJson(member as Map<String, dynamic>),
+    ],
   );
+}
+
+class HarmonyMember {
+  final String accessId;
+  final String? userId;
+  final String? email;
+  final String? displayName;
+
+  /// VIEWER, MEMBER, or ADMIN.
+  final String role;
+  final String? addedByName;
+
+  const HarmonyMember({
+    required this.accessId,
+    this.userId,
+    this.email,
+    this.displayName,
+    required this.role,
+    this.addedByName,
+  });
+
+  String get label => displayName ?? email ?? userId ?? accessId;
+
+  factory HarmonyMember.fromJson(Map<String, dynamic> json) => HarmonyMember(
+    accessId: json['accessId'] as String,
+    userId: json['userId'] as String?,
+    email: json['email'] as String?,
+    displayName: json['displayName'] as String?,
+    role:
+        (json['role'] as String?) ??
+        (json['isAdmin'] == true ? 'ADMIN' : 'MEMBER'),
+    addedByName: json['addedByName'] as String?,
+  );
+}
+
+/// A user profile hit from `/users?query=` (for granting access).
+class HarmonyUserResult {
+  final String userId;
+  final String? displayName;
+  final String? email;
+
+  const HarmonyUserResult({required this.userId, this.displayName, this.email});
+
+  String get label => displayName ?? email ?? userId;
+
+  factory HarmonyUserResult.fromJson(Map<String, dynamic> json) =>
+      HarmonyUserResult(
+        userId: json['userId'] as String,
+        displayName: json['displayName'] as String?,
+        email: json['email'] as String?,
+      );
 }
 
 class HarmonyGroup {

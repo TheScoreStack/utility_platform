@@ -13,6 +13,40 @@ class HarmonyApi {
     return HarmonyAccess.fromJson(data as Map<String, dynamic>);
   }
 
+  /// Grants ledger access to an existing user account (admin only).
+  Future<HarmonyMember> addAccess({
+    required String userId,
+    required String role,
+  }) async {
+    final data = await _api.post('/harmony-ledger/access', {
+      'userId': userId,
+      'role': role,
+    });
+    return HarmonyMember.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Changes another member's role (admin only; not your own).
+  Future<HarmonyMember> updateAccessRole(String accessId, String role) async {
+    final data = await _api.patch('/harmony-ledger/access/$accessId', {
+      'role': role,
+    });
+    return HarmonyMember.fromJson(data as Map<String, dynamic>);
+  }
+
+  Future<void> removeAccess(String accessId) =>
+      _api.delete('/harmony-ledger/access/$accessId');
+
+  /// Searches user accounts by name or email (min 2 characters server-side).
+  Future<List<HarmonyUserResult>> searchUsers(String query) async {
+    final data =
+        await _api.get('/users?query=${Uri.encodeQueryComponent(query)}')
+            as Map<String, dynamic>;
+    return [
+      for (final user in (data['users'] as List? ?? []))
+        HarmonyUserResult.fromJson(user as Map<String, dynamic>),
+    ];
+  }
+
   Future<HarmonyLedgerData> getLedger() async {
     final data = await _api.get('/harmony-ledger/entries');
     return HarmonyLedgerData.fromJson(data as Map<String, dynamic>);

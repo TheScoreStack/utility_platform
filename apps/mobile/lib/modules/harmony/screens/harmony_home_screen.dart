@@ -8,6 +8,7 @@ import '../models/harmony_models.dart';
 import '../widgets/entry_row.dart';
 import '../widgets/entry_sheet.dart';
 import 'group_detail_screen.dart';
+import 'members_screen.dart';
 import 'statements_screen.dart';
 import 'transfers_screen.dart';
 
@@ -133,6 +134,12 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
         .then((_) => _load());
   }
 
+  void _openMembers() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(builder: (_) => MembersScreen(api: widget.api)),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final data = _data;
@@ -141,6 +148,11 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
       appBar: AppBar(
         title: const Text('Harmony Collective'),
         actions: [
+          IconButton(
+            tooltip: 'Members',
+            icon: const Icon(Icons.group_rounded),
+            onPressed: _openMembers,
+          ),
           IconButton(
             tooltip: 'Group transfers',
             icon: const Icon(Icons.swap_horiz_rounded),
