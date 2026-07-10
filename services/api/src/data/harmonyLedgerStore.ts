@@ -95,9 +95,11 @@ export interface UpdateAccessRecordInput {
   role?: HarmonyLedgerRole;
 }
 
-// Records written before roles existed only carry isAdmin.
+// Two effective tiers: ADMIN runs the ledger, everyone else is a VIEWER.
+// Legacy records may carry only isAdmin, or a stored MEMBER role from the
+// brief three-tier era — both normalize here so consumers never see MEMBER.
 const roleFromItem = (item: Record<string, unknown>): HarmonyLedgerRole =>
-  (item.role as HarmonyLedgerRole) ?? (item.isAdmin ? "ADMIN" : "MEMBER");
+  item.role === "ADMIN" || item.isAdmin ? "ADMIN" : "VIEWER";
 
 const mapAccess = (item: Record<string, unknown>): HarmonyLedgerAccessRecord => {
   const role = roleFromItem(item);

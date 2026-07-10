@@ -8,12 +8,11 @@ import '../../../core/app_theme.dart';
 import '../harmony_api.dart';
 import '../models/harmony_models.dart';
 
-const _roleLabels = {'VIEWER': 'Viewer', 'MEMBER': 'Member', 'ADMIN': 'Admin'};
+const _roleLabels = {'VIEWER': 'Viewer', 'ADMIN': 'Admin'};
 
 const _roleHelpers = {
-  'VIEWER': 'Can browse the ledger but not change it',
-  'MEMBER': 'Can record entries, transfers, and imports',
-  'ADMIN': 'Member powers plus people and group management',
+  'VIEWER': 'Sees the overview — nothing else',
+  'ADMIN': 'Full access: ledger, statements, people',
 };
 
 /// Who has access to the ledger. Everyone can see the list; admins can add

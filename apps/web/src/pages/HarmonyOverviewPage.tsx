@@ -72,9 +72,10 @@ const SkeletonHero = () => (
 const HarmonyOverviewPage = () => {
   const { data, isLoading } = useHarmonyLedgerOverview();
   const { data: accessData } = useHarmonyLedgerAccess();
-  const allowed = accessData?.allowed ?? false;
-  const statementsQuery = useHarmonyStatements(allowed);
-  const entriesQuery = useHarmonyLedgerEntries(allowed);
+  const isAdmin = accessData?.isAdmin ?? false;
+  // Statements and full entries are admin-only endpoints.
+  const statementsQuery = useHarmonyStatements(isAdmin);
+  const entriesQuery = useHarmonyLedgerEntries(isAdmin);
 
   const statements = statementsQuery.data?.statements;
   const pendingReview = useMemo(
@@ -178,7 +179,7 @@ const HarmonyOverviewPage = () => {
     <div className="hl-page">
       <HarmonySubNav />
 
-      {(pendingReview > 0 || failedCount > 0) && (
+      {isAdmin && (pendingReview > 0 || failedCount > 0) && (
         <Link
           to="/harmony-ledger/statements"
           className={`hl-nudge ov-rise${pendingReview === 0 ? " hl-nudge--failed" : ""}`}
@@ -245,9 +246,11 @@ const HarmonyOverviewPage = () => {
           </div>
         </div>
 
-        <Link to="/harmony-ledger/ledger" className="hl-hero__cta">
-          Open the ledger →
-        </Link>
+        {isAdmin && (
+          <Link to="/harmony-ledger/ledger" className="hl-hero__cta">
+            Open the ledger →
+          </Link>
+        )}
       </section>
 
       <section className="hl-section ov-rise ov-rise-2">
@@ -280,13 +283,8 @@ const HarmonyOverviewPage = () => {
                 : negative
                   ? "hl-group--owe"
                   : "hl-group--neutral";
-              return (
-                <Link
-                  key={group.groupId}
-                  to={`/harmony-ledger/ledger?group=${encodeURIComponent(group.groupId)}`}
-                  className={`hl-group ${tintClass}`}
-                  style={{ animationDelay: `${0.08 * idx}s` }}
-                >
+              const cardInner = (
+                <>
                   <div className="hl-group__head">
                     <span
                       className="hl-group__seal"
@@ -318,7 +316,27 @@ const HarmonyOverviewPage = () => {
                       style={{ width: `${barWidth}%` }}
                     />
                   </div>
+                </>
+              );
+              // Drill-down goes to the admin-only ledger; viewers get a
+              // plain card.
+              return isAdmin ? (
+                <Link
+                  key={group.groupId}
+                  to={`/harmony-ledger/ledger?group=${encodeURIComponent(group.groupId)}`}
+                  className={`hl-group ${tintClass}`}
+                  style={{ animationDelay: `${0.08 * idx}s` }}
+                >
+                  {cardInner}
                 </Link>
+              ) : (
+                <div
+                  key={group.groupId}
+                  className={`hl-group ${tintClass}`}
+                  style={{ animationDelay: `${0.08 * idx}s` }}
+                >
+                  {cardInner}
+                </div>
               );
             })}
           </div>

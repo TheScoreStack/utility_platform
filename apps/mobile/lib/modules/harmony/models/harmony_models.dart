@@ -259,6 +259,26 @@ class HarmonyTransfer {
       );
 }
 
+/// The `/harmony-ledger/overview` response: totals and group summaries
+/// without entry-level detail. This is all a viewer can see.
+class HarmonyOverview {
+  final HarmonyTotals totals;
+  final List<HarmonyGroupSummary> groupSummaries;
+
+  const HarmonyOverview({required this.totals, required this.groupSummaries});
+
+  factory HarmonyOverview.fromJson(Map<String, dynamic> json) =>
+      HarmonyOverview(
+        totals: HarmonyTotals.fromJson(
+          (json['totals'] as Map<String, dynamic>?) ?? {},
+        ),
+        groupSummaries: [
+          for (final summary in (json['groups'] as List? ?? []))
+            HarmonyGroupSummary.fromJson(summary as Map<String, dynamic>),
+        ],
+      );
+}
+
 class HarmonyLedgerData {
   final List<HarmonyEntry> entries;
   final HarmonyTotals totals;

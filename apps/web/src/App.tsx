@@ -22,6 +22,8 @@ import TermsPage from "./pages/TermsPage";
 import { modules } from "./modules/registry";
 import { WorkspaceBadgeIcon } from "./components/icons/UtilityIcons";
 import HarmonyLedgerPage from "./pages/HarmonyLedgerPage";
+import HarmonyManagePage from "./pages/HarmonyManagePage";
+import HarmonyPeoplePage from "./pages/HarmonyPeoplePage";
 import HarmonyOverviewPage from "./pages/HarmonyOverviewPage";
 import HarmonyStatementsPage from "./pages/HarmonyStatementsPage";
 import HarmonyStatementReviewPage from "./pages/HarmonyStatementReviewPage";
@@ -206,6 +208,8 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
             <Route path="overview" element={<HarmonyOverviewPage />} />
             <Route path="ledger" element={<HarmonyLedgerPage />} />
             <Route path="statements" element={<HarmonyStatementsPage />} />
+            <Route path="manage" element={<HarmonyManagePage />} />
+            <Route path="people" element={<HarmonyPeoplePage />} />
             <Route
               path="statements/:statementId"
               element={<HarmonyStatementReviewPage />}

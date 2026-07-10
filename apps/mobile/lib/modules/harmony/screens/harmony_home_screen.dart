@@ -28,6 +28,7 @@ class HarmonyHomeScreen extends StatefulWidget {
 
 class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
   HarmonyLedgerData? _data;
+  HarmonyOverview? _overview;
   List<HarmonyStatement>? _statements;
   bool _loading = true;
   String? _error;
@@ -41,6 +42,16 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
   Future<void> _load() async {
     setState(() => _error = null);
     try {
+      // Viewers only get the overview endpoint; the rest is admin-only.
+      if (!widget.canWrite) {
+        final overview = await widget.api.getOverview();
+        if (!mounted) return;
+        setState(() {
+          _overview = overview;
+          _loading = false;
+        });
+        return;
+      }
       final results = await Future.wait([
         widget.api.getLedger(),
         widget.api.listStatements(),
@@ -153,16 +164,18 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
             icon: const Icon(Icons.group_rounded),
             onPressed: _openMembers,
           ),
-          IconButton(
-            tooltip: 'Group transfers',
-            icon: const Icon(Icons.swap_horiz_rounded),
-            onPressed: _openTransfers,
-          ),
-          IconButton(
-            tooltip: 'Statement imports',
-            icon: const Icon(Icons.upload_file_rounded),
-            onPressed: _openStatements,
-          ),
+          if (widget.canWrite) ...[
+            IconButton(
+              tooltip: 'Group transfers',
+              icon: const Icon(Icons.swap_horiz_rounded),
+              onPressed: _openTransfers,
+            ),
+            IconButton(
+              tooltip: 'Statement imports',
+              icon: const Icon(Icons.upload_file_rounded),
+              onPressed: _openStatements,
+            ),
+          ],
         ],
       ),
       floatingActionButton: data == null || !widget.canWrite
@@ -190,6 +203,22 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
               child: ListView(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
                 children: [
+                  if (!widget.canWrite && _overview != null) ...[
+                    _netCard(_overview!.totals),
+                    const SizedBox(height: 16),
+                    Text('GROUPS', style: eyebrowStyle()),
+                    const SizedBox(height: 8),
+                    ...(() {
+                      final summaries = [..._overview!.groupSummaries]
+                        ..sort((a, b) => b.net.abs().compareTo(a.net.abs()));
+                      return summaries.map(_groupRow);
+                    })(),
+                    if (_overview!.groupSummaries.isEmpty)
+                      const Text(
+                        'No group activity yet.',
+                        style: TextStyle(color: Colors.white54),
+                      ),
+                  ],
                   if (data != null) ...[
                     _netCard(data.totals),
                     ..._reviewNudge(),
@@ -328,7 +357,8 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
       ),
       child: ListTile(
         dense: true,
-        onTap: () => _openGroup(summary),
+        // Group drill-down needs the admin-only entries endpoint.
+        onTap: widget.canWrite ? () => _openGroup(summary) : null,
         title: Text(summary.name),
         subtitle: Text(
           'in ${formatCurrency(summary.inflow, 'USD')} · '
@@ -346,7 +376,8 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
                 color: positive ? AppColors.positive : AppColors.danger,
               ),
             ),
-            const Icon(Icons.chevron_right_rounded, color: Colors.white38),
+            if (widget.canWrite)
+              const Icon(Icons.chevron_right_rounded, color: Colors.white38),
           ],
         ),
       ),

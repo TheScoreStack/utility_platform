@@ -47,9 +47,16 @@ class HarmonyApi {
     ];
   }
 
+  /// Full ledger detail — admin-only on the server.
   Future<HarmonyLedgerData> getLedger() async {
     final data = await _api.get('/harmony-ledger/entries');
     return HarmonyLedgerData.fromJson(data as Map<String, dynamic>);
+  }
+
+  /// Totals and group summaries — available to every role.
+  Future<HarmonyOverview> getOverview() async {
+    final data = await _api.get('/harmony-ledger/overview');
+    return HarmonyOverview.fromJson(data as Map<String, dynamic>);
   }
 
   Future<HarmonyEntry> createEntry({

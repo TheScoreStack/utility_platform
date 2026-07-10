@@ -97,9 +97,7 @@ const HarmonyStatementsPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: accessData, isLoading: accessLoading } = useHarmonyLedgerAccess();
-  // Older API responses predate canWrite; treat missing as writable.
-  const canWrite = accessData?.canWrite !== false;
-  const statementsQuery = useHarmonyStatements(accessData?.allowed ?? false);
+  const statementsQuery = useHarmonyStatements(accessData?.isAdmin ?? false);
 
   const [sourceType, setSourceType] = useState<HarmonyStatementSourceType>("BANK");
   const [file, setFile] = useState<File | null>(null);
@@ -314,17 +312,19 @@ const HarmonyStatementsPage = () => {
     );
   }
 
-  if (!accessData?.allowed) {
+  if (!accessData?.allowed || !accessData.isAdmin) {
     return (
       <div className="hl-page">
         <HarmonySubNav />
         <section className="hl-hero">
           <span className="hl-hero__eyebrow">Harmony Collective · private</span>
           <h1 className="hl-hero__title">
-            Invite-only <em>workspace.</em>
+            Admins only <em>back here.</em>
           </h1>
           <p className="hl-hero__net">
-            If you should have access, ask Hunter to add you on the Ledger page.
+            {accessData?.allowed
+              ? "Statement imports are managed by admins."
+              : "If you should have access, ask Hunter to add you."}
           </p>
           <div className="hl-hero__rule" aria-hidden="true" />
         </section>
@@ -338,7 +338,6 @@ const HarmonyStatementsPage = () => {
     <div className="hl-page">
       <HarmonySubNav />
 
-      {canWrite && (
       <section className="card">
         <div className="section-title">
           <div>
@@ -423,7 +422,6 @@ const HarmonyStatementsPage = () => {
           </button>
         </form>
       </section>
-      )}
 
       <section className="card">
         <div className="section-title">
@@ -514,7 +512,6 @@ const HarmonyStatementsPage = () => {
                         )}
                       </td>
                       <td className="entry-actions">
-                        {canWrite && (
                         <div className="hl-txn-actions">
                           {statement.status === "FAILED" && (
                             <button
@@ -541,7 +538,6 @@ const HarmonyStatementsPage = () => {
                             Delete
                           </button>
                         </div>
-                        )}
                       </td>
                     </tr>
                   );

@@ -130,8 +130,6 @@ const HarmonyStatementReviewPage = () => {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { data: accessData, isLoading: accessLoading } = useHarmonyLedgerAccess();
-  // Older API responses predate canWrite; treat missing as writable.
-  const canWrite = accessData?.canWrite !== false;
   const detailQuery = useHarmonyStatementDetail(
     statementId,
     accessData?.allowed ?? false
@@ -341,17 +339,19 @@ const HarmonyStatementReviewPage = () => {
     );
   }
 
-  if (!accessData?.allowed) {
+  if (!accessData?.allowed || !accessData.isAdmin) {
     return (
       <div className="hl-page">
         <HarmonySubNav />
         <section className="hl-hero">
           <span className="hl-hero__eyebrow">Harmony Collective · private</span>
           <h1 className="hl-hero__title">
-            Invite-only <em>workspace.</em>
+            Admins only <em>back here.</em>
           </h1>
           <p className="hl-hero__net">
-            If you should have access, ask Hunter to add you on the Ledger page.
+            {accessData?.allowed
+              ? "Statement review is managed by admins."
+              : "If you should have access, ask Hunter to add you."}
           </p>
           <div className="hl-hero__rule" aria-hidden="true" />
         </section>
@@ -506,16 +506,14 @@ const HarmonyStatementReviewPage = () => {
             >
               View original
             </button>
-            {canWrite && (
-              <button
-                type="button"
-                className="primary"
-                onClick={handleConfirmAll}
-                disabled={bulkBusy || counts.pending === 0}
-              >
-                {bulkBusy ? "Confirming…" : "Accept all suggestions"}
-              </button>
-            )}
+            <button
+              type="button"
+              className="primary"
+              onClick={handleConfirmAll}
+              disabled={bulkBusy || counts.pending === 0}
+            >
+              {bulkBusy ? "Confirming…" : "Accept all suggestions"}
+            </button>
           </div>
         </div>
         {bulkResult && <p className="muted" style={{ margin: 0 }}>{bulkResult}</p>}
@@ -557,7 +555,7 @@ const HarmonyStatementReviewPage = () => {
                   const edit = edits[txn.txnId];
                   const selectedType = edit?.type ?? txn.suggestedType;
                   const selectedGroup = edit?.groupId ?? txn.suggestedGroupId ?? "";
-                  const rowBusy = bulkBusy || rowBusyId === txn.txnId || !canWrite;
+                  const rowBusy = bulkBusy || rowBusyId === txn.txnId;
                   return (
                     <tr key={txn.txnId}>
                       <td>{formatTxnDate(txn.txnDate)}</td>
@@ -649,28 +647,26 @@ const HarmonyStatementReviewPage = () => {
                         />
                       </td>
                       <td>
-                        {canWrite && (
-                          <div className="hl-txn-actions">
-                            <button
-                              type="button"
-                              className="primary"
-                              onClick={() => handleConfirm(txn)}
-                              disabled={rowBusy}
-                            >
-                              {rowBusyId === txn.txnId && confirmMutation.isPending
-                                ? "Confirming…"
-                                : "Confirm"}
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost"
-                              onClick={() => handleDismiss(txn)}
-                              disabled={rowBusy}
-                            >
-                              Dismiss
-                            </button>
-                          </div>
-                        )}
+                        <div className="hl-txn-actions">
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={() => handleConfirm(txn)}
+                            disabled={rowBusy}
+                          >
+                            {rowBusyId === txn.txnId && confirmMutation.isPending
+                              ? "Confirming…"
+                              : "Confirm"}
+                          </button>
+                          <button
+                            type="button"
+                            className="ghost"
+                            onClick={() => handleDismiss(txn)}
+                            disabled={rowBusy}
+                          >
+                            Dismiss
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -765,7 +761,7 @@ const HarmonyStatementReviewPage = () => {
                       )}
                     </td>
                     <td>
-                      {!canWrite ? null : txn.status === "DISMISSED" ? (
+                      {txn.status === "DISMISSED" ? (
                         <button
                           type="button"
                           className="ghost"

@@ -212,6 +212,10 @@ export interface HarmonyLedgerEntry {
   importStatementId?: string;
 }
 
+/**
+ * VIEWER sees the overview only; ADMIN has full access. MEMBER is a legacy
+ * value old clients may still send — the API normalizes it to VIEWER.
+ */
 export type HarmonyLedgerRole = "VIEWER" | "MEMBER" | "ADMIN";
 
 export interface HarmonyLedgerAccessRecord {

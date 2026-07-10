@@ -1,25 +1,14 @@
 import { FormEvent, Fragment, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError } from "../lib/api";
 import HarmonySubNav from "../components/HarmonySubNav";
-import UserSelect from "../components/UserSelect";
-import { seedAvatar } from "../lib/avatarPalette";
 import {
-  HarmonyLedgerAccessRecord,
-  HarmonyLedgerAccessResponse,
   HarmonyLedgerEntry,
-  HarmonyLedgerEntryType,
-  HarmonyLedgerGroup,
-  HarmonyLedgerGroupSummary,
-  HarmonyLedgerRole,
-  HarmonyLedgerTransfer,
-  HarmonyRecurringCadence,
-  HarmonyRecurringTemplate
+  HarmonyLedgerEntryType
 } from "../types";
 import { useHarmonyLedgerAccess } from "../modules/useHarmonyLedgerAccess";
 import { useHarmonyLedgerEntries } from "../modules/useHarmonyLedgerEntries";
-import { useHarmonyRecurringTemplates } from "../modules/useHarmonyRecurringTemplates";
 import { useConfirm } from "../components/ConfirmDialog";
 
 interface EntryFormState {
@@ -33,36 +22,6 @@ interface EntryFormState {
   memberName: string;
   groupId: string;
 }
-
-interface TransferFormState {
-  fromGroupId: string;
-  toGroupId: string;
-  amount: string;
-  note: string;
-}
-
-interface RecurringFormState {
-  type: HarmonyLedgerEntryType;
-  amount: string;
-  description: string;
-  category: string;
-  groupId: string;
-  cadence: HarmonyRecurringCadence;
-}
-
-const defaultRecurringForm: RecurringFormState = {
-  type: "DONATION",
-  amount: "",
-  description: "",
-  category: "",
-  groupId: "",
-  cadence: "monthly"
-};
-
-const cadenceCopy: Record<HarmonyRecurringCadence, { label: string; unit: string }> = {
-  weekly: { label: "Weekly", unit: "week" },
-  monthly: { label: "Monthly", unit: "month" }
-};
 
 const defaultEntryForm: EntryFormState = {
   type: "DONATION",
@@ -105,12 +64,6 @@ const entryTypeCopy: Record<
 /** Sentinel `group` search-param value for entries with no group allocation. */
 const UNALLOCATED_GROUP = "__unallocated";
 
-const roleCopy: Record<HarmonyLedgerRole, { label: string; helper: string }> = {
-  VIEWER: { label: "Viewer", helper: "Can browse the ledger but not change it" },
-  MEMBER: { label: "Member", helper: "Can record entries, transfers, and imports" },
-  ADMIN: { label: "Admin", helper: "Member powers plus people and group management" }
-};
-
 const formatCurrencyValue = (value: number, currency: string) =>
   new Intl.NumberFormat(undefined, {
     style: "currency",
@@ -142,50 +95,22 @@ const formatDateTime = (value: string) =>
     minute: "2-digit"
   }).format(new Date(value));
 
-const formatShortDate = (value: string) =>
-  new Intl.DateTimeFormat(undefined, {
-    month: "short",
-    day: "numeric"
-  }).format(new Date(value));
-
 const HarmonyLedgerPage = () => {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { data: accessData, isLoading: accessLoading } = useHarmonyLedgerAccess();
-  // Older API responses predate canWrite; treat missing as writable.
-  const canWrite = accessData?.canWrite !== false;
   const [entryForm, setEntryForm] = useState<EntryFormState>(defaultEntryForm);
   const [entryError, setEntryError] = useState<string | null>(null);
-  const [accessError, setAccessError] = useState<string | null>(null);
-  const [transferError, setTransferError] = useState<string | null>(null);
-  const [transferForm, setTransferForm] = useState<TransferFormState>({
-    fromGroupId: "",
-    toGroupId: "",
-    amount: "",
-    note: ""
-  });
   const [menuEntryId, setMenuEntryId] = useState<string | null>(null);
-  const [menuTransferId, setMenuTransferId] = useState<string | null>(null);
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EntryFormState>(defaultEntryForm);
   const [editError, setEditError] = useState<string | null>(null);
-  const [selectedUserId, setSelectedUserId] = useState<string>("");
-  const [newMemberRole, setNewMemberRole] = useState<HarmonyLedgerRole>("MEMBER");
   const [monthFilter, setMonthFilter] = useState("");
   const [searchText, setSearchText] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
   const groupFilter = searchParams.get("group") ?? "";
-  const [newGroupName, setNewGroupName] = useState("");
-  const [addGroupError, setAddGroupError] = useState<string | null>(null);
-  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
-  const [editingGroupName, setEditingGroupName] = useState("");
-  const [groupErrors, setGroupErrors] = useState<Record<string, string>>({});
-  const [recurringForm, setRecurringForm] = useState<RecurringFormState>(defaultRecurringForm);
-  const [recurringError, setRecurringError] = useState<string | null>(null);
-  const [recurringRowErrors, setRecurringRowErrors] = useState<Record<string, string>>({});
 
-  const entriesQuery = useHarmonyLedgerEntries(accessData?.allowed ?? false);
-  const recurringQuery = useHarmonyRecurringTemplates(accessData?.allowed ?? false);
+  const entriesQuery = useHarmonyLedgerEntries(accessData?.isAdmin ?? false);
 
   const entryMutation = useMutation({
     mutationFn: (payload: unknown) =>
@@ -200,50 +125,6 @@ const HarmonyLedgerPage = () => {
         setEntryError(error.message);
       } else {
         setEntryError("Failed to record entry");
-      }
-    }
-  });
-
-  const addAccessMutation = useMutation({
-    mutationFn: (payload: unknown) =>
-      api.post<HarmonyLedgerAccessRecord>("/harmony-ledger/access", payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "access"] });
-      setSelectedUserId("");
-      setNewMemberRole("MEMBER");
-      setAccessError(null);
-    },
-    onError: (error: unknown) => {
-      if (error instanceof ApiError) {
-        setAccessError(error.message);
-      } else {
-        setAccessError("Unable to invite member");
-      }
-    }
-  });
-
-  const removeAccessMutation = useMutation({
-    mutationFn: (accessId: string) => api.delete(`/harmony-ledger/access/${accessId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "access"] });
-    }
-  });
-
-  const updateAccessRoleMutation = useMutation({
-    mutationFn: (payload: { accessId: string; role: HarmonyLedgerRole }) =>
-      api.patch<HarmonyLedgerAccessRecord>(
-        `/harmony-ledger/access/${payload.accessId}`,
-        { role: payload.role }
-      ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "access"] });
-      setAccessError(null);
-    },
-    onError: (error: unknown) => {
-      if (error instanceof ApiError) {
-        setAccessError(error.message);
-      } else {
-        setAccessError("Unable to change role");
       }
     }
   });
@@ -289,188 +170,11 @@ const HarmonyLedgerPage = () => {
     }
   });
 
-  const transferMutation = useMutation({
-    mutationFn: (payload: { fromGroupId?: string; toGroupId?: string; amount: number; note?: string }) =>
-      api.post<HarmonyLedgerTransfer>("/harmony-ledger/transfers", payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "entries"] });
-      setTransferForm({ fromGroupId: "", toGroupId: "", amount: "", note: "" });
-      setTransferError(null);
-    },
-    onError: (error: unknown) => {
-      if (error instanceof ApiError) {
-        setTransferError(error.message);
-      } else {
-        setTransferError("Unable to move funds");
-      }
-    }
-  });
-
-  const deleteTransferMutation = useMutation({
-    mutationFn: (payload: { transferId: string; createdAt: string }) =>
-      api.delete(`/harmony-ledger/transfers/${payload.transferId}`, {
-        createdAt: payload.createdAt
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "entries"] });
-    }
-  });
-
-  const createGroupMutation = useMutation({
-    mutationFn: (payload: { name: string }) =>
-      api.post<HarmonyLedgerGroup>("/harmony-ledger/groups", payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "entries"] });
-      setNewGroupName("");
-      setAddGroupError(null);
-    },
-    onError: (error: unknown) => {
-      if (error instanceof ApiError) {
-        setAddGroupError(error.message);
-      } else {
-        setAddGroupError("Unable to add group");
-      }
-    }
-  });
-
-  const updateGroupMutation = useMutation({
-    mutationFn: (payload: {
-      groupId: string;
-      body: { name?: string; isActive?: boolean };
-    }) =>
-      api.patch<HarmonyLedgerGroup>(
-        `/harmony-ledger/groups/${payload.groupId}`,
-        payload.body
-      ),
-    onMutate: (payload) => {
-      setGroupErrors((prev) => {
-        if (!(payload.groupId in prev)) return prev;
-        const next = { ...prev };
-        delete next[payload.groupId];
-        return next;
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "entries"] });
-      setEditingGroupId(null);
-    },
-    onError: (error: unknown, payload) => {
-      setGroupErrors((prev) => ({
-        ...prev,
-        [payload.groupId]:
-          error instanceof ApiError ? error.message : "Unable to update group"
-      }));
-    }
-  });
-  const busyGroupId = updateGroupMutation.isPending
-    ? updateGroupMutation.variables?.groupId ?? null
-    : null;
-
-  const createRecurringMutation = useMutation({
-    mutationFn: (payload: unknown) =>
-      api.post<HarmonyRecurringTemplate>("/harmony-ledger/recurring", payload),
-    onSuccess: () => {
-      // Entries only change when the schedule fires, so just refresh templates.
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "recurring"] });
-      setRecurringForm(defaultRecurringForm);
-      setRecurringError(null);
-    },
-    onError: (error: unknown) => {
-      if (error instanceof ApiError) {
-        setRecurringError(error.message);
-      } else {
-        setRecurringError("Unable to add recurring entry");
-      }
-    }
-  });
-
-  const clearRecurringRowError = (templateId: string) => {
-    setRecurringRowErrors((prev) => {
-      if (!(templateId in prev)) return prev;
-      const next = { ...prev };
-      delete next[templateId];
-      return next;
-    });
-  };
-
-  const updateRecurringMutation = useMutation({
-    mutationFn: (payload: { templateId: string; body: { isActive?: boolean } }) =>
-      api.patch<HarmonyRecurringTemplate>(
-        `/harmony-ledger/recurring/${payload.templateId}`,
-        payload.body
-      ),
-    onMutate: (payload) => clearRecurringRowError(payload.templateId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "recurring"] });
-    },
-    onError: (error: unknown, payload) => {
-      setRecurringRowErrors((prev) => ({
-        ...prev,
-        [payload.templateId]:
-          error instanceof ApiError ? error.message : "Unable to update recurring entry"
-      }));
-    }
-  });
-
-  const deleteRecurringMutation = useMutation({
-    mutationFn: (templateId: string) =>
-      api.delete(`/harmony-ledger/recurring/${templateId}`),
-    onMutate: (templateId) => clearRecurringRowError(templateId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "recurring"] });
-    },
-    onError: (error: unknown, templateId) => {
-      setRecurringRowErrors((prev) => ({
-        ...prev,
-        [templateId]:
-          error instanceof ApiError ? error.message : "Unable to delete recurring entry"
-      }));
-    }
-  });
-
-  const busyTemplateId = updateRecurringMutation.isPending
-    ? updateRecurringMutation.variables?.templateId ?? null
-    : deleteRecurringMutation.isPending
-      ? deleteRecurringMutation.variables ?? null
-      : null;
-
   const totals = entriesQuery.data?.totals;
   const entriesData = entriesQuery.data;
   const entries = useMemo(() => entriesData?.entries ?? [], [entriesData]);
   const groups = useMemo(() => entriesData?.groups ?? [], [entriesData]);
   const activeGroups = groups.filter((group) => group.isActive);
-  const groupSummaries = useMemo(
-    () => entriesData?.groupSummaries ?? [],
-    [entriesData]
-  );
-  const unallocated = entriesQuery.data?.unallocated;
-  const transfers = entriesQuery.data?.transfers ?? [];
-  const recurringTemplates = recurringQuery.data?.templates ?? [];
-  const groupSummaryMap = useMemo(() => {
-    const map = new Map<string, HarmonyLedgerGroupSummary>();
-    for (const summary of groupSummaries) {
-      map.set(summary.groupId, summary);
-    }
-    return map;
-  }, [groupSummaries]);
-  const groupMetrics = useMemo(() => {
-    if (!groups.length) {
-      return [] as HarmonyLedgerGroupSummary[];
-    }
-    return groups.map((group) =>
-      groupSummaryMap.get(group.groupId) ?? {
-        groupId: group.groupId,
-        name: group.name,
-        donations: 0,
-        income: 0,
-        expenses: 0,
-        reimbursements: 0,
-        transfersIn: 0,
-        transfersOut: 0,
-        net: 0
-      }
-    );
-  }, [groups, groupSummaryMap]);
   const metricsCurrency = entries[0]?.currency ?? "USD";
   const monthOptions = useMemo(() => {
     const keys = new Set<string>();
@@ -547,12 +251,6 @@ const HarmonyLedgerPage = () => {
     sums.net = sums.donations + sums.income + sums.reimbursements - sums.expenses;
     return sums;
   }, [filteredEntries]);
-  const unallocatedInflow = unallocated
-    ? unallocated.donations + unallocated.income + unallocated.reimbursements + unallocated.transfersIn
-    : 0;
-  const unallocatedOutflow = unallocated
-    ? unallocated.expenses + unallocated.transfersOut
-    : 0;
 
   const counterpartyLabel = entryTypeCopy[entryForm.type].sourceLabel;
 
@@ -667,58 +365,6 @@ const HarmonyLedgerPage = () => {
     setMenuEntryId(null);
   };
 
-  const handleDeleteTransfer = async (transfer: HarmonyLedgerTransfer) => {
-    const ok = await confirm({
-      title: "Delete this transfer?",
-      body: "This cannot be undone.",
-      confirmLabel: "Delete",
-      tone: "danger"
-    });
-    if (!ok) return;
-    deleteTransferMutation.mutate({
-      transferId: transfer.transferId,
-      createdAt: transfer.createdAt
-    });
-    setMenuTransferId(null);
-  };
-
-  const handleAccessSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setAccessError(null);
-    if (!selectedUserId) {
-      setAccessError("Select a person to add");
-      return;
-    }
-    addAccessMutation.mutate({
-      userId: selectedUserId,
-      role: newMemberRole
-    });
-  };
-
-  const handleTransferSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setTransferError(null);
-    const amount = Number(transferForm.amount);
-    if (!transferForm.amount || Number.isNaN(amount) || amount <= 0) {
-      setTransferError("Enter a positive transfer amount");
-      return;
-    }
-    if (transferForm.fromGroupId === transferForm.toGroupId) {
-      setTransferError("Choose different source and destination");
-      return;
-    }
-    if (!transferForm.fromGroupId && !transferForm.toGroupId) {
-      setTransferError("Select at least one group to adjust");
-      return;
-    }
-    transferMutation.mutate({
-      fromGroupId: transferForm.fromGroupId || undefined,
-      toGroupId: transferForm.toGroupId || undefined,
-      amount,
-      note: transferForm.note || undefined
-    });
-  };
-
   const clearFilters = () => {
     setMonthFilter("");
     setSearchText("");
@@ -772,195 +418,6 @@ const HarmonyLedgerPage = () => {
     URL.revokeObjectURL(url);
   };
 
-  const handleAddGroup = (event: FormEvent) => {
-    event.preventDefault();
-    setAddGroupError(null);
-    const name = newGroupName.trim();
-    if (!name) {
-      setAddGroupError("Enter a group name");
-      return;
-    }
-    createGroupMutation.mutate({ name });
-  };
-
-  const startRenameGroup = (group: HarmonyLedgerGroup) => {
-    setEditingGroupId(group.groupId);
-    setEditingGroupName(group.name);
-    setGroupErrors((prev) => {
-      if (!(group.groupId in prev)) return prev;
-      const next = { ...prev };
-      delete next[group.groupId];
-      return next;
-    });
-  };
-
-  const cancelRenameGroup = () => {
-    setEditingGroupId(null);
-    setEditingGroupName("");
-  };
-
-  const handleRenameSubmit = (event: FormEvent, group: HarmonyLedgerGroup) => {
-    event.preventDefault();
-    const name = editingGroupName.trim();
-    if (!name) {
-      setGroupErrors((prev) => ({ ...prev, [group.groupId]: "Enter a group name" }));
-      return;
-    }
-    if (name === group.name) {
-      cancelRenameGroup();
-      return;
-    }
-    updateGroupMutation.mutate({ groupId: group.groupId, body: { name } });
-  };
-
-  const toggleGroupActive = (group: HarmonyLedgerGroup) => {
-    updateGroupMutation.mutate({
-      groupId: group.groupId,
-      body: { isActive: !group.isActive }
-    });
-  };
-
-  const handleRecurringSubmit = (event: FormEvent) => {
-    event.preventDefault();
-    setRecurringError(null);
-    const amount = Number(recurringForm.amount);
-    if (!recurringForm.amount || Number.isNaN(amount) || amount <= 0) {
-      setRecurringError("Enter a positive amount");
-      return;
-    }
-    createRecurringMutation.mutate({
-      type: recurringForm.type,
-      amount,
-      description: recurringForm.description || undefined,
-      category: recurringForm.category || undefined,
-      groupId: recurringForm.groupId || undefined,
-      cadence: recurringForm.cadence
-    });
-  };
-
-  const toggleRecurringActive = (template: HarmonyRecurringTemplate) => {
-    updateRecurringMutation.mutate({
-      templateId: template.templateId,
-      body: { isActive: !template.isActive }
-    });
-  };
-
-  const handleDeleteRecurring = async (template: HarmonyRecurringTemplate) => {
-    const ok = await confirm({
-      title: `Delete "${template.description ?? entryTypeCopy[template.type].label}"?`,
-      body: "Future scheduled entries stop. Entries it already posted are kept.",
-      confirmLabel: "Delete",
-      tone: "danger"
-    });
-    if (!ok) return;
-    deleteRecurringMutation.mutate(template.templateId);
-  };
-
-  const renderAccessSection = (data: HarmonyLedgerAccessResponse) => {
-    if (!data.allowed) {
-      return null;
-    }
-
-    return (
-      <section className="card">
-        <div className="section-title">
-          <div>
-            <h2>Harmony Collective Access</h2>
-            <p className="muted">Manage who can view this private ledger.</p>
-          </div>
-        </div>
-        {!data.members?.length ? (
-          <p className="muted">No teammates have access yet.</p>
-        ) : (
-          <div className="list">
-            {data.members?.map((record) => (
-              <div key={record.accessId} className="pill-row">
-                <div>
-                  <p style={{ margin: 0, fontWeight: 600 }}>{record.displayName ?? record.email ?? record.userId}</p>
-                  <p className="muted" style={{ margin: 0 }}>
-                    {record.email || "Pending email"} •{" "}
-                    {roleCopy[record.role ?? (record.isAdmin ? "ADMIN" : "MEMBER")].label}
-                  </p>
-                </div>
-                {data.isAdmin && record.accessId !== data.currentAccessId && (
-                  <div className="hl-txn-actions">
-                    <select
-                      value={record.role ?? (record.isAdmin ? "ADMIN" : "MEMBER")}
-                      onChange={(event) =>
-                        updateAccessRoleMutation.mutate({
-                          accessId: record.accessId,
-                          role: event.target.value as HarmonyLedgerRole
-                        })
-                      }
-                      disabled={updateAccessRoleMutation.isPending}
-                      aria-label={`Role for ${record.displayName ?? record.email ?? record.userId}`}
-                    >
-                      {Object.entries(roleCopy).map(([value, meta]) => (
-                        <option key={value} value={value}>
-                          {meta.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      className="ghost"
-                      type="button"
-                      onClick={() => removeAccessMutation.mutate(record.accessId)}
-                      disabled={removeAccessMutation.isPending}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                )}
-                {record.accessId === data.currentAccessId && (
-                  <span className="pill" style={{ background: "#E0F2FE", color: "#0369a1" }}>
-                    You
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-        <hr />
-        <form onSubmit={handleAccessSubmit} className="list">
-          <UserSelect
-            value={selectedUserId}
-            onChange={setSelectedUserId}
-            disabled={!data.isAdmin}
-          />
-          <div className="input-group">
-            <label htmlFor="access-role">Role</label>
-            <select
-              id="access-role"
-              value={newMemberRole}
-              onChange={(event) =>
-                setNewMemberRole(event.target.value as HarmonyLedgerRole)
-              }
-              disabled={!data.isAdmin}
-            >
-              {Object.entries(roleCopy).map(([value, meta]) => (
-                <option key={value} value={value}>
-                  {meta.label}
-                </option>
-              ))}
-            </select>
-            <p className="muted" style={{ margin: 0 }}>
-              {roleCopy[newMemberRole].helper}.
-            </p>
-          </div>
-          {accessError && <p className="error">{accessError}</p>}
-          <button type="submit" disabled={!data.isAdmin || addAccessMutation.isPending}>
-            Invite member
-          </button>
-          {!data.isAdmin && (
-            <p className="muted" style={{ margin: 0 }}>
-              Only admins can invite others. Ask Hunter to promote you if needed.
-            </p>
-          )}
-        </form>
-      </section>
-    );
-  };
-
   if (accessLoading) {
     return (
       <div className="hl-page">
@@ -975,17 +432,19 @@ const HarmonyLedgerPage = () => {
     );
   }
 
-  if (!accessData?.allowed) {
+  if (!accessData?.allowed || !accessData.isAdmin) {
     return (
       <div className="hl-page">
         <HarmonySubNav />
         <section className="hl-hero">
           <span className="hl-hero__eyebrow">Harmony Collective · private</span>
           <h1 className="hl-hero__title">
-            Invite-only <em>workspace.</em>
+            Admins only <em>back here.</em>
           </h1>
           <p className="hl-hero__net">
-            If you should have access, ask Hunter to add you on the Ledger page.
+            {accessData?.allowed
+              ? "The full ledger is managed by admins — your overview has everything else."
+              : "If you should have access, ask Hunter to add you."}
           </p>
           <div className="hl-hero__rule" aria-hidden="true" />
         </section>
@@ -996,413 +455,27 @@ const HarmonyLedgerPage = () => {
   return (
     <div className="hl-page">
       <HarmonySubNav />
-      <div className="grid-two">
-        <section className="card">
-          <div className="section-title">
-            <div>
-              <h2>{canWrite ? "Record Activity" : "Ledger Totals"}</h2>
-              <p className="muted">
-                {canWrite
-                  ? entryTypeCopy[entryForm.type].helper
-                  : "You have read-only access to Harmony Collective."}
-              </p>
-            </div>
-            {totals && (
-              <div className="pill" style={{ background: "#DCFCE7", color: "#15803d" }}>
-                Net {formatCurrencyValue(totals.net, metricsCurrency)}
-              </div>
-            )}
-          </div>
-          {totals ? (
-            <div className="metrics-row">
-              <div>
-                <p className="muted">Donations</p>
-                <strong>{formatCurrencyValue(totals.donations, metricsCurrency)}</strong>
-              </div>
-              <div>
-                <p className="muted">Income</p>
-                <strong>{formatCurrencyValue(totals.income, metricsCurrency)}</strong>
-              </div>
-              <div>
-                <p className="muted">Expenses</p>
-                <strong>{formatCurrencyValue(totals.expenses, metricsCurrency)}</strong>
-              </div>
-              <div>
-                <p className="muted">Reimbursements</p>
-                <strong>{formatCurrencyValue(totals.reimbursements, metricsCurrency)}</strong>
-              </div>
-            </div>
-          ) : (
-            <p className="muted">No ledger data yet.</p>
-          )}
-          {canWrite && (
-          <form onSubmit={handleEntrySubmit} className="list" style={{ marginTop: "1rem" }}>
-            <div className="input-group">
-              <label htmlFor="entry-type">Type</label>
-              <select
-                id="entry-type"
-                value={entryForm.type}
-                onChange={(event) =>
-                  setEntryForm((prev) => ({ ...prev, type: event.target.value as HarmonyLedgerEntryType }))
-                }
-              >
-                {Object.entries(entryTypeCopy).map(([value, meta]) => (
-                  <option key={value} value={value}>
-                    {meta.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="input-group">
-              <label htmlFor="entry-amount">Amount</label>
-              <input
-                id="entry-amount"
-                type="number"
-                min="0"
-                step="0.01"
-                required
-                value={entryForm.amount}
-                onChange={(event) => setEntryForm((prev) => ({ ...prev, amount: event.target.value }))}
-              />
-            </div>
-            <div className="input-group">
-              <label htmlFor="entry-description">Description</label>
-              <input
-                id="entry-description"
-                value={entryForm.description}
-                placeholder="e.g., Jazz Night fundraiser"
-                onChange={(event) => setEntryForm((prev) => ({ ...prev, description: event.target.value }))}
-              />
-            </div>
-            <div className="input-group">
-              <label htmlFor="entry-source">{counterpartyLabel}</label>
-              <input
-                id="entry-source"
-                value={entryForm.source}
-                onChange={(event) => setEntryForm((prev) => ({ ...prev, source: event.target.value }))}
-              />
-            </div>
-            <div className="input-group">
-              <label htmlFor="entry-group">Group allocation</label>
-              <select
-                id="entry-group"
-                value={entryForm.groupId}
-                onChange={(event) => setEntryForm((prev) => ({ ...prev, groupId: event.target.value }))}
-              >
-                <option value="">General (no group)</option>
-                {activeGroups.map((group) => (
-                  <option key={group.groupId} value={group.groupId}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="input-group">
-              <label htmlFor="entry-category">Category (optional)</label>
-              <input
-                id="entry-category"
-                value={entryForm.category}
-                onChange={(event) => setEntryForm((prev) => ({ ...prev, category: event.target.value }))}
-              />
-            </div>
-            {entryForm.type === "REIMBURSEMENT" && (
-              <div className="input-group">
-                <label htmlFor="entry-member">Member (optional)</label>
-                <input
-                  id="entry-member"
-                  value={entryForm.memberName}
-                  onChange={(event) => setEntryForm((prev) => ({ ...prev, memberName: event.target.value }))}
-                />
-              </div>
-            )}
-            <div className="input-group">
-              <label htmlFor="entry-notes">Notes</label>
-              <textarea
-                id="entry-notes"
-                value={entryForm.notes}
-                onChange={(event) => setEntryForm((prev) => ({ ...prev, notes: event.target.value }))}
-                rows={3}
-              />
-            </div>
-            {entryError && <p className="error">{entryError}</p>}
-            <button type="submit" disabled={entryMutation.isPending}>
-              Save entry
-            </button>
-          </form>
-          )}
-        </section>
-        {renderAccessSection(accessData)}
-      </div>
-
       <section className="card">
         <div className="section-title">
           <div>
-            <h2>Unallocated Funds</h2>
-            <p className="muted">Money not yet assigned to a Harmony group.</p>
+            <h2>Record Activity</h2>
+            <p className="muted">{entryTypeCopy[entryForm.type].helper}</p>
           </div>
-          {unallocated && (
-            <div className="pill" style={{ background: "#E0E7FF", color: "#312E81" }}>
-              {formatCurrencyValue(unallocated.net, metricsCurrency)} net
+          {totals && (
+            <div className="pill" style={{ background: "#DCFCE7", color: "#15803d" }}>
+              Net {formatCurrencyValue(totals.net, metricsCurrency)}
             </div>
           )}
         </div>
-        {unallocated ? (
-          <div className="group-summary-grid">
-            <Link
-              to={`/harmony-ledger/ledger?group=${UNALLOCATED_GROUP}`}
-              className="group-summary-card"
-            >
-              <div className="group-summary-details">
-                <span>Inflow</span>
-                <strong>{formatCurrencyValue(unallocatedInflow, metricsCurrency)}</strong>
-              </div>
-              <div className="group-summary-details">
-                <span>Outflow</span>
-                <strong>{formatCurrencyValue(unallocatedOutflow, metricsCurrency)}</strong>
-              </div>
-              <p className="muted" style={{ marginTop: "0.5rem" }}>
-                Use the group selector in the table below to allocate any of these entries.
-              </p>
-            </Link>
-          </div>
-        ) : (
-          <p className="muted">No unallocated entries yet.</p>
-        )}
-      </section>
-
-      {canWrite && (
-      <section className="card">
-        <div className="section-title">
-          <div>
-            <h2>Transfer Funds</h2>
-            <p className="muted">Shift balance between groups without creating new cash movement.</p>
-          </div>
-        </div>
-        <form onSubmit={handleTransferSubmit} className="list">
+        <form onSubmit={handleEntrySubmit} className="list" style={{ marginTop: "1rem" }}>
           <div className="input-group">
-            <label htmlFor="transfer-from">From (optional)</label>
+            <label htmlFor="entry-type">Type</label>
             <select
-              id="transfer-from"
-              value={transferForm.fromGroupId}
-              onChange={(event) => setTransferForm((prev) => ({ ...prev, fromGroupId: event.target.value }))}
-              disabled={transferMutation.isPending}
-            >
-              <option value="">Unallocated</option>
-              {activeGroups.map((group) => (
-                <option key={group.groupId} value={group.groupId}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="input-group">
-            <label htmlFor="transfer-to">To (optional)</label>
-            <select
-              id="transfer-to"
-              value={transferForm.toGroupId}
-              onChange={(event) => setTransferForm((prev) => ({ ...prev, toGroupId: event.target.value }))}
-              disabled={transferMutation.isPending}
-            >
-              <option value="">Unallocated</option>
-              {activeGroups.map((group) => (
-                <option key={group.groupId} value={group.groupId}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="input-group">
-            <label htmlFor="transfer-amount">Amount</label>
-            <input
-              id="transfer-amount"
-              type="number"
-              min="0"
-              step="0.01"
-              value={transferForm.amount}
-              onChange={(event) => setTransferForm((prev) => ({ ...prev, amount: event.target.value }))}
-              disabled={transferMutation.isPending}
-              required
-            />
-          </div>
-          <div className="input-group">
-            <label htmlFor="transfer-note">Note (optional)</label>
-            <textarea
-              id="transfer-note"
-              rows={2}
-              value={transferForm.note}
-              onChange={(event) => setTransferForm((prev) => ({ ...prev, note: event.target.value }))}
-              disabled={transferMutation.isPending}
-            />
-          </div>
-          {transferError && <p className="error">{transferError}</p>}
-          <button type="submit" disabled={transferMutation.isPending}>
-            Move funds
-          </button>
-          <p className="muted" style={{ margin: 0 }}>
-            Leave either dropdown on &ldquo;Unallocated&rdquo; to move money in or out of the general pool.
-          </p>
-        </form>
-      </section>
-      )}
-
-      {groupMetrics.length > 0 && (
-        <section className="hl-section">
-          <div className="hl-section-head">
-            <h2 className="hl-section-head__title">Group allocations</h2>
-            <span className="hl-section-head__count">
-              {groupMetrics.length} {groupMetrics.length === 1 ? "group" : "groups"}
-            </span>
-          </div>
-          <div className="hl-group-list">
-            {groupMetrics.map((group, idx) => {
-              const palette = seedAvatar(group.groupId);
-              const inflow =
-                group.donations + group.income + group.reimbursements + group.transfersIn;
-              const outflow = group.expenses + group.transfersOut;
-              const positive = group.net > 0.01;
-              const negative = group.net < -0.01;
-              const tintClass = positive
-                ? "hl-group--owed"
-                : negative
-                  ? "hl-group--owe"
-                  : "hl-group--neutral";
-              return (
-                <Link
-                  key={group.groupId}
-                  to={`/harmony-ledger/ledger?group=${encodeURIComponent(group.groupId)}`}
-                  className={`hl-group ${tintClass}`}
-                  style={{ animationDelay: `${0.06 * idx}s` }}
-                >
-                  <div className="hl-group__head">
-                    <span
-                      className="hl-group__seal"
-                      style={{ background: palette.bg, color: palette.fg }}
-                      aria-hidden="true"
-                    >
-                      {(group.name || "?").slice(0, 1).toUpperCase()}
-                    </span>
-                    <div className="hl-group__id">
-                      <h3 className="hl-group__name">{group.name}</h3>
-                      <p className="hl-group__flows">
-                        <span className="hl-group__flow hl-group__flow--in">
-                          ↑ {formatCurrencyValue(inflow, metricsCurrency)}
-                        </span>
-                        <span className="hl-group__flow hl-group__flow--out">
-                          ↓ {formatCurrencyValue(outflow, metricsCurrency)}
-                        </span>
-                      </p>
-                    </div>
-                    <span
-                      className={`hl-group__net hl-group__net--${positive ? "owed" : negative ? "owe" : "neutral"}`}
-                    >
-                      {formatCurrencyValue(group.net, metricsCurrency)}
-                    </span>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      <section className="card">
-        <div className="section-title">
-          <div>
-            <h2>Recurring</h2>
-            <p className="muted">
-              Entries that post themselves on a weekly or monthly schedule.
-            </p>
-          </div>
-        </div>
-        {recurringQuery.isLoading ? (
-          <p className="muted">Loading recurring entries…</p>
-        ) : recurringTemplates.length === 0 ? (
-          <p className="muted">No recurring entries yet. Add your first one below.</p>
-        ) : (
-          <div className="list">
-            {recurringTemplates.map((template) => {
-              const busy = busyTemplateId === template.templateId;
-              const groupLabel =
-                template.groupName ??
-                groups.find((group) => group.groupId === template.groupId)?.name ??
-                "Unallocated";
-              return (
-                <div key={template.templateId}>
-                  <div className="pill-row">
-                    <div>
-                      <p style={{ margin: 0, fontWeight: 600 }}>
-                        {template.description || entryTypeCopy[template.type].label}
-                        {!template.isActive && (
-                          <span
-                            className="pill"
-                            style={{
-                              marginLeft: "0.5rem",
-                              background: "rgba(148, 163, 184, 0.18)",
-                              color: "#94a3b8"
-                            }}
-                          >
-                            Paused
-                          </span>
-                        )}
-                      </p>
-                      <p className="muted" style={{ margin: 0 }}>
-                        {entryTypeCopy[template.type].label} ·{" "}
-                        {formatCurrencyValue(template.amount, template.currency)} ·{" "}
-                        {groupLabel} · {cadenceCopy[template.cadence].label} · next:{" "}
-                        {formatShortDate(template.nextRunAt)}
-                      </p>
-                    </div>
-                    {canWrite && (
-                      <div className="hl-txn-actions">
-                        <button
-                          type="button"
-                          className="ghost"
-                          onClick={() => toggleRecurringActive(template)}
-                          disabled={busy}
-                        >
-                          {busy && updateRecurringMutation.isPending
-                            ? "Saving…"
-                            : template.isActive
-                              ? "Pause"
-                              : "Resume"}
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost"
-                          onClick={() => handleDeleteRecurring(template)}
-                          disabled={busy}
-                        >
-                          {busy && deleteRecurringMutation.isPending ? "Deleting…" : "Delete"}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                  {recurringRowErrors[template.templateId] && (
-                    <p className="error" style={{ margin: "0.35rem 0 0" }}>
-                      {recurringRowErrors[template.templateId]}
-                    </p>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {canWrite && (
-        <>
-        <hr />
-        <form onSubmit={handleRecurringSubmit} className="list">
-          <div className="input-group">
-            <label htmlFor="recurring-type">Type</label>
-            <select
-              id="recurring-type"
-              value={recurringForm.type}
+              id="entry-type"
+              value={entryForm.type}
               onChange={(event) =>
-                setRecurringForm((prev) => ({
-                  ...prev,
-                  type: event.target.value as HarmonyLedgerEntryType
-                }))
+                setEntryForm((prev) => ({ ...prev, type: event.target.value as HarmonyLedgerEntryType }))
               }
-              disabled={createRecurringMutation.isPending}
             >
               {Object.entries(entryTypeCopy).map(([value, meta]) => (
                 <option key={value} value={value}>
@@ -1412,54 +485,42 @@ const HarmonyLedgerPage = () => {
             </select>
           </div>
           <div className="input-group">
-            <label htmlFor="recurring-amount">Amount</label>
+            <label htmlFor="entry-amount">Amount</label>
             <input
-              id="recurring-amount"
+              id="entry-amount"
               type="number"
               min="0"
               step="0.01"
               required
-              value={recurringForm.amount}
-              onChange={(event) =>
-                setRecurringForm((prev) => ({ ...prev, amount: event.target.value }))
-              }
-              disabled={createRecurringMutation.isPending}
+              value={entryForm.amount}
+              onChange={(event) => setEntryForm((prev) => ({ ...prev, amount: event.target.value }))}
             />
           </div>
           <div className="input-group">
-            <label htmlFor="recurring-description">Description</label>
+            <label htmlFor="entry-description">Description</label>
             <input
-              id="recurring-description"
-              value={recurringForm.description}
-              placeholder="e.g., Rehearsal space rent"
-              onChange={(event) =>
-                setRecurringForm((prev) => ({ ...prev, description: event.target.value }))
-              }
-              disabled={createRecurringMutation.isPending}
+              id="entry-description"
+              value={entryForm.description}
+              placeholder="e.g., Jazz Night fundraiser"
+              onChange={(event) => setEntryForm((prev) => ({ ...prev, description: event.target.value }))}
             />
           </div>
           <div className="input-group">
-            <label htmlFor="recurring-category">Category (optional)</label>
+            <label htmlFor="entry-source">{counterpartyLabel}</label>
             <input
-              id="recurring-category"
-              value={recurringForm.category}
-              onChange={(event) =>
-                setRecurringForm((prev) => ({ ...prev, category: event.target.value }))
-              }
-              disabled={createRecurringMutation.isPending}
+              id="entry-source"
+              value={entryForm.source}
+              onChange={(event) => setEntryForm((prev) => ({ ...prev, source: event.target.value }))}
             />
           </div>
           <div className="input-group">
-            <label htmlFor="recurring-group">Group allocation</label>
+            <label htmlFor="entry-group">Group allocation</label>
             <select
-              id="recurring-group"
-              value={recurringForm.groupId}
-              onChange={(event) =>
-                setRecurringForm((prev) => ({ ...prev, groupId: event.target.value }))
-              }
-              disabled={createRecurringMutation.isPending}
+              id="entry-group"
+              value={entryForm.groupId}
+              onChange={(event) => setEntryForm((prev) => ({ ...prev, groupId: event.target.value }))}
             >
-              <option value="">Unallocated</option>
+              <option value="">General (no group)</option>
               {activeGroups.map((group) => (
                 <option key={group.groupId} value={group.groupId}>
                   {group.name}
@@ -1468,151 +529,38 @@ const HarmonyLedgerPage = () => {
             </select>
           </div>
           <div className="input-group">
-            <label htmlFor="recurring-cadence">Cadence</label>
-            <select
-              id="recurring-cadence"
-              value={recurringForm.cadence}
-              onChange={(event) =>
-                setRecurringForm((prev) => ({
-                  ...prev,
-                  cadence: event.target.value as HarmonyRecurringCadence
-                }))
-              }
-              disabled={createRecurringMutation.isPending}
-            >
-              {Object.entries(cadenceCopy).map(([value, meta]) => (
-                <option key={value} value={value}>
-                  {meta.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          {recurringError && <p className="error">{recurringError}</p>}
-          <button type="submit" disabled={createRecurringMutation.isPending}>
-            {createRecurringMutation.isPending ? "Adding…" : "Add recurring entry"}
-          </button>
-          <p className="muted" style={{ margin: 0 }}>
-            Posts automatically each {cadenceCopy[recurringForm.cadence].unit}, starting
-            next cycle.
-          </p>
-        </form>
-        </>
-        )}
-      </section>
-
-      {accessData.isAdmin && (
-        <section className="card">
-          <div className="section-title">
-            <div>
-              <h2>Manage Groups</h2>
-              <p className="muted">
-                Archiving hides a group from pickers but keeps its history — entries keep their group.
-              </p>
-            </div>
-          </div>
-          {groups.length === 0 ? (
-            <p className="muted">No groups yet. Add your first one below.</p>
-          ) : (
-            <div className="list">
-              {groups.map((group) => {
-                const busy = busyGroupId === group.groupId;
-                return (
-                  <div key={group.groupId}>
-                    <div className="pill-row">
-                      {editingGroupId === group.groupId ? (
-                        <form
-                          className="hl-group-manage__form"
-                          onSubmit={(event) => handleRenameSubmit(event, group)}
-                        >
-                          <input
-                            value={editingGroupName}
-                            onChange={(event) => setEditingGroupName(event.target.value)}
-                            aria-label={`Rename ${group.name}`}
-                            disabled={busy}
-                            autoFocus
-                          />
-                          <button type="submit" disabled={busy}>
-                            {busy ? "Saving…" : "Save"}
-                          </button>
-                          <button
-                            type="button"
-                            className="ghost"
-                            onClick={cancelRenameGroup}
-                            disabled={busy}
-                          >
-                            Cancel
-                          </button>
-                        </form>
-                      ) : (
-                        <>
-                          <div>
-                            <p style={{ margin: 0, fontWeight: 600 }}>
-                              {group.name}
-                              {!group.isActive && (
-                                <span
-                                  className="pill"
-                                  style={{
-                                    marginLeft: "0.5rem",
-                                    background: "rgba(148, 163, 184, 0.18)",
-                                    color: "#94a3b8"
-                                  }}
-                                >
-                                  Archived
-                                </span>
-                              )}
-                            </p>
-                          </div>
-                          <div className="hl-txn-actions">
-                            <button
-                              type="button"
-                              className="ghost"
-                              onClick={() => startRenameGroup(group)}
-                              disabled={busy}
-                            >
-                              Rename
-                            </button>
-                            <button
-                              type="button"
-                              className="ghost"
-                              onClick={() => toggleGroupActive(group)}
-                              disabled={busy}
-                            >
-                              {busy ? "Saving…" : group.isActive ? "Archive" : "Unarchive"}
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    {groupErrors[group.groupId] && (
-                      <p className="error" style={{ margin: "0.35rem 0 0" }}>
-                        {groupErrors[group.groupId]}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <hr />
-          <form className="hl-group-manage__form" onSubmit={handleAddGroup}>
+            <label htmlFor="entry-category">Category (optional)</label>
             <input
-              value={newGroupName}
-              placeholder="New group name"
-              aria-label="New group name"
-              onChange={(event) => setNewGroupName(event.target.value)}
-              disabled={createGroupMutation.isPending}
+              id="entry-category"
+              value={entryForm.category}
+              onChange={(event) => setEntryForm((prev) => ({ ...prev, category: event.target.value }))}
             />
-            <button type="submit" disabled={createGroupMutation.isPending}>
-              {createGroupMutation.isPending ? "Adding…" : "Add group"}
-            </button>
-          </form>
-          {addGroupError && (
-            <p className="error" style={{ margin: "0.5rem 0 0" }}>
-              {addGroupError}
-            </p>
+          </div>
+          {entryForm.type === "REIMBURSEMENT" && (
+            <div className="input-group">
+              <label htmlFor="entry-member">Member (optional)</label>
+              <input
+                id="entry-member"
+                value={entryForm.memberName}
+                onChange={(event) => setEntryForm((prev) => ({ ...prev, memberName: event.target.value }))}
+              />
+            </div>
           )}
-        </section>
-      )}
+          <div className="input-group">
+            <label htmlFor="entry-notes">Notes</label>
+            <textarea
+              id="entry-notes"
+              value={entryForm.notes}
+              onChange={(event) => setEntryForm((prev) => ({ ...prev, notes: event.target.value }))}
+              rows={3}
+            />
+          </div>
+          {entryError && <p className="error">{entryError}</p>}
+          <button type="submit" disabled={entryMutation.isPending}>
+            Save entry
+          </button>
+        </form>
+      </section>
 
       <section className="card">
         <div className="section-title">
@@ -1746,14 +694,6 @@ const HarmonyLedgerPage = () => {
                         </p>
                       </td>
                       <td>
-                        {!canWrite ? (
-                          <p style={{ margin: 0 }}>
-                            {entry.groupName ??
-                              groups.find((group) => group.groupId === entry.groupId)
-                                ?.name ??
-                              "Unallocated"}
-                          </p>
-                        ) : (
                         <select
                           value={entry.groupId ?? ""}
                           onChange={(event) =>
@@ -1776,13 +716,11 @@ const HarmonyLedgerPage = () => {
                               </option>
                             )}
                         </select>
-                        )}
                       </td>
                       <td>
                         {formatCurrencyValue(entry.amount, entry.currency)}
                       </td>
                       <td className="entry-actions">
-                        {canWrite && (
                         <button
                           type="button"
                           className="icon-button"
@@ -1792,7 +730,6 @@ const HarmonyLedgerPage = () => {
                         >
                           ⋮
                         </button>
-                        )}
                         {menuEntryId === entry.entryId && (
                           <div className="entry-menu">
                             <button
@@ -1982,71 +919,6 @@ const HarmonyLedgerPage = () => {
           </div>
         )}
       </section>
-
-      {transfers.length > 0 && (
-        <section className="card">
-          <div className="section-title">
-            <div>
-              <h2>Transfer History</h2>
-              <p className="muted">Recent reallocations between groups.</p>
-            </div>
-          </div>
-          <div className="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ width: "20%" }}>Date</th>
-                  <th style={{ width: "20%" }}>From</th>
-                  <th style={{ width: "20%" }}>To</th>
-                  <th style={{ width: "15%" }}>Amount</th>
-                  <th>Note</th>
-                  <th style={{ width: "8%" }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {transfers.map((transfer) => (
-                  <tr key={transfer.transferId}>
-                    <td>{formatDateTime(transfer.createdAt)}</td>
-                    <td>{transfer.fromGroupName ?? "Unallocated"}</td>
-                    <td>{transfer.toGroupName ?? "Unallocated"}</td>
-                    <td>{formatCurrencyValue(transfer.amount, transfer.currency)}</td>
-                    <td>{transfer.note ?? "—"}</td>
-                    <td className="entry-actions">
-                      {canWrite && (
-                      <button
-                        type="button"
-                        className="icon-button"
-                        onClick={() =>
-                          setMenuTransferId((current) =>
-                            current === transfer.transferId ? null : transfer.transferId
-                          )
-                        }
-                      >
-                        ⋮
-                      </button>
-                      )}
-                      {menuTransferId === transfer.transferId && (
-                        <div className="entry-menu">
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteTransfer(transfer)}
-                            disabled={deleteTransferMutation.isPending}
-                          >
-                            Delete transfer
-                          </button>
-                          <button type="button" onClick={() => setMenuTransferId(null)}>
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
     </div>
   );
 };
