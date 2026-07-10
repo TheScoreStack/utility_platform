@@ -10,7 +10,9 @@ class ModuleDefinition {
   final String id;
   final String name;
   final String description;
-  final String maturity;
+
+  /// Invite-only modules stay off the hub for accounts without access.
+  final bool restricted;
   final List<String> tags;
   final IconData icon;
   final WidgetBuilder builder;
@@ -19,7 +21,7 @@ class ModuleDefinition {
     required this.id,
     required this.name,
     required this.description,
-    required this.maturity,
+    this.restricted = false,
     required this.tags,
     required this.icon,
     required this.builder,
@@ -31,8 +33,7 @@ final List<ModuleDefinition> registeredModules = [
     id: 'group-expenses',
     name: 'Group Expenses',
     description:
-        'Create trips, digitize receipts, and keep balances synced with the shared backend.',
-    maturity: 'beta',
+        'Create trips, digitize receipts, and settle up with friends.',
     tags: ['travel', 'finance', 'receipts'],
     icon: Icons.currency_exchange_rounded,
     builder: (_) => const GroupExpensesScreen(),
@@ -42,7 +43,6 @@ final List<ModuleDefinition> registeredModules = [
     name: 'Stack Meet',
     description:
         'Find a time that works for everyone — share a link, paint availability, and finalize the best slot.',
-    maturity: 'alpha',
     tags: ['scheduling', 'groups', 'time'],
     icon: Icons.event_available_rounded,
     builder: (_) => MeetHomeScreen(
@@ -60,7 +60,7 @@ final List<ModuleDefinition> registeredModules = [
     name: 'Harmony Collective',
     description:
         'Private ledger — cash entries, statement imports, and group balances.',
-    maturity: 'alpha',
+    restricted: true,
     tags: ['finance', 'ledger', 'private'],
     icon: Icons.volunteer_activism_rounded,
     builder: (_) => const HarmonyModuleScreen(),

@@ -1,16 +1,57 @@
 import 'package:flutter/material.dart';
 
+import '../app_config.dart';
+import '../core/api_client.dart';
+import '../core/auth_service.dart';
+import '../modules/harmony/harmony_api.dart';
 import '../modules/module_registry.dart';
 
-class ModuleHub extends StatelessWidget {
+class ModuleHub extends StatefulWidget {
   final List<ModuleDefinition> modules;
 
   const ModuleHub({super.key, required this.modules});
 
   @override
+  State<ModuleHub> createState() => _ModuleHubState();
+}
+
+class _ModuleHubState extends State<ModuleHub> {
+  /// Restricted module ids this account is allowed to see.
+  final Set<String> _unlocked = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _checkRestrictedAccess();
+  }
+
+  /// Restricted modules are invite-only; the tile only appears once the
+  /// backend confirms this account has access.
+  Future<void> _checkRestrictedAccess() async {
+    if (!widget.modules.any((module) => module.restricted)) return;
+    try {
+      final api = HarmonyApi(
+        ApiClient(
+          baseUrl: AppConfig.apiBaseUrl,
+          tokenProvider: AuthService.instance.getToken,
+        ),
+      );
+      final access = await api.getAccess();
+      if (!mounted || !access.allowed) return;
+      setState(() => _unlocked.add('harmony-ledger'));
+    } catch (_) {
+      // Can't confirm access — keep invite-only modules hidden.
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final modules = widget.modules
+        .where((module) => !module.restricted || _unlocked.contains(module.id))
+        .toList();
+
     return Scaffold(
-      appBar: AppBar(title: const Text('Utility Platform'), centerTitle: false),
+      appBar: AppBar(title: const Text('The Stack Core'), centerTitle: false),
       body: ListView.separated(
         padding: const EdgeInsets.all(16),
         itemBuilder: (context, index) {
@@ -50,29 +91,10 @@ class _ModuleCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: Colors.white10,
-                  child: Icon(module.icon, size: 26),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(999),
-                    color: Colors.white10,
-                  ),
-                  child: Text(
-                    module.maturity.toUpperCase(),
-                    style: const TextStyle(letterSpacing: 0.08, fontSize: 12),
-                  ),
-                ),
-              ],
+            CircleAvatar(
+              radius: 24,
+              backgroundColor: Colors.white10,
+              child: Icon(module.icon, size: 26),
             ),
             const SizedBox(height: 16),
             Text(

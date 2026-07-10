@@ -11,7 +11,7 @@ void main() {
       MaterialApp(home: ModuleHub(modules: registeredModules)),
     );
 
-    expect(find.text('Utility Platform'), findsOneWidget);
+    expect(find.text('The Stack Core'), findsOneWidget);
     expect(find.text('Group Expenses'), findsOneWidget);
   });
 }
