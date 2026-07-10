@@ -52,6 +52,11 @@
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<!-- Statement imports ingest a copy of opened files; nothing is edited in
+	     place. Required alongside CFBundleDocumentTypes — without it every
+	     upload triggers an ITMS-90737 warning email. -->
+	<key>LSSupportsOpeningDocumentsInPlace</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan receipts to split expenses.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
