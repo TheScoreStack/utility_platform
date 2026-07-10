@@ -11,6 +11,7 @@ import type {
   HarmonyLedgerAccessRecord,
   HarmonyLedgerEntry,
   HarmonyLedgerGroup,
+  HarmonyLedgerRole,
   HarmonyLedgerTransfer,
   HarmonyRecurringTemplate
 } from "../types.js";
@@ -80,7 +81,7 @@ export interface CreateAccessRecordInput {
   email?: string;
   normalizedEmail?: string;
   displayName?: string;
-  isAdmin: boolean;
+  role: HarmonyLedgerRole;
   addedAt: string;
   addedBy: string;
   addedByName?: string;
@@ -91,18 +92,27 @@ export interface UpdateAccessRecordInput {
   email?: string;
   normalizedEmail?: string;
   userId?: string;
+  role?: HarmonyLedgerRole;
 }
 
-const mapAccess = (item: Record<string, unknown>): HarmonyLedgerAccessRecord => ({
-  accessId: item.accessId as string,
-  userId: (item.userId as string) || undefined,
-  email: (item.email as string) || undefined,
-  displayName: (item.displayName as string) || undefined,
-  isAdmin: Boolean(item.isAdmin),
-  addedAt: item.addedAt as string,
-  addedBy: item.addedBy as string,
-  addedByName: (item.addedByName as string) || undefined
-});
+// Records written before roles existed only carry isAdmin.
+const roleFromItem = (item: Record<string, unknown>): HarmonyLedgerRole =>
+  (item.role as HarmonyLedgerRole) ?? (item.isAdmin ? "ADMIN" : "MEMBER");
+
+const mapAccess = (item: Record<string, unknown>): HarmonyLedgerAccessRecord => {
+  const role = roleFromItem(item);
+  return {
+    accessId: item.accessId as string,
+    userId: (item.userId as string) || undefined,
+    email: (item.email as string) || undefined,
+    displayName: (item.displayName as string) || undefined,
+    role,
+    isAdmin: role === "ADMIN",
+    addedAt: item.addedAt as string,
+    addedBy: item.addedBy as string,
+    addedByName: (item.addedByName as string) || undefined
+  };
+};
 
 export class HarmonyLedgerStore {
   private readonly tableName: string;
@@ -128,6 +138,26 @@ export class HarmonyLedgerStore {
     }
 
     return Items.map((item) => mapAccess(item as Record<string, unknown>));
+  }
+
+  async getAccessRecord(
+    accessId: string
+  ): Promise<HarmonyLedgerAccessRecord | null> {
+    const { Item } = await this.docClient.send(
+      new GetCommand({
+        TableName: this.tableName,
+        Key: {
+          PK: ACCESS_PK,
+          SK: ACCESS_SK(accessId)
+        }
+      })
+    );
+
+    if (!Item) {
+      return null;
+    }
+
+    return mapAccess(Item as Record<string, unknown>);
   }
 
   async findAccessByUserId(
@@ -188,7 +218,8 @@ export class HarmonyLedgerStore {
       email: record.email,
       normalizedEmail: record.normalizedEmail,
       displayName: record.displayName,
-      isAdmin: record.isAdmin,
+      role: record.role,
+      isAdmin: record.role === "ADMIN",
       addedAt: record.addedAt,
       addedBy: record.addedBy,
       addedByName: record.addedByName,
@@ -219,6 +250,7 @@ export class HarmonyLedgerStore {
       userId: entity.userId,
       email: entity.email,
       displayName: entity.displayName,
+      role: entity.role,
       isAdmin: entity.isAdmin,
       addedAt: entity.addedAt,
       addedBy: entity.addedBy,
@@ -469,11 +501,20 @@ export class HarmonyLedgerStore {
     updates: UpdateAccessRecordInput
   ): Promise<void> {
     const expressions: string[] = [];
+    const names: Record<string, string> = {};
     const values: Record<string, unknown> = {};
 
     if (updates.displayName !== undefined) {
       expressions.push("displayName = :displayName");
       values[":displayName"] = updates.displayName;
+    }
+    if (updates.role !== undefined) {
+      // "role" is a DynamoDB reserved word.
+      names["#role"] = "role";
+      expressions.push("#role = :role");
+      values[":role"] = updates.role;
+      expressions.push("isAdmin = :isAdmin");
+      values[":isAdmin"] = updates.role === "ADMIN";
     }
     if (updates.email !== undefined) {
       expressions.push("email = :email");
@@ -507,7 +548,11 @@ export class HarmonyLedgerStore {
           PK: ACCESS_PK,
           SK: ACCESS_SK(accessId)
         },
+        ConditionExpression: "attribute_exists(PK) AND attribute_exists(SK)",
         UpdateExpression: `SET ${expressions.join(", ")}`,
+        ...(Object.keys(names).length
+          ? { ExpressionAttributeNames: names }
+          : {}),
         ExpressionAttributeValues: values
       })
     );

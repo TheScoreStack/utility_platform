@@ -293,6 +293,19 @@ export const handler = async (
       return noContent(origin);
     }
 
+    if (harmonyAccessMatch && method === "PATCH") {
+      const body = parseBody(event);
+      if (!body) {
+        return handleError(new ValidationError("Request body required"), origin);
+      }
+      const record = await harmonyLedgerService.updateAccessRole(
+        decodeURIComponent(harmonyAccessMatch[1]),
+        body,
+        auth
+      );
+      return ok(record, origin);
+    }
+
     if (path === "/harmony-ledger/groups" && method === "GET") {
       const groups = await harmonyLedgerService.listGroups(auth);
       return ok({ groups }, origin);

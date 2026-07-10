@@ -11,7 +11,10 @@ import '../models/harmony_models.dart';
 class TransfersScreen extends StatefulWidget {
   final HarmonyApi api;
 
-  const TransfersScreen({super.key, required this.api});
+  /// False for viewer-role members: all write affordances are hidden.
+  final bool canWrite;
+
+  const TransfersScreen({super.key, required this.api, this.canWrite = true});
 
   @override
   State<TransfersScreen> createState() => _TransfersScreenState();
@@ -110,7 +113,7 @@ class _TransfersScreenState extends State<TransfersScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Group transfers')),
-      floatingActionButton: _data == null
+      floatingActionButton: _data == null || !widget.canWrite
           ? null
           : FloatingActionButton.extended(
               onPressed: _create,
@@ -194,14 +197,15 @@ class _TransfersScreenState extends State<TransfersScreen> {
                 fontFeatures: kTabularFigures,
               ),
             ),
-            PopupMenuButton<String>(
-              onSelected: (action) {
-                if (action == 'delete') _delete(transfer);
-              },
-              itemBuilder: (_) => const [
-                PopupMenuItem(value: 'delete', child: Text('Delete')),
-              ],
-            ),
+            if (widget.canWrite)
+              PopupMenuButton<String>(
+                onSelected: (action) {
+                  if (action == 'delete') _delete(transfer);
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              ),
           ],
         ),
       ),

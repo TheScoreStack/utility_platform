@@ -97,6 +97,8 @@ const HarmonyStatementsPage = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: accessData, isLoading: accessLoading } = useHarmonyLedgerAccess();
+  // Older API responses predate canWrite; treat missing as writable.
+  const canWrite = accessData?.canWrite !== false;
   const statementsQuery = useHarmonyStatements(accessData?.allowed ?? false);
 
   const [sourceType, setSourceType] = useState<HarmonyStatementSourceType>("BANK");
@@ -336,6 +338,7 @@ const HarmonyStatementsPage = () => {
     <div className="hl-page">
       <HarmonySubNav />
 
+      {canWrite && (
       <section className="card">
         <div className="section-title">
           <div>
@@ -420,6 +423,7 @@ const HarmonyStatementsPage = () => {
           </button>
         </form>
       </section>
+      )}
 
       <section className="card">
         <div className="section-title">
@@ -510,6 +514,7 @@ const HarmonyStatementsPage = () => {
                         )}
                       </td>
                       <td className="entry-actions">
+                        {canWrite && (
                         <div className="hl-txn-actions">
                           {statement.status === "FAILED" && (
                             <button
@@ -536,6 +541,7 @@ const HarmonyStatementsPage = () => {
                             Delete
                           </button>
                         </div>
+                        )}
                       </td>
                     </tr>
                   );

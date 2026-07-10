@@ -15,10 +15,14 @@ class StatementReviewScreen extends StatefulWidget {
   final HarmonyApi api;
   final String statementId;
 
+  /// False for viewer-role members: all write affordances are hidden.
+  final bool canWrite;
+
   const StatementReviewScreen({
     super.key,
     required this.api,
     required this.statementId,
+    this.canWrite = true,
   });
 
   @override
@@ -361,7 +365,7 @@ class _StatementReviewScreenState extends State<StatementReviewScreen> {
               icon: const Icon(Icons.attachment_rounded),
               onPressed: _viewOriginal,
             ),
-          if (pending.isNotEmpty)
+          if (pending.isNotEmpty && widget.canWrite)
             TextButton(
               onPressed: _bulkRunning ? null : _confirmAll,
               child: _bulkRunning
@@ -410,18 +414,25 @@ class _StatementReviewScreenState extends State<StatementReviewScreen> {
                         style: eyebrowStyle(),
                       ),
                     ),
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(4, 0, 4, 8),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
                       child: Text(
-                        'Swipe right to confirm, left to skip. Tap the chips '
-                        'to change the type or group first.',
-                        style: TextStyle(fontSize: 12, color: Colors.white54),
+                        widget.canWrite
+                            ? 'Swipe right to confirm, left to skip. Tap the '
+                                  'chips to change the type or group first.'
+                            : 'Your access is read-only — ask an admin to '
+                                  'review these.',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.white54,
+                        ),
                       ),
                     ),
                     for (final txn in pending)
                       Dismissible(
                         key: ValueKey(txn.txnId),
-                        direction: _busyTxnIds.contains(txn.txnId)
+                        direction:
+                            _busyTxnIds.contains(txn.txnId) || !widget.canWrite
                             ? DismissDirection.none
                             : DismissDirection.horizontal,
                         background: _swipeBackground(
@@ -451,8 +462,12 @@ class _StatementReviewScreenState extends State<StatementReviewScreen> {
                           type: _effectiveType(txn),
                           groupName: _effectiveGroupName(txn),
                           busy: _busyTxnIds.contains(txn.txnId),
-                          onTypeTap: () => _pickType(txn),
-                          onGroupTap: () => _pickGroup(txn),
+                          onTypeTap: widget.canWrite
+                              ? () => _pickType(txn)
+                              : null,
+                          onGroupTap: widget.canWrite
+                              ? () => _pickGroup(txn)
+                              : null,
                         ),
                       ),
                   ],
@@ -470,8 +485,12 @@ class _StatementReviewScreenState extends State<StatementReviewScreen> {
                         type: _effectiveType(txn),
                         groupName: _effectiveGroupName(txn),
                         busy: _busyTxnIds.contains(txn.txnId),
-                        onRestore: () => _reopenTxn(txn),
-                        onUndo: () => _unconfirmTxn(txn),
+                        onRestore: widget.canWrite
+                            ? () => _reopenTxn(txn)
+                            : null,
+                        onUndo: widget.canWrite
+                            ? () => _unconfirmTxn(txn)
+                            : null,
                       ),
                   ],
                 ],

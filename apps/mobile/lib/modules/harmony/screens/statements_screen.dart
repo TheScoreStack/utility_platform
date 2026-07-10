@@ -15,7 +15,10 @@ import 'statement_review_screen.dart';
 class StatementsScreen extends StatefulWidget {
   final HarmonyApi api;
 
-  const StatementsScreen({super.key, required this.api});
+  /// False for viewer-role members: all write affordances are hidden.
+  final bool canWrite;
+
+  const StatementsScreen({super.key, required this.api, this.canWrite = true});
 
   @override
   State<StatementsScreen> createState() => _StatementsScreenState();
@@ -282,6 +285,7 @@ class _StatementsScreenState extends State<StatementsScreen> {
             builder: (_) => StatementReviewScreen(
               api: widget.api,
               statementId: statement.statementId,
+              canWrite: widget.canWrite,
             ),
           ),
         )
@@ -295,7 +299,9 @@ class _StatementsScreenState extends State<StatementsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Statement imports')),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: !widget.canWrite
+          ? null
+          : FloatingActionButton.extended(
         onPressed: _importing ? null : _import,
         icon: _importing
             ? const SizedBox(
@@ -392,21 +398,26 @@ class _StatementsScreenState extends State<StatementsScreen> {
             color: statement.isFailed ? AppColors.danger : Colors.white54,
           ),
         ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (action) {
-            if (action == 'delete') _delete(statement);
-            if (action == 'retry') _retry(statement);
-          },
-          itemBuilder: (_) => [
-            if (statement.isFailed)
-              const PopupMenuItem(value: 'retry', child: Text('Retry parse')),
-            const PopupMenuItem(value: 'delete', child: Text('Delete')),
-          ],
-        ),
+        trailing: !widget.canWrite
+            ? null
+            : PopupMenuButton<String>(
+                onSelected: (action) {
+                  if (action == 'delete') _delete(statement);
+                  if (action == 'retry') _retry(statement);
+                },
+                itemBuilder: (_) => [
+                  if (statement.isFailed)
+                    const PopupMenuItem(
+                      value: 'retry',
+                      child: Text('Retry parse'),
+                    ),
+                  const PopupMenuItem(value: 'delete', child: Text('Delete')),
+                ],
+              ),
         // Failed statements retry on tap; parsed ones open the review queue.
         onTap: statement.isParsed
             ? () => _open(statement)
-            : statement.isFailed
+            : statement.isFailed && widget.canWrite
             ? () => _retry(statement)
             : null,
       ),

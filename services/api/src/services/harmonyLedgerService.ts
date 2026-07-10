@@ -22,6 +22,7 @@ import type {
   HarmonyLedgerEntry,
   HarmonyLedgerEntryType,
   HarmonyLedgerGroup,
+  HarmonyLedgerRole,
   HarmonyLedgerTransfer,
   HarmonyLedgerUnallocatedSummary,
   HarmonyStagedTransaction,
@@ -62,9 +63,17 @@ const entrySchema = z.object({
   groupId: z.string().min(1).optional()
 });
 
+const ledgerRoles = ["VIEWER", "MEMBER", "ADMIN"] as const;
+
 const addAccessSchema = z.object({
   userId: z.string().min(1),
+  role: z.enum(ledgerRoles).optional(),
+  // Pre-roles clients send isAdmin instead of role.
   isAdmin: z.boolean().optional()
+});
+
+const updateAccessSchema = z.object({
+  role: z.enum(ledgerRoles)
 });
 
 const updateEntryGroupSchema = z.object({
@@ -263,6 +272,8 @@ export const slugifyGroupName = (name: string): string =>
 
 export interface HarmonyLedgerAccessResponse {
   allowed: boolean;
+  role?: HarmonyLedgerRole;
+  canWrite: boolean;
   isAdmin: boolean;
   members?: HarmonyLedgerAccessRecord[];
   currentAccessId?: string;
@@ -333,7 +344,7 @@ export class HarmonyLedgerService {
             email,
             normalizedEmail: email,
             displayName: "Harmony Admin",
-            isAdmin: true,
+            role: "ADMIN",
             addedAt: isoNow(),
             addedBy: "system",
             addedByName: "System"
@@ -409,12 +420,26 @@ export class HarmonyLedgerService {
     return { profile, access };
   }
 
+  /** Members and admins pass; viewers are read-only. */
+  private async requireWriter(auth: AuthContext): Promise<{
+    profile: UserProfile;
+    access: HarmonyLedgerAccessRecord;
+  }> {
+    const context = await this.requireAccess(auth);
+    if (context.access.role === "VIEWER") {
+      throw new ForbiddenError(
+        "Your Harmony Collective access is read-only."
+      );
+    }
+    return context;
+  }
+
   private async requireAdmin(auth: AuthContext): Promise<{
     profile: UserProfile;
     access: HarmonyLedgerAccessRecord;
   }> {
     const context = await this.requireAccess(auth);
-    if (!context.access.isAdmin) {
+    if (context.access.role !== "ADMIN") {
       throw new ForbiddenError("Only Harmony Collective admins can manage access.");
     }
     return context;
@@ -558,7 +583,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyLedgerEntry> {
-    const { profile } = await this.requireAccess(auth);
+    const { profile } = await this.requireWriter(auth);
     const parsed = entrySchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -606,7 +631,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyLedgerEntry> {
-    await this.requireAccess(auth);
+    await this.requireWriter(auth);
     const parsed = updateEntrySchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -644,7 +669,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<void> {
-    await this.requireAccess(auth);
+    await this.requireWriter(auth);
     const parsed = updateEntryGroupSchema.pick({ recordedAt: true }).safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -653,7 +678,7 @@ export class HarmonyLedgerService {
   }
 
   async createTransfer(body: unknown, auth: AuthContext): Promise<HarmonyLedgerTransfer> {
-    const { profile } = await this.requireAccess(auth);
+    const { profile } = await this.requireWriter(auth);
     const parsed = transferSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -699,7 +724,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<void> {
-    await this.requireAccess(auth);
+    await this.requireWriter(auth);
     const parsed = deleteTransferSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -713,6 +738,7 @@ export class HarmonyLedgerService {
     if (!access) {
       return {
         allowed: false,
+        canWrite: false,
         isAdmin: false
       };
     }
@@ -720,7 +746,9 @@ export class HarmonyLedgerService {
     const members = await this.store.listAccessRecords();
     return {
       allowed: true,
-      isAdmin: access.isAdmin,
+      role: access.role,
+      canWrite: access.role !== "VIEWER",
+      isAdmin: access.role === "ADMIN",
       members,
       currentAccessId: access.accessId
     };
@@ -752,13 +780,42 @@ export class HarmonyLedgerService {
       email: targetProfile.email,
       normalizedEmail: this.normalizeEmail(targetProfile.email) ?? undefined,
       displayName,
-      isAdmin: payload.isAdmin ?? false,
+      role: payload.role ?? (payload.isAdmin ? "ADMIN" : "MEMBER"),
       addedAt: isoNow(),
       addedBy: profile.userId,
       addedByName: displayNameFromProfile(profile)
     });
 
     return accessRecord;
+  }
+
+  async updateAccessRole(
+    accessId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<HarmonyLedgerAccessRecord> {
+    const { access: actingAccess } = await this.requireAdmin(auth);
+    const parsed = updateAccessSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+    if (actingAccess.accessId === accessId) {
+      throw new ValidationError("You cannot change your own role.");
+    }
+
+    const existing = await this.store.getAccessRecord(accessId);
+    if (!existing) {
+      throw new NotFoundError("Access record not found");
+    }
+
+    await this.store.updateAccessMetadata(accessId, {
+      role: parsed.data.role
+    });
+    return {
+      ...existing,
+      role: parsed.data.role,
+      isAdmin: parsed.data.role === "ADMIN"
+    };
   }
 
   async removeAccess(accessId: string, auth: AuthContext): Promise<void> {
@@ -846,7 +903,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyRecurringTemplate> {
-    const { profile } = await this.requireAccess(auth);
+    const { profile } = await this.requireWriter(auth);
     const parsed = createRecurringSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -893,7 +950,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyRecurringTemplate> {
-    await this.requireAccess(auth);
+    await this.requireWriter(auth);
     const parsed = updateRecurringSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -929,7 +986,7 @@ export class HarmonyLedgerService {
     templateId: string,
     auth: AuthContext
   ): Promise<void> {
-    await this.requireAccess(auth);
+    await this.requireWriter(auth);
     await this.store.deleteRecurringTemplate(templateId);
   }
 
@@ -985,7 +1042,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyStatementCreateResponse> {
-    const { profile } = await this.requireAccess(auth);
+    const { profile } = await this.requireWriter(auth);
     const parsed = createStatementSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -1163,7 +1220,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<{ transaction: HarmonyStagedTransaction; entry: HarmonyLedgerEntry }> {
-    const { profile } = await this.requireAccess(auth);
+    const { profile } = await this.requireWriter(auth);
     const parsed = confirmTxnSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -1225,7 +1282,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyStagedTransaction> {
-    const { profile } = await this.requireAccess(auth);
+    const { profile } = await this.requireWriter(auth);
     const parsed = dismissTxnSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -1277,7 +1334,7 @@ export class HarmonyLedgerService {
     statementId: string,
     auth: AuthContext
   ): Promise<HarmonyStatement> {
-    await this.requireAccess(auth);
+    await this.requireWriter(auth);
     const statement = await this.statementStore.getStatement(statementId);
     if (!statement) {
       throw new NotFoundError("Statement not found");
@@ -1312,7 +1369,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyStagedTransaction> {
-    const { profile } = await this.requireAccess(auth);
+    const { profile } = await this.requireWriter(auth);
     const parsed = dismissTxnSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -1343,7 +1400,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyStagedTransaction> {
-    const { profile } = await this.requireAccess(auth);
+    const { profile } = await this.requireWriter(auth);
     const parsed = dismissTxnSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -1384,7 +1441,7 @@ export class HarmonyLedgerService {
     body: unknown,
     auth: AuthContext
   ): Promise<HarmonyBulkConfirmResponse> {
-    const { profile } = await this.requireAccess(auth);
+    const { profile } = await this.requireWriter(auth);
     const parsed = bulkConfirmSchema.safeParse(body);
     if (!parsed.success) {
       throw new ValidationError(parsed.error.message);
@@ -1440,7 +1497,7 @@ export class HarmonyLedgerService {
   }
 
   async deleteStatement(statementId: string, auth: AuthContext): Promise<void> {
-    await this.requireAccess(auth);
+    await this.requireWriter(auth);
     const statement = await this.statementStore.getStatement(statementId);
     if (!statement) {
       throw new NotFoundError("Statement not found");

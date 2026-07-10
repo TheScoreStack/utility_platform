@@ -130,6 +130,8 @@ const HarmonyStatementReviewPage = () => {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { data: accessData, isLoading: accessLoading } = useHarmonyLedgerAccess();
+  // Older API responses predate canWrite; treat missing as writable.
+  const canWrite = accessData?.canWrite !== false;
   const detailQuery = useHarmonyStatementDetail(
     statementId,
     accessData?.allowed ?? false
@@ -504,14 +506,16 @@ const HarmonyStatementReviewPage = () => {
             >
               View original
             </button>
-            <button
-              type="button"
-              className="primary"
-              onClick={handleConfirmAll}
-              disabled={bulkBusy || counts.pending === 0}
-            >
-              {bulkBusy ? "Confirming…" : "Accept all suggestions"}
-            </button>
+            {canWrite && (
+              <button
+                type="button"
+                className="primary"
+                onClick={handleConfirmAll}
+                disabled={bulkBusy || counts.pending === 0}
+              >
+                {bulkBusy ? "Confirming…" : "Accept all suggestions"}
+              </button>
+            )}
           </div>
         </div>
         {bulkResult && <p className="muted" style={{ margin: 0 }}>{bulkResult}</p>}
@@ -553,7 +557,7 @@ const HarmonyStatementReviewPage = () => {
                   const edit = edits[txn.txnId];
                   const selectedType = edit?.type ?? txn.suggestedType;
                   const selectedGroup = edit?.groupId ?? txn.suggestedGroupId ?? "";
-                  const rowBusy = bulkBusy || rowBusyId === txn.txnId;
+                  const rowBusy = bulkBusy || rowBusyId === txn.txnId || !canWrite;
                   return (
                     <tr key={txn.txnId}>
                       <td>{formatTxnDate(txn.txnDate)}</td>
@@ -645,26 +649,28 @@ const HarmonyStatementReviewPage = () => {
                         />
                       </td>
                       <td>
-                        <div className="hl-txn-actions">
-                          <button
-                            type="button"
-                            className="primary"
-                            onClick={() => handleConfirm(txn)}
-                            disabled={rowBusy}
-                          >
-                            {rowBusyId === txn.txnId && confirmMutation.isPending
-                              ? "Confirming…"
-                              : "Confirm"}
-                          </button>
-                          <button
-                            type="button"
-                            className="ghost"
-                            onClick={() => handleDismiss(txn)}
-                            disabled={rowBusy}
-                          >
-                            Dismiss
-                          </button>
-                        </div>
+                        {canWrite && (
+                          <div className="hl-txn-actions">
+                            <button
+                              type="button"
+                              className="primary"
+                              onClick={() => handleConfirm(txn)}
+                              disabled={rowBusy}
+                            >
+                              {rowBusyId === txn.txnId && confirmMutation.isPending
+                                ? "Confirming…"
+                                : "Confirm"}
+                            </button>
+                            <button
+                              type="button"
+                              className="ghost"
+                              onClick={() => handleDismiss(txn)}
+                              disabled={rowBusy}
+                            >
+                              Dismiss
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -759,7 +765,7 @@ const HarmonyStatementReviewPage = () => {
                       )}
                     </td>
                     <td>
-                      {txn.status === "DISMISSED" ? (
+                      {!canWrite ? null : txn.status === "DISMISSED" ? (
                         <button
                           type="button"
                           className="ghost"

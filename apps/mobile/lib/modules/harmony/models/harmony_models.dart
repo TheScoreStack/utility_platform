@@ -6,12 +6,24 @@ double _asDouble(dynamic value) => (value as num?)?.toDouble() ?? 0;
 
 class HarmonyAccess {
   final bool allowed;
+
+  /// VIEWER, MEMBER, or ADMIN. Null on responses that predate roles.
+  final String? role;
+  final bool canWrite;
   final bool isAdmin;
 
-  const HarmonyAccess({required this.allowed, required this.isAdmin});
+  const HarmonyAccess({
+    required this.allowed,
+    this.role,
+    required this.canWrite,
+    required this.isAdmin,
+  });
 
   factory HarmonyAccess.fromJson(Map<String, dynamic> json) => HarmonyAccess(
     allowed: json['allowed'] == true,
+    role: json['role'] as String?,
+    // Older API responses predate canWrite; treat missing as writable.
+    canWrite: json['canWrite'] != false,
     isAdmin: json['isAdmin'] == true,
   );
 }

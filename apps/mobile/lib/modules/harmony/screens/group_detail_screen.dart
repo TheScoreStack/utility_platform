@@ -16,11 +16,15 @@ class GroupDetailScreen extends StatefulWidget {
   final String groupId;
   final String groupName;
 
+  /// False for viewer-role members: all write affordances are hidden.
+  final bool canWrite;
+
   const GroupDetailScreen({
     super.key,
     required this.api,
     required this.groupId,
     required this.groupName,
+    this.canWrite = true,
   });
 
   @override
@@ -116,7 +120,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
 
     return Scaffold(
         appBar: AppBar(title: Text(widget.groupName)),
-        floatingActionButton: data == null
+        floatingActionButton: data == null || !widget.canWrite
             ? null
             : FloatingActionButton.extended(
                 onPressed: _record,
@@ -157,7 +161,9 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                       HarmonyEntryRow(
                         entry: entry,
                         showGroup: false,
-                        onTap: () => _entryActions(entry),
+                        onTap: widget.canWrite
+                            ? () => _entryActions(entry)
+                            : null,
                       ),
                     if (transfers.isNotEmpty) ...[
                       const SizedBox(height: 20),

@@ -12,6 +12,7 @@ import {
   HarmonyLedgerEntryType,
   HarmonyLedgerGroup,
   HarmonyLedgerGroupSummary,
+  HarmonyLedgerRole,
   HarmonyLedgerTransfer,
   HarmonyRecurringCadence,
   HarmonyRecurringTemplate
@@ -104,6 +105,12 @@ const entryTypeCopy: Record<
 /** Sentinel `group` search-param value for entries with no group allocation. */
 const UNALLOCATED_GROUP = "__unallocated";
 
+const roleCopy: Record<HarmonyLedgerRole, { label: string; helper: string }> = {
+  VIEWER: { label: "Viewer", helper: "Can browse the ledger but not change it" },
+  MEMBER: { label: "Member", helper: "Can record entries, transfers, and imports" },
+  ADMIN: { label: "Admin", helper: "Member powers plus people and group management" }
+};
+
 const formatCurrencyValue = (value: number, currency: string) =>
   new Intl.NumberFormat(undefined, {
     style: "currency",
@@ -145,6 +152,8 @@ const HarmonyLedgerPage = () => {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
   const { data: accessData, isLoading: accessLoading } = useHarmonyLedgerAccess();
+  // Older API responses predate canWrite; treat missing as writable.
+  const canWrite = accessData?.canWrite !== false;
   const [entryForm, setEntryForm] = useState<EntryFormState>(defaultEntryForm);
   const [entryError, setEntryError] = useState<string | null>(null);
   const [accessError, setAccessError] = useState<string | null>(null);
@@ -161,7 +170,7 @@ const HarmonyLedgerPage = () => {
   const [editForm, setEditForm] = useState<EntryFormState>(defaultEntryForm);
   const [editError, setEditError] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [newMemberRole, setNewMemberRole] = useState<HarmonyLedgerRole>("MEMBER");
   const [monthFilter, setMonthFilter] = useState("");
   const [searchText, setSearchText] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
@@ -201,7 +210,7 @@ const HarmonyLedgerPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "access"] });
       setSelectedUserId("");
-      setIsAdmin(false);
+      setNewMemberRole("MEMBER");
       setAccessError(null);
     },
     onError: (error: unknown) => {
@@ -217,6 +226,25 @@ const HarmonyLedgerPage = () => {
     mutationFn: (accessId: string) => api.delete(`/harmony-ledger/access/${accessId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "access"] });
+    }
+  });
+
+  const updateAccessRoleMutation = useMutation({
+    mutationFn: (payload: { accessId: string; role: HarmonyLedgerRole }) =>
+      api.patch<HarmonyLedgerAccessRecord>(
+        `/harmony-ledger/access/${payload.accessId}`,
+        { role: payload.role }
+      ),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["harmony-ledger", "access"] });
+      setAccessError(null);
+    },
+    onError: (error: unknown) => {
+      if (error instanceof ApiError) {
+        setAccessError(error.message);
+      } else {
+        setAccessError("Unable to change role");
+      }
     }
   });
 
@@ -663,7 +691,7 @@ const HarmonyLedgerPage = () => {
     }
     addAccessMutation.mutate({
       userId: selectedUserId,
-      isAdmin
+      role: newMemberRole
     });
   };
 
@@ -850,18 +878,38 @@ const HarmonyLedgerPage = () => {
                 <div>
                   <p style={{ margin: 0, fontWeight: 600 }}>{record.displayName ?? record.email ?? record.userId}</p>
                   <p className="muted" style={{ margin: 0 }}>
-                    {record.email || "Pending email"} • {record.isAdmin ? "Admin" : "Member"}
+                    {record.email || "Pending email"} •{" "}
+                    {roleCopy[record.role ?? (record.isAdmin ? "ADMIN" : "MEMBER")].label}
                   </p>
                 </div>
                 {data.isAdmin && record.accessId !== data.currentAccessId && (
-                  <button
-                    className="ghost"
-                    type="button"
-                    onClick={() => removeAccessMutation.mutate(record.accessId)}
-                    disabled={removeAccessMutation.isPending}
-                  >
-                    Remove
-                  </button>
+                  <div className="hl-txn-actions">
+                    <select
+                      value={record.role ?? (record.isAdmin ? "ADMIN" : "MEMBER")}
+                      onChange={(event) =>
+                        updateAccessRoleMutation.mutate({
+                          accessId: record.accessId,
+                          role: event.target.value as HarmonyLedgerRole
+                        })
+                      }
+                      disabled={updateAccessRoleMutation.isPending}
+                      aria-label={`Role for ${record.displayName ?? record.email ?? record.userId}`}
+                    >
+                      {Object.entries(roleCopy).map(([value, meta]) => (
+                        <option key={value} value={value}>
+                          {meta.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      className="ghost"
+                      type="button"
+                      onClick={() => removeAccessMutation.mutate(record.accessId)}
+                      disabled={removeAccessMutation.isPending}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 )}
                 {record.accessId === data.currentAccessId && (
                   <span className="pill" style={{ background: "#E0F2FE", color: "#0369a1" }}>
@@ -879,15 +927,26 @@ const HarmonyLedgerPage = () => {
             onChange={setSelectedUserId}
             disabled={!data.isAdmin}
           />
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <input
-              type="checkbox"
-              checked={isAdmin}
-              onChange={(event) => setIsAdmin(event.target.checked)}
+          <div className="input-group">
+            <label htmlFor="access-role">Role</label>
+            <select
+              id="access-role"
+              value={newMemberRole}
+              onChange={(event) =>
+                setNewMemberRole(event.target.value as HarmonyLedgerRole)
+              }
               disabled={!data.isAdmin}
-            />
-            Grant admin privileges
-          </label>
+            >
+              {Object.entries(roleCopy).map(([value, meta]) => (
+                <option key={value} value={value}>
+                  {meta.label}
+                </option>
+              ))}
+            </select>
+            <p className="muted" style={{ margin: 0 }}>
+              {roleCopy[newMemberRole].helper}.
+            </p>
+          </div>
           {accessError && <p className="error">{accessError}</p>}
           <button type="submit" disabled={!data.isAdmin || addAccessMutation.isPending}>
             Invite member
@@ -941,8 +1000,12 @@ const HarmonyLedgerPage = () => {
         <section className="card">
           <div className="section-title">
             <div>
-              <h2>Record Activity</h2>
-              <p className="muted">{entryTypeCopy[entryForm.type].helper}</p>
+              <h2>{canWrite ? "Record Activity" : "Ledger Totals"}</h2>
+              <p className="muted">
+                {canWrite
+                  ? entryTypeCopy[entryForm.type].helper
+                  : "You have read-only access to Harmony Collective."}
+              </p>
             </div>
             {totals && (
               <div className="pill" style={{ background: "#DCFCE7", color: "#15803d" }}>
@@ -972,6 +1035,7 @@ const HarmonyLedgerPage = () => {
           ) : (
             <p className="muted">No ledger data yet.</p>
           )}
+          {canWrite && (
           <form onSubmit={handleEntrySubmit} className="list" style={{ marginTop: "1rem" }}>
             <div className="input-group">
               <label htmlFor="entry-type">Type</label>
@@ -1065,6 +1129,7 @@ const HarmonyLedgerPage = () => {
               Save entry
             </button>
           </form>
+          )}
         </section>
         {renderAccessSection(accessData)}
       </div>
@@ -1105,6 +1170,7 @@ const HarmonyLedgerPage = () => {
         )}
       </section>
 
+      {canWrite && (
       <section className="card">
         <div className="section-title">
           <div>
@@ -1177,6 +1243,7 @@ const HarmonyLedgerPage = () => {
           </p>
         </form>
       </section>
+      )}
 
       {groupMetrics.length > 0 && (
         <section className="hl-section">
@@ -1285,28 +1352,30 @@ const HarmonyLedgerPage = () => {
                         {formatShortDate(template.nextRunAt)}
                       </p>
                     </div>
-                    <div className="hl-txn-actions">
-                      <button
-                        type="button"
-                        className="ghost"
-                        onClick={() => toggleRecurringActive(template)}
-                        disabled={busy}
-                      >
-                        {busy && updateRecurringMutation.isPending
-                          ? "Saving…"
-                          : template.isActive
-                            ? "Pause"
-                            : "Resume"}
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost"
-                        onClick={() => handleDeleteRecurring(template)}
-                        disabled={busy}
-                      >
-                        {busy && deleteRecurringMutation.isPending ? "Deleting…" : "Delete"}
-                      </button>
-                    </div>
+                    {canWrite && (
+                      <div className="hl-txn-actions">
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => toggleRecurringActive(template)}
+                          disabled={busy}
+                        >
+                          {busy && updateRecurringMutation.isPending
+                            ? "Saving…"
+                            : template.isActive
+                              ? "Pause"
+                              : "Resume"}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          onClick={() => handleDeleteRecurring(template)}
+                          disabled={busy}
+                        >
+                          {busy && deleteRecurringMutation.isPending ? "Deleting…" : "Delete"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                   {recurringRowErrors[template.templateId] && (
                     <p className="error" style={{ margin: "0.35rem 0 0" }}>
@@ -1318,6 +1387,8 @@ const HarmonyLedgerPage = () => {
             })}
           </div>
         )}
+        {canWrite && (
+        <>
         <hr />
         <form onSubmit={handleRecurringSubmit} className="list">
           <div className="input-group">
@@ -1425,6 +1496,8 @@ const HarmonyLedgerPage = () => {
             next cycle.
           </p>
         </form>
+        </>
+        )}
       </section>
 
       {accessData.isAdmin && (
@@ -1673,6 +1746,14 @@ const HarmonyLedgerPage = () => {
                         </p>
                       </td>
                       <td>
+                        {!canWrite ? (
+                          <p style={{ margin: 0 }}>
+                            {entry.groupName ??
+                              groups.find((group) => group.groupId === entry.groupId)
+                                ?.name ??
+                              "Unallocated"}
+                          </p>
+                        ) : (
                         <select
                           value={entry.groupId ?? ""}
                           onChange={(event) =>
@@ -1695,11 +1776,13 @@ const HarmonyLedgerPage = () => {
                               </option>
                             )}
                         </select>
+                        )}
                       </td>
                       <td>
                         {formatCurrencyValue(entry.amount, entry.currency)}
                       </td>
                       <td className="entry-actions">
+                        {canWrite && (
                         <button
                           type="button"
                           className="icon-button"
@@ -1709,6 +1792,7 @@ const HarmonyLedgerPage = () => {
                         >
                           ⋮
                         </button>
+                        )}
                         {menuEntryId === entry.entryId && (
                           <div className="entry-menu">
                             <button
@@ -1928,6 +2012,7 @@ const HarmonyLedgerPage = () => {
                     <td>{formatCurrencyValue(transfer.amount, transfer.currency)}</td>
                     <td>{transfer.note ?? "—"}</td>
                     <td className="entry-actions">
+                      {canWrite && (
                       <button
                         type="button"
                         className="icon-button"
@@ -1939,6 +2024,7 @@ const HarmonyLedgerPage = () => {
                       >
                         ⋮
                       </button>
+                      )}
                       {menuTransferId === transfer.transferId && (
                         <div className="entry-menu">
                           <button

@@ -15,6 +15,7 @@ import type {
   HarmonyLedgerAccessRecord,
   HarmonyLedgerEntry,
   HarmonyLedgerGroup,
+  HarmonyLedgerRole,
   HarmonyLedgerGroupSummary,
   HarmonyLedgerTransfer,
   HarmonyLedgerUnallocatedSummary,
@@ -155,6 +156,8 @@ export interface HarmonyLedgerOverviewResponse {
 
 export interface HarmonyLedgerAccessResponse {
   allowed: boolean;
+  role?: HarmonyLedgerRole;
+  canWrite: boolean;
   isAdmin: boolean;
   currentAccessId?: string;
   members?: HarmonyLedgerAccessRecord[];

@@ -212,11 +212,15 @@ export interface HarmonyLedgerEntry {
   importStatementId?: string;
 }
 
+export type HarmonyLedgerRole = "VIEWER" | "MEMBER" | "ADMIN";
+
 export interface HarmonyLedgerAccessRecord {
   accessId: string;
   userId?: string;
   email?: string;
   displayName?: string;
+  role: HarmonyLedgerRole;
+  /** Mirrors role === "ADMIN" for clients that predate roles. */
   isAdmin: boolean;
   addedAt: string;
   addedBy: string;

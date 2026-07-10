@@ -62,7 +62,7 @@ class _HarmonyModuleScreenState extends State<HarmonyModuleScreen> {
                 'account, then come back.',
           );
         }
-        return HarmonyHomeScreen(api: _api);
+        return HarmonyHomeScreen(api: _api, canWrite: access.canWrite);
       },
     );
   }

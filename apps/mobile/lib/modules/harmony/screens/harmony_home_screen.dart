@@ -16,7 +16,10 @@ import 'transfers_screen.dart';
 class HarmonyHomeScreen extends StatefulWidget {
   final HarmonyApi api;
 
-  const HarmonyHomeScreen({super.key, required this.api});
+  /// False for viewer-role members: all write affordances are hidden.
+  final bool canWrite;
+
+  const HarmonyHomeScreen({super.key, required this.api, this.canWrite = true});
 
   @override
   State<HarmonyHomeScreen> createState() => _HarmonyHomeScreenState();
@@ -100,6 +103,7 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
               api: widget.api,
               groupId: summary.groupId,
               groupName: summary.name,
+              canWrite: widget.canWrite,
             ),
           ),
         )
@@ -110,7 +114,8 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
     Navigator.of(context)
         .push(
           MaterialPageRoute<void>(
-            builder: (_) => StatementsScreen(api: widget.api),
+            builder: (_) =>
+                StatementsScreen(api: widget.api, canWrite: widget.canWrite),
           ),
         )
         // Confirmed imports change balances; refresh on return.
@@ -121,7 +126,8 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
     Navigator.of(context)
         .push(
           MaterialPageRoute<void>(
-            builder: (_) => TransfersScreen(api: widget.api),
+            builder: (_) =>
+                TransfersScreen(api: widget.api, canWrite: widget.canWrite),
           ),
         )
         .then((_) => _load());
@@ -147,7 +153,7 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
           ),
         ],
       ),
-      floatingActionButton: data == null
+      floatingActionButton: data == null || !widget.canWrite
           ? null
           : FloatingActionButton.extended(
               onPressed: _recordCash,
@@ -336,6 +342,9 @@ class _HarmonyHomeScreenState extends State<HarmonyHomeScreen> {
   }
 
   Widget _entryRow(HarmonyEntry entry) {
-    return HarmonyEntryRow(entry: entry, onTap: () => _entryActions(entry));
+    return HarmonyEntryRow(
+      entry: entry,
+      onTap: widget.canWrite ? () => _entryActions(entry) : null,
+    );
   }
 }
