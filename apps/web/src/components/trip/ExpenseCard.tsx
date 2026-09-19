@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { CategoryBadge } from "../CategoryBadge";
 import ExpenseCommentsThread from "../ExpenseCommentsThread";
 import { useConfirm } from "../ConfirmDialog";
@@ -51,7 +52,48 @@ export const ExpenseCard = ({
   onViewReceipt
 }: ExpenseCardProps) => {
   const confirm = useConfirm();
+  const queryClient = useQueryClient();
   const [splitUrl, setSplitUrl] = useState<string | null>(null);
+  const [claimBusy, setClaimBusy] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+
+  // Members claim their items right here — the split link stays for people
+  // who aren't on the trip. Each tap sends the full "what's mine" set, so a
+  // stale card can't silently drop a claim made from another device.
+  const canClaim = Boolean(currentUserId) && !expense.draft;
+  const myItemIds = new Set(
+    (expense.lineItems ?? [])
+      .filter(
+        (item) =>
+          currentUserId && item.assignedMemberIds.includes(currentUserId)
+      )
+      .map((item) => item.lineItemId)
+  );
+  const unclaimedCount = (expense.lineItems ?? []).filter(
+    (item) => item.assignedMemberIds.length === 0
+  ).length;
+
+  const handleToggleClaim = async (lineItemId: string) => {
+    if (!canClaim || claimBusy) return;
+    const next = new Set(myItemIds);
+    if (next.has(lineItemId)) {
+      next.delete(lineItemId);
+    } else {
+      next.add(lineItemId);
+    }
+    setClaimBusy(true);
+    setClaimError(null);
+    try {
+      await splitLinkApi.saveMemberClaims(tripId, expense.expenseId, [...next]);
+      await queryClient.invalidateQueries({ queryKey: ["trip", tripId] });
+    } catch (error) {
+      setClaimError(
+        error instanceof Error ? error.message : "Couldn't save that claim."
+      );
+    } finally {
+      setClaimBusy(false);
+    }
+  };
   const [splitBusy, setSplitBusy] = useState<"open" | "revoke" | null>(null);
   const [splitCopied, setSplitCopied] = useState(false);
   const [splitError, setSplitError] = useState<string | null>(null);
@@ -205,6 +247,11 @@ export const ExpenseCard = ({
             {expense.extrasSplitMode === "even"
               ? " · tax & tip split evenly"
               : " · tax & tip proportional"}
+            {unclaimedCount > 0 && (
+              <strong style={{ marginLeft: "0.4rem" }}>
+                · {unclaimedCount} unclaimed
+              </strong>
+            )}
           </summary>
           <div
             style={{
@@ -214,43 +261,121 @@ export const ExpenseCard = ({
               marginTop: "0.6rem"
             }}
           >
-            {expense.lineItems.map((item) => (
-              <div
-                key={item.lineItemId}
+            {canClaim && (
+              <p
+                className="muted"
+                style={{ margin: "0 0 0.2rem", fontSize: "0.78rem" }}
+              >
+                {claimBusy
+                  ? "Saving…"
+                  : unclaimedCount > 0
+                    ? "Tap an item to claim it — anything nobody claims stays with the payer."
+                    : "Tap an item to claim or unclaim it."}
+              </p>
+            )}
+            {expense.lineItems.map((item) => {
+              const mine = myItemIds.has(item.lineItemId);
+              const others = item.assignedMemberIds.filter(
+                (memberId) => memberId !== currentUserId
+              );
+              const names = [
+                ...(mine ? ["you"] : []),
+                ...others.map(
+                  (memberId) =>
+                    (membersById[memberId] ?? memberId).split(/\s+/)[0]
+                )
+              ];
+              const row = (
+                <>
+                  {canClaim && (
+                    <span
+                      aria-hidden="true"
+                      style={{
+                        display: "inline-block",
+                        width: "1rem",
+                        height: "1rem",
+                        borderRadius: "0.3rem",
+                        border: mine
+                          ? "1px solid var(--accent, #6366f1)"
+                          : "1px solid rgba(148,163,184,0.5)",
+                        background: mine
+                          ? "var(--accent, #6366f1)"
+                          : "transparent",
+                        color: "white",
+                        fontSize: "0.7rem",
+                        lineHeight: "1rem",
+                        textAlign: "center",
+                        flexShrink: 0
+                      }}
+                    >
+                      {mine ? "✓" : ""}
+                    </span>
+                  )}
+                  <span style={{ fontSize: "0.88rem", flex: 1 }}>
+                    {item.description}
+                    {typeof item.quantity === "number" &&
+                      item.quantity > 1 && (
+                        <span className="muted"> ×{item.quantity}</span>
+                      )}
+                    <span
+                      className="muted"
+                      style={{ fontSize: "0.78rem", marginLeft: "0.4rem" }}
+                    >
+                      {names.length > 0 ? names.join(", ") : "unclaimed"}
+                    </span>
+                  </span>
+                  <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>
+                    {formatCurrency.format(item.total)}
+                  </span>
+                </>
+              );
+              const rowStyle = {
+                display: "flex",
+                gap: "0.6rem",
+                alignItems: "baseline",
+                width: "100%"
+              } as const;
+              return canClaim ? (
+                <button
+                  key={item.lineItemId}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={mine}
+                  disabled={claimBusy}
+                  title={mine ? "Unclaim this item" : "Claim this item"}
+                  onClick={() => void handleToggleClaim(item.lineItemId)}
+                  style={{
+                    ...rowStyle,
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    margin: 0,
+                    color: "inherit",
+                    font: "inherit",
+                    textAlign: "left",
+                    cursor: claimBusy ? "wait" : "pointer"
+                  }}
+                >
+                  {row}
+                </button>
+              ) : (
+                <div key={item.lineItemId} style={rowStyle}>
+                  {row}
+                </div>
+              );
+            })}
+            {claimError && (
+              <p
+                role="alert"
                 style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: "0.75rem",
-                  alignItems: "baseline"
+                  margin: 0,
+                  fontSize: "0.8rem",
+                  color: "var(--danger, #f87171)"
                 }}
               >
-                <span style={{ fontSize: "0.88rem" }}>
-                  {item.description}
-                  {typeof item.quantity === "number" &&
-                    item.quantity > 1 && (
-                      <span className="muted"> ×{item.quantity}</span>
-                    )}
-                  <span
-                    className="muted"
-                    style={{ fontSize: "0.78rem", marginLeft: "0.4rem" }}
-                  >
-                    {item.assignedMemberIds.length > 0
-                      ? item.assignedMemberIds
-                          .map(
-                            (memberId) =>
-                              (membersById[memberId] ?? memberId).split(
-                                /\s+/
-                              )[0]
-                          )
-                          .join(", ")
-                      : "unclaimed"}
-                  </span>
-                </span>
-                <span style={{ fontSize: "0.88rem", fontWeight: 600 }}>
-                  {formatCurrency.format(item.total)}
-                </span>
-              </div>
-            ))}
+                {claimError}
+              </p>
+            )}
           </div>
         </details>
       )}

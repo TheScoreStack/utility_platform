@@ -1014,6 +1014,36 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
 
   /// Routes to the right editor: the itemized review screen when the expense
   /// has line items, otherwise the quick (even-split) sheet.
+  /// In-app claiming: rewrites the caller's own item selection on an
+  /// itemized expense — the same math the split link uses, no link needed —
+  /// then reloads so balances move right away.
+  Future<void> _toggleClaim(Expense expense, ExpenseLineItem item) async {
+    final summary = _summary;
+    if (summary == null) return;
+    final me = summary.currentUserId;
+    final mine = (expense.lineItems ?? const <ExpenseLineItem>[])
+        .where((i) => i.assignedMemberIds.contains(me))
+        .map((i) => i.lineItemId)
+        .toSet();
+    if (!mine.remove(item.lineItemId)) {
+      mine.add(item.lineItemId);
+    }
+    try {
+      await widget.api.put(
+        '/trips/${widget.tripId}/expenses/${expense.expenseId}/claims',
+        {'lineItemIds': mine.toList()},
+      );
+      HapticFeedback.selectionClick();
+      await _load();
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      showAppSnackBar(context, 'Could not save that claim.', error: true);
+    }
+  }
+
   Future<void> _editExpense(Expense expense) async {
     final summary = _summary;
     if (summary == null) return;
@@ -1175,6 +1205,7 @@ class _TripDetailScreenState extends State<TripDetailScreen> {
                 onExpenseLongPress: _showExpenseActions,
                 onReceiptTap: _openReceipt,
                 onCommentsTap: _showComments,
+                onClaimToggle: _toggleClaim,
                 onDraftPublish: _confirmPublishDraft,
                 onDraftLongPress: _showDraftActions,
                 onRecurringTap: _showRecurringActions,
@@ -1288,6 +1319,7 @@ class _ExpensesTab extends StatefulWidget {
   final Future<void> Function(Expense) onExpenseLongPress;
   final Future<void> Function(Expense) onReceiptTap;
   final Future<void> Function(Expense) onCommentsTap;
+  final Future<void> Function(Expense, ExpenseLineItem) onClaimToggle;
   final Future<void> Function(Expense) onDraftPublish;
   final Future<void> Function(Expense) onDraftLongPress;
   final Future<void> Function(RecurringExpense) onRecurringTap;
@@ -1298,6 +1330,7 @@ class _ExpensesTab extends StatefulWidget {
     required this.onExpenseLongPress,
     required this.onReceiptTap,
     required this.onCommentsTap,
+    required this.onClaimToggle,
     required this.onDraftPublish,
     required this.onDraftLongPress,
     required this.onRecurringTap,
@@ -1593,9 +1626,12 @@ class _ExpensesTabState extends State<_ExpensesTab> {
                   (expense) => _ExpenseCard(
                     expense: expense,
                     membersById: membersById,
+                    currentUserId: summary.currentUserId,
                     onLongPress: () => onExpenseLongPress(expense),
                     onReceiptTap: () => onReceiptTap(expense),
                     onCommentsTap: () => widget.onCommentsTap(expense),
+                    onClaimToggle: (item) =>
+                        widget.onClaimToggle(expense, item),
                   ),
                 ),
               ],
@@ -1710,16 +1746,22 @@ class _DraftCard extends StatelessWidget {
 class _ExpenseCard extends StatefulWidget {
   final Expense expense;
   final Map<String, TripMember> membersById;
+  final String currentUserId;
   final VoidCallback onLongPress;
   final VoidCallback onReceiptTap;
   final VoidCallback onCommentsTap;
 
+  /// Tapping a line item claims or unclaims it for the current user.
+  final Future<void> Function(ExpenseLineItem) onClaimToggle;
+
   const _ExpenseCard({
     required this.expense,
     required this.membersById,
+    required this.currentUserId,
     required this.onLongPress,
     required this.onReceiptTap,
     required this.onCommentsTap,
+    required this.onClaimToggle,
   });
 
   @override
@@ -1729,8 +1771,22 @@ class _ExpenseCard extends StatefulWidget {
 class _ExpenseCardState extends State<_ExpenseCard> {
   bool _expanded = false;
 
+  /// Line item whose claim is in flight; taps are ignored until it lands so
+  /// two quick toggles can't race each other with stale "what's mine" sets.
+  String? _savingItemId;
+
   String _memberName(String memberId) =>
       firstName(widget.membersById[memberId]?.displayName ?? 'Someone');
+
+  Future<void> _toggleClaim(ExpenseLineItem item) async {
+    if (_savingItemId != null) return;
+    setState(() => _savingItemId = item.lineItemId);
+    try {
+      await widget.onClaimToggle(item);
+    } finally {
+      if (mounted) setState(() => _savingItemId = null);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1740,6 +1796,10 @@ class _ExpenseCardState extends State<_ExpenseCard> {
     final hasItems = lineItems.isNotEmpty;
     final date = formatShortDate(expense.createdAt);
     final payer = _memberName(expense.paidByMemberId);
+    final canClaim = hasItems && !expense.draft;
+    final unclaimedCount = lineItems
+        .where((item) => item.assignedMemberIds.isEmpty)
+        .length;
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1832,7 +1892,8 @@ class _ExpenseCardState extends State<_ExpenseCard> {
                     Expanded(
                       child: Text(
                         '${lineItems.length} '
-                        '${lineItems.length == 1 ? 'item' : 'items'} · split by item',
+                        '${lineItems.length == 1 ? 'item' : 'items'} · split by item'
+                        '${unclaimedCount > 0 ? ' · $unclaimedCount unclaimed' : ''}',
                         style: const TextStyle(
                           fontSize: 12,
                           color: Colors.white70,
@@ -1851,45 +1912,90 @@ class _ExpenseCardState extends State<_ExpenseCard> {
               ],
               if (_expanded && hasItems) ...[
                 const Divider(height: 20),
-                ...lineItems.map(
-                  (item) => Padding(
+                if (canClaim)
+                  Padding(
                     padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.description,
-                                style: const TextStyle(fontSize: 13),
-                              ),
-                              Text(
-                                item.assignedMemberIds.isEmpty
-                                    ? 'unclaimed'
-                                    : item.assignedMemberIds
-                                          .map(_memberName)
-                                          .join(', '),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white54,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(
-                          formatCurrency(item.total, currency),
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontFeatures: kTabularFigures,
-                          ),
-                        ),
-                      ],
+                    child: Text(
+                      unclaimedCount > 0
+                          ? 'Tap an item to claim it — anything nobody '
+                                'claims stays with $payer.'
+                          : 'Tap an item to claim or unclaim it.',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.white54,
+                      ),
                     ),
                   ),
-                ),
+                ...lineItems.map((item) {
+                  final mine = item.assignedMemberIds.contains(
+                    widget.currentUserId,
+                  );
+                  final names = [
+                    if (mine) 'you',
+                    ...item.assignedMemberIds
+                        .where((id) => id != widget.currentUserId)
+                        .map(_memberName),
+                  ];
+                  final saving = _savingItemId == item.lineItemId;
+                  return InkWell(
+                    borderRadius: BorderRadius.circular(8),
+                    onTap: canClaim ? () => _toggleClaim(item) : null,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (canClaim)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8, top: 1),
+                              child: saving
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      ),
+                                    )
+                                  : Icon(
+                                      mine
+                                          ? Icons.check_box_rounded
+                                          : Icons.check_box_outline_blank_rounded,
+                                      size: 18,
+                                      color: mine
+                                          ? Theme.of(context).colorScheme.primary
+                                          : Colors.white38,
+                                    ),
+                            ),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.description,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                                Text(
+                                  names.isEmpty ? 'unclaimed' : names.join(', '),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white54,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            formatCurrency(item.total, currency),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontFeatures: kTabularFigures,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
               ],
             ],
           ),

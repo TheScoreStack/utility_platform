@@ -444,8 +444,94 @@ export class SplitLinkService {
       );
     }
 
+    const patch = await this.persistClaims(
+      link.tripId,
+      link.expenseId,
+      expense,
+      memberId,
+      parsed.data.lineItemIds
+    );
+
+    return this.buildSnapshot({
+      ...context,
+      expense: { ...expense, ...patch }
+    });
+  }
+
+  /** In-app claiming for signed-in trip members: the same "replace my item
+   *  selection" as the guest route, authorized by trip membership instead of
+   *  a guest secret. Works whether or not a split link has been minted, so
+   *  nobody has to leave the app to say what they had. If a link exists and
+   *  this member already marked it paid from the guest page, the selection
+   *  is locked exactly as it is there. */
+  async updateMemberClaims(
+    tripId: string,
+    expenseId: string,
+    body: unknown,
+    auth: AuthContext
+  ): Promise<Expense> {
+    const parsed = claimsSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ValidationError(parsed.error.message);
+    }
+
+    const details = await getTripStore().getTripDetails(tripId);
+    if (!details.members.some((m) => m.memberId === auth.userId)) {
+      throw new ForbiddenError("You are not part of this trip");
+    }
+    // Drafts are private to their creator and don't count toward balances,
+    // so they aren't claimable until published.
+    const expense = details.expenses.find((e) => e.expenseId === expenseId);
+    if (!expense) {
+      throw new NotFoundError("Expense not found");
+    }
+    if (!expense.lineItems?.length) {
+      throw new ValidationError("This expense isn't split by item");
+    }
+
+    const link = await getSplitLinkStore().getSplitLinkByExpense(
+      tripId,
+      expenseId
+    );
+    if (link) {
+      const guest = await getSplitLinkStore().getGuest(
+        link.shareId,
+        auth.userId
+      );
+      if (guest?.completedAt) {
+        throw new ValidationError(
+          "You already marked this paid — ask whoever covered the bill to adjust it"
+        );
+      }
+    }
+
+    const patch = await this.persistClaims(
+      tripId,
+      expenseId,
+      expense,
+      auth.userId,
+      parsed.data.lineItemIds
+    );
+    return { ...expense, ...patch };
+  }
+
+  /** Shared tail of both claim routes: validates the chosen items, rewrites
+   *  this member's assignments, re-derives allocations (unclaimed items ride
+   *  with the payer) and persists. Returns the fields that changed. */
+  private async persistClaims(
+    tripId: string,
+    expenseId: string,
+    expense: Expense,
+    memberId: string,
+    lineItemIds: string[]
+  ): Promise<
+    Pick<
+      Expense,
+      "lineItems" | "allocations" | "sharedWithMemberIds" | "updatedAt"
+    >
+  > {
     const itemIds = new Set((expense.lineItems ?? []).map((i) => i.lineItemId));
-    for (const lineItemId of parsed.data.lineItemIds) {
+    for (const lineItemId of lineItemIds) {
       if (!itemIds.has(lineItemId)) {
         throw new ValidationError("One of those items is no longer on the bill");
       }
@@ -454,32 +540,23 @@ export class SplitLinkService {
     const lineItems = applyGuestClaims(
       expense.lineItems ?? [],
       memberId,
-      new Set(parsed.data.lineItemIds)
+      new Set(lineItemIds)
     );
-
-    const updatedExpense: Expense = { ...expense, lineItems };
-    const allocations = computeSplitShares(updatedExpense).map(
+    const allocations = computeSplitShares({ ...expense, lineItems }).map(
       ({ memberId: id, amount }) => ({ memberId: id, amount })
     );
     const sharedWithMemberIds = expense.sharedWithMemberIds.includes(memberId)
       ? expense.sharedWithMemberIds
       : [...expense.sharedWithMemberIds, memberId];
+    const patch = {
+      lineItems,
+      allocations,
+      sharedWithMemberIds,
+      updatedAt: isoNow()
+    };
 
-    await getTripStore().updateExpenseAllocations(
-      link.tripId,
-      link.expenseId,
-      {
-        lineItems,
-        allocations,
-        sharedWithMemberIds,
-        updatedAt: isoNow()
-      }
-    );
-
-    return this.buildSnapshot({
-      ...context,
-      expense: { ...updatedExpense, allocations, sharedWithMemberIds }
-    });
+    await getTripStore().updateExpenseAllocations(tripId, expenseId, patch);
+    return patch;
   }
 
   /** Guest says "I've sent the money": records an unconfirmed settlement to

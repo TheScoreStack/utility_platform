@@ -7,6 +7,7 @@
 import { api, ApiError } from "./api";
 import { appConfig } from "../config";
 import type {
+  Expense,
   ExpenseSplitLink,
   SplitLinkJoinResponse,
   SplitLinkSnapshot
@@ -19,6 +20,17 @@ export const splitLinkApi = {
     ),
   revoke: (tripId: string, expenseId: string) =>
     api.delete<void>(`/trips/${tripId}/expenses/${expenseId}/split-link`),
+  /** In-app claiming: replaces the caller's own item selection on an
+   *  itemized expense. Same math as the guest page, no link required. */
+  saveMemberClaims: (
+    tripId: string,
+    expenseId: string,
+    lineItemIds: string[]
+  ) =>
+    api.put<{ expense: Expense }>(
+      `/trips/${tripId}/expenses/${expenseId}/claims`,
+      { lineItemIds }
+    ),
   /** Signed-in join: binds the claim session to the caller's account and
    *  adds them to the trip if they aren't on it yet. Pass claimMemberId to
    *  merge an unclaimed placeholder ("Are you Sarah?") into the account. */

@@ -731,6 +731,21 @@ export const handler = async (
         return noContent(origin);
       }
 
+      // In-app claiming: a member replaces their own item selection without
+      // going through the public split link (same math, membership auth).
+      const expenseClaimsMatch = remainder.match(/^\/expenses\/([^/]+)\/claims$/);
+      if (expenseClaimsMatch && method === "PUT") {
+        const expenseId = decodeURIComponent(expenseClaimsMatch[1]);
+        const body = parseBody(event);
+        const expense = await splitLinkService.updateMemberClaims(
+          tripId,
+          expenseId,
+          body,
+          auth
+        );
+        return ok({ expense }, origin);
+      }
+
       const splitLinkMatch = remainder.match(/^\/expenses\/([^/]+)\/split-link$/);
       if (splitLinkMatch && method === "GET") {
         // Fetch-or-create, like the trip invite link.
