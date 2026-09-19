@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { formatTripRange } from "../lib/tripFormat";
@@ -14,6 +14,8 @@ import { ExpensesTab } from "../components/trip/ExpensesTab";
 import { SettlementsTab } from "../components/trip/SettlementsTab";
 import { ActivityTab } from "../components/trip/ActivityTab";
 import { PeopleTab, type PaymentMethodsInput } from "../components/trip/PeopleTab";
+import { SidePanel } from "../components/trip/SidePanel";
+import { TripBalanceStrip } from "../components/trip/TripBalanceStrip";
 import type {
   TripSummary,
   Expense,
@@ -23,9 +25,33 @@ import type {
 } from "../types";
 import { useConfirm } from "../components/ConfirmDialog";
 
-type TripTab = "overview" | "expenses" | "settlements" | "activity" | "people";
+// Two destinations, matching the mobile app. What used to be the Overview,
+// Activity and People tabs is occasional work and now opens in a side panel,
+// so the trip page presents two choices instead of five.
+type TripTab = "expenses" | "settle";
 
-const TRIP_TABS: readonly TripTab[] = ["overview", "expenses", "settlements", "activity", "people"];
+const DEFAULT_TRIP_TAB: TripTab = "expenses";
+
+/** Which side panel is open, if any. */
+type TripPanel = "insights" | "activity" | "people";
+
+// Links and bookmarks from the five-tab layout still have to land somewhere
+// sensible, and "settlements" is still what handleUseSuggestion means.
+const LEGACY_TAB_ALIASES: Record<string, TripTab> = {
+  overview: "expenses",
+  expenses: "expenses",
+  settlements: "settle",
+  settle: "settle",
+  activity: "expenses",
+  people: "expenses"
+};
+
+/** A legacy ?tab= value that should open a panel rather than a tab. */
+const LEGACY_TAB_PANELS: Record<string, TripPanel> = {
+  activity: "activity",
+  people: "people",
+  overview: "insights"
+};
 
 type TripDetailsFormState = {
   name: string;
@@ -73,15 +99,26 @@ const TripDetailPage = () => {
   const confirm = useConfirm();
   // Tab lives in the URL (?tab=...) so refreshes and shared links keep their place.
   const [searchParams, setSearchParams] = useSearchParams();
-  const tabParam = searchParams.get("tab") as TripTab | null;
+  const tabParam = searchParams.get("tab");
   const activeTab: TripTab =
-    tabParam && TRIP_TABS.includes(tabParam) ? tabParam : "overview";
+    (tabParam ? LEGACY_TAB_ALIASES[tabParam] : undefined) ?? DEFAULT_TRIP_TAB;
   const setActiveTab = useCallback(
     (tab: TripTab) => {
-      setSearchParams(tab === "overview" ? {} : { tab });
+      setSearchParams(tab === DEFAULT_TRIP_TAB ? {} : { tab });
     },
     [setSearchParams]
   );
+  const [openPanel, setOpenPanel] = useState<TripPanel | null>(null);
+  // A bookmark to ?tab=people should still land on the people UI, now that
+  // it is a panel. Runs once per distinct legacy value.
+  const consumedLegacyPanelRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!tabParam) return;
+    if (consumedLegacyPanelRef.current === tabParam) return;
+    consumedLegacyPanelRef.current = tabParam;
+    const panel = LEGACY_TAB_PANELS[tabParam];
+    if (panel) setOpenPanel(panel);
+  }, [tabParam]);
   const [settlementPrefill, setSettlementPrefill] = useState<SettlementPrefill | null>(null);
   const [expensePrefill, setExpensePrefill] = useState<ExpensePrefill | null>(null);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -141,7 +178,8 @@ const TripDetailPage = () => {
         amount: suggestion.amount,
         nonce: Date.now()
       });
-      setActiveTab("settlements");
+      setActiveTab("settle");
+      setOpenPanel(null);
     },
     [setActiveTab]
   );
@@ -832,100 +870,110 @@ const TripDetailPage = () => {
             {detailsMessage.text}
           </p>
         )}
-        <div
-          className="list"
-          style={{ marginTop: "1rem", flexDirection: "row", gap: "0.5rem", flexWrap: "wrap" }}
-        >
-          {[
-            { id: "overview", label: "Overview" },
+        <div className="tabbar" role="tablist" aria-label="Trip sections">
+          {([
             { id: "expenses", label: "Expenses" },
-            { id: "settlements", label: "Settlements" },
-            { id: "activity", label: "Activity" },
-            { id: "people", label: "People" }
-          ].map((tab) => (
+            { id: "settle", label: "Settle up" }
+          ] as const).map((tab) => (
             <button
               key={tab.id}
               type="button"
-              className={activeTab === tab.id ? "primary" : "secondary"}
-              onClick={() => handleTabChange(tab.id as TripTab)}
+              role="tab"
+              aria-selected={activeTab === tab.id}
+              className="tabbar__tab"
+              onClick={() => handleTabChange(tab.id)}
             >
               {tab.label}
             </button>
           ))}
+          <span className="tabbar__spacer" />
           {isFetching && !isLoading && (
             <span className="muted" style={{ alignSelf: "center" }}>
               Refreshing…
             </span>
           )}
         </div>
+
+        {/* Everything that used to be its own tab. Quiet by design: these
+            are places you visit occasionally, not the job at hand. */}
+        <div className="trip-toolbar" style={{ marginTop: "var(--space-3)" }}>
+          {([
+            { id: "insights", label: "Insights" },
+            { id: "activity", label: "Activity" },
+            { id: "people", label: "People" }
+          ] as const).map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              className="secondary btn-sm btn-quiet"
+              onClick={() => setOpenPanel(entry.id)}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
       </section>
 
-      {activeTab === "overview" && (
-        <OverviewTab
-          balances={balances}
-          membersById={membersById}
-          settlementSuggestions={settlementSuggestions}
-          currency={trip.currency}
-          expenses={expenses}
-          currentUserId={effectiveCurrentUserId}
-          pendingSettlements={pendingSettlements}
-          onUseSuggestion={handleUseSuggestion}
-          onGoToSettlements={() => handleTabChange("settlements")}
-        />
-      )}
-
       {activeTab === "expenses" && (
-        <ExpensesTab
-          receipts={receipts}
-          tripId={trip.tripId}
-          members={members}
-          expenses={expenses}
-          currency={trip.currency}
-          onCreateExpense={handleSubmitExpense}
-          isCreating={
-            createExpenseMutation.isPending || updateExpenseMutation.isPending
-          }
-          editingExpense={editingExpense}
-          draftExpenses={data.draftExpenses ?? []}
-          onPublishDraft={(expenseId) =>
-            publishDraftMutation.mutateAsync(expenseId)
-          }
-          publishingExpenseId={
-            publishDraftMutation.isPending
-              ? publishDraftMutation.variables
-              : undefined
-          }
-          onCancelEditExpense={() => setEditingExpense(null)}
-          onEditExpense={handleEditExpense}
-          membersById={membersById}
-          onDeleteExpense={(expenseId, description, isDraft) =>
-            deleteExpenseMutation.mutateAsync({ expenseId, description, isDraft })
-          }
-          deletePending={deleteExpenseMutation.isPending}
-          deletingExpenseId={deleteExpenseMutation.variables?.expenseId}
-          currentUserId={effectiveCurrentUserId}
-          expensePrefill={expensePrefill}
-          onExpensePrefillConsumed={() => setExpensePrefill(null)}
-          onRepeatExpense={handleRepeatExpense}
-          deletedExpenses={data.deletedExpenses ?? []}
-          onRestoreExpense={(expenseId) => restoreExpenseMutation.mutateAsync(expenseId)}
-          onPurgeExpense={(expenseId) => purgeExpenseMutation.mutateAsync(expenseId)}
-          restoringExpenseId={restoreExpenseMutation.variables}
-          purgingExpenseId={purgeExpenseMutation.variables}
-          isTripOwner={canManageMembers}
-          recurringExpenses={data.recurringExpenses ?? []}
-          onStopRecurring={(recurringId) =>
-            stopRecurringMutation.mutateAsync(recurringId)
-          }
-          stoppingRecurringId={
-            stopRecurringMutation.isPending
-              ? stopRecurringMutation.variables
-              : undefined
-          }
-        />
+        <>
+          <TripBalanceStrip
+            balances={balances}
+            currency={trip.currency}
+            currentUserId={effectiveCurrentUserId}
+            onGoToSettle={() => handleTabChange("settle")}
+          />
+          <ExpensesTab
+            receipts={receipts}
+            tripId={trip.tripId}
+            members={members}
+            expenses={expenses}
+            currency={trip.currency}
+            onCreateExpense={handleSubmitExpense}
+            isCreating={
+              createExpenseMutation.isPending || updateExpenseMutation.isPending
+            }
+            editingExpense={editingExpense}
+            draftExpenses={data.draftExpenses ?? []}
+            onPublishDraft={(expenseId) =>
+              publishDraftMutation.mutateAsync(expenseId)
+            }
+            publishingExpenseId={
+              publishDraftMutation.isPending
+                ? publishDraftMutation.variables
+                : undefined
+            }
+            onCancelEditExpense={() => setEditingExpense(null)}
+            onEditExpense={handleEditExpense}
+            membersById={membersById}
+            onDeleteExpense={(expenseId, description, isDraft) =>
+              deleteExpenseMutation.mutateAsync({ expenseId, description, isDraft })
+            }
+            deletePending={deleteExpenseMutation.isPending}
+            deletingExpenseId={deleteExpenseMutation.variables?.expenseId}
+            currentUserId={effectiveCurrentUserId}
+            expensePrefill={expensePrefill}
+            onExpensePrefillConsumed={() => setExpensePrefill(null)}
+            onRepeatExpense={handleRepeatExpense}
+            deletedExpenses={data.deletedExpenses ?? []}
+            onRestoreExpense={(expenseId) => restoreExpenseMutation.mutateAsync(expenseId)}
+            onPurgeExpense={(expenseId) => purgeExpenseMutation.mutateAsync(expenseId)}
+            restoringExpenseId={restoreExpenseMutation.variables}
+            purgingExpenseId={purgeExpenseMutation.variables}
+            isTripOwner={canManageMembers}
+            recurringExpenses={data.recurringExpenses ?? []}
+            onStopRecurring={(recurringId) =>
+              stopRecurringMutation.mutateAsync(recurringId)
+            }
+            stoppingRecurringId={
+              stopRecurringMutation.isPending
+                ? stopRecurringMutation.variables
+                : undefined
+            }
+          />
+        </>
       )}
 
-      {activeTab === "settlements" && (
+      {activeTab === "settle" && (
         <SettlementsTab
           currency={trip.currency}
           members={members}
@@ -962,7 +1010,34 @@ const TripDetailPage = () => {
         />
       )}
 
-      {activeTab === "activity" && (
+      {/* Occasional work: reachable from the toolbar, never competing with
+          the two tabs above. */}
+      <SidePanel
+        open={openPanel === "insights"}
+        title="Insights"
+        onClose={() => setOpenPanel(null)}
+      >
+        <OverviewTab
+          balances={balances}
+          membersById={membersById}
+          settlementSuggestions={settlementSuggestions}
+          currency={trip.currency}
+          expenses={expenses}
+          currentUserId={effectiveCurrentUserId}
+          pendingSettlements={pendingSettlements}
+          onUseSuggestion={handleUseSuggestion}
+          onGoToSettlements={() => {
+            setOpenPanel(null);
+            handleTabChange("settle");
+          }}
+        />
+      </SidePanel>
+
+      <SidePanel
+        open={openPanel === "activity"}
+        title="Activity"
+        onClose={() => setOpenPanel(null)}
+      >
         <ActivityTab
           expenses={expenses}
           settlements={settlements}
@@ -971,9 +1046,13 @@ const TripDetailPage = () => {
           currency={trip.currency}
           currentUserId={effectiveCurrentUserId}
         />
-      )}
+      </SidePanel>
 
-      {activeTab === "people" && (
+      <SidePanel
+        open={openPanel === "people"}
+        title="People"
+        onClose={() => setOpenPanel(null)}
+      >
         <PeopleTab
           members={members}
           memberSearchTerm={memberSearchTerm}
@@ -1004,7 +1083,7 @@ const TripDetailPage = () => {
           inviteSaving={createInviteMutation.isPending}
           inviteRevoking={revokeInviteMutation.isPending}
         />
-      )}
+      </SidePanel>
 
       {undoToast && (
         <UndoToast

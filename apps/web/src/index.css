@@ -7415,3 +7415,280 @@ aside.meet-aside > .meet-form {
     padding: 1.3rem 1.4rem;
   }
 }
+
+/* ============================================================
+   DESIGN TOKENS — the layer inline styles should defer to.
+   Colours already live at the top of this file and mirror the
+   mobile AppColors. What was missing is everything else a
+   component reaches for: text ramps, radii, spacing, shadow.
+   Anything hardcoding rgba(148,163,184,0.14) should use var(--border).
+   ============================================================ */
+:root {
+  /* Text ramp */
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
+
+  /* Extra surface step for things that sit on top of a card */
+  --surface-raised: #223052;
+
+  /* Semantic aliases so components stop inventing their own hexes */
+  --positive: var(--owed);
+  --warning: var(--owe);
+  --danger: #f87171;
+
+  /* Radii */
+  --radius-sm: 0.5rem;
+  --radius-md: 0.85rem;
+  --radius-lg: 1rem;
+  --radius-pill: 999px;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  /* Elevation */
+  --shadow-raised: 0 10px 30px rgba(2, 6, 23, 0.45);
+  --shadow-panel: -18px 0 50px rgba(2, 6, 23, 0.55);
+}
+
+/* ---------- layout utilities ---------- */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.stack--tight { gap: var(--space-2); }
+.stack--loose { gap: var(--space-5); }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.row--between { justify-content: space-between; }
+.row--tight { gap: var(--space-2); }
+.row--top { align-items: flex-start; }
+.row--baseline { align-items: baseline; }
+
+/* A wrapping run of small things: chips, filters, action buttons. */
+.cluster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+/* ---------- surface utilities ---------- */
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  background: var(--inset);
+}
+.panel--dashed { border-style: dashed; }
+.panel--accent { border-color: var(--accent); }
+.panel--warning { border-color: var(--owe); border-style: dashed; }
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--inset);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.text-muted { color: var(--text-muted); }
+.text-dim { color: var(--text-dim); }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- small buttons ----------
+   The expense card had six equal-weight buttons in a row. These give
+   secondary actions a quieter default so the card reads as content. */
+button.btn-sm {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border-radius: var(--radius-sm);
+}
+button.btn-quiet {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-muted);
+}
+button.btn-quiet:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--text);
+}
+
+/* ---------- tab bar ----------
+   Replaces a row of primary/secondary buttons, which read as five
+   actions rather than two destinations. */
+.tabbar {
+  display: flex;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--border);
+  margin-top: var(--space-4);
+}
+.tabbar__tab {
+  appearance: none;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  padding: var(--space-3) var(--space-4);
+  font-size: 0.98rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 0;
+}
+.tabbar__tab:hover { color: var(--text); }
+.tabbar__tab[aria-selected="true"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+.tabbar__spacer { flex: 1; }
+
+/* Secondary destinations live here, visibly below the two tabs. */
+.trip-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+/* ---------- vertical tab body ---------- */
+.tab-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* ---------- balance strip ----------
+   The mobile app opens on your number. This puts it back on web. */
+.balance-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+.balance-strip__headline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.balance-strip__label {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.balance-strip__amount {
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.balance-strip__amount--owed { color: var(--positive); }
+.balance-strip__amount--owe { color: var(--warning); }
+.balance-strip__amount--settled { color: var(--text); }
+
+/* ---------- composer ----------
+   The add-expense form is now opt-in instead of greeting every visit. */
+.composer__trigger {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+.composer__panel {
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-raised);
+}
+.composer__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+.composer__head h2 { margin: 0; }
+
+/* ---------- side panel ----------
+   Web had no surface for occasional work, so everything became a tab.
+   People, Activity and Insights open here instead. */
+.side-panel__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.6);
+  z-index: 60;
+  display: flex;
+  justify-content: flex-end;
+}
+.side-panel__sheet {
+  background: var(--bg);
+  width: min(46rem, 100%);
+  height: 100%;
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-panel);
+  padding: var(--space-5);
+  animation: side-panel-in 180ms ease-out;
+}
+.side-panel__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+.side-panel__head h2 { margin: 0; }
+.side-panel__close {
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.4rem 0.7rem;
+}
+@keyframes side-panel-in {
+  from { transform: translateX(3%); opacity: 0.4; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .side-panel__sheet { animation: none; }
+}
+@media (max-width: 640px) {
+  .side-panel__sheet { padding: var(--space-4); }
+  .balance-strip__amount { font-size: 1.7rem; }
+  .tabbar__tab { padding: var(--space-3); }
+}
+
+/* Card variants, replacing one-off inline borders. */
+.card--accent { border-color: var(--accent); }
+.card--draft { border-color: var(--owe); border-style: dashed; }
+
+/* Destructive action: quiet until you reach for it. */
+button.btn-danger {
+  color: var(--text-dim);
+  border-color: transparent;
+  background: transparent;
+}
+button.btn-danger:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(248, 113, 113, 0.08);
+}

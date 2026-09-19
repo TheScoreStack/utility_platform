@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import AddExpenseForm, { type CreateExpenseInput, type ExpensePrefill } from "../AddExpenseForm";
+import { type CreateExpenseInput, type ExpensePrefill } from "../AddExpenseForm";
+import { ExpenseComposer } from "./ExpenseComposer";
 import { normalizeCategoryKey, resolveExpenseCategory } from "../../lib/expenseCategories";
 import { api } from "../../lib/api";
 import { formatDate, formatDayLabel, localDayKey } from "../../lib/tripFormat";
@@ -433,35 +434,24 @@ export const ExpensesTab = ({
   };
 
   return (
-    <div className="grid-two">
-      <section className="card">
-        <div className="section-title">
-          <h2>{editingExpense ? "Edit Expense" : "Log Expense"}</h2>
-        </div>
-        <AddExpenseForm
-          tripId={tripId}
-          members={members}
-          currency={currency}
-          receipts={receipts}
-          isSubmitting={isCreating}
-          onSubmit={onCreateExpense}
-          currentUserId={currentUserId}
-          prefill={expensePrefill}
-          onPrefillConsumed={onExpensePrefillConsumed}
-          editingLabel={editingExpense?.description ?? null}
-          editingIsDraft={Boolean(editingExpense?.draft)}
-          onCancelEdit={onCancelEditExpense}
-        />
-      </section>
+    <div className="tab-stack">
+      <ExpenseComposer
+        tripId={tripId}
+        members={members}
+        currency={currency}
+        receipts={receipts}
+        isSubmitting={isCreating}
+        onSubmit={onCreateExpense}
+        currentUserId={currentUserId}
+        prefill={expensePrefill}
+        onPrefillConsumed={onExpensePrefillConsumed}
+        editingExpense={editingExpense ?? null}
+        onCancelEdit={onCancelEditExpense ?? (() => {})}
+        expenseCount={expenses.length}
+      />
 
       {recurringExpenses.length > 0 && (
-        <section
-          className="card"
-          style={{
-            gridColumn: "1 / -1",
-            border: "1px solid rgba(165,180,252,0.35)"
-          }}
-        >
+        <section className="card card--accent">
           <div className="section-title">
             <h2>Recurring</h2>
             <span className="muted">
@@ -474,16 +464,7 @@ export const ExpensesTab = ({
                 isTripOwner || template.createdBy === currentUserId;
               const stopping = stoppingRecurringId === template.recurringId;
               return (
-                <div
-                  key={template.recurringId}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    gap: "1rem",
-                    flexWrap: "wrap"
-                  }}
-                >
+                <div key={template.recurringId} className="row row--between">
                   <div>
                     <strong>{template.description}</strong>{" "}
                     <span className="muted">
@@ -510,7 +491,7 @@ export const ExpensesTab = ({
                       {stopping ? "Stopping…" : "Stop repeating"}
                     </button>
                   ) : (
-                    <span className="muted" style={{ fontSize: "0.8rem" }}>
+                    <span className="text-dim">
                       Set up by {membersById[template.createdBy] ?? "someone"}
                     </span>
                   )}
@@ -522,13 +503,7 @@ export const ExpensesTab = ({
       )}
 
       {draftExpenses.length > 0 && (
-        <section
-          className="card"
-          style={{
-            gridColumn: "1 / -1",
-            border: "1px dashed rgba(250,204,21,0.45)"
-          }}
-        >
+        <section className="card card--draft">
           <div className="section-title">
             <h2>Your drafts</h2>
             <span className="muted">
@@ -537,19 +512,7 @@ export const ExpensesTab = ({
           </div>
           <div className="list">
             {draftExpenses.map((draft) => (
-              <div
-                key={draft.expenseId}
-                style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  gap: "1rem",
-                  flexWrap: "wrap",
-                  border: "1px solid rgba(148,163,184,0.14)",
-                  borderRadius: "0.85rem",
-                  padding: "0.85rem 1rem"
-                }}
-              >
+              <div key={draft.expenseId} className="row row--between panel">
                 <div style={{ minWidth: "12rem" }}>
                   <div
                     style={{
@@ -626,7 +589,7 @@ export const ExpensesTab = ({
         </section>
       )}
 
-      <section className="card" style={{ gridColumn: "1 / -1" }}>
+      <section className="card">
         <div className="section-title">
           <h2>Expense History</h2>
           <span className="muted">{expenses.length} recorded</span>
@@ -656,7 +619,7 @@ export const ExpensesTab = ({
               onResetFilters={resetFilters}
             />
             {viewReceiptError && (
-              <p style={{ color: "#f87171" }}>{viewReceiptError}</p>
+              <p style={{ color: "var(--danger)" }}>{viewReceiptError}</p>
             )}
 
             <div

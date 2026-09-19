@@ -178,7 +178,7 @@ export const ExpenseCard = ({
       style={{
         padding: "1.35rem 1.6rem",
         borderRadius: "1.1rem",
-        border: "1px solid rgba(148,163,184,0.12)",
+        border: "1px solid var(--border)",
         background: "var(--surface-2)",
         display: "flex",
         flexDirection: "column",
@@ -234,7 +234,7 @@ export const ExpenseCard = ({
       {expense.lineItems && expense.lineItems.length > 0 && (
         <details
           style={{
-            border: "1px solid rgba(148,163,184,0.14)",
+            border: "1px solid var(--border)",
             borderRadius: "0.75rem",
             padding: "0.55rem 0.8rem",
             background: "var(--inset)"
@@ -302,7 +302,7 @@ export const ExpenseCard = ({
                           ? "1px solid var(--accent, #6366f1)"
                           : "1px solid rgba(148,163,184,0.5)",
                         background: mine
-                          ? "var(--accent, #6366f1)"
+                          ? "var(--accent)"
                           : "transparent",
                         color: "white",
                         fontSize: "0.7rem",
@@ -373,7 +373,7 @@ export const ExpenseCard = ({
                 style={{
                   margin: 0,
                   fontSize: "0.8rem",
-                  color: "var(--danger, #f87171)"
+                  color: "var(--danger)"
                 }}
               >
                 {claimError}
@@ -411,21 +411,18 @@ export const ExpenseCard = ({
 
       <div
         style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          borderTop: "1px solid rgba(148,163,184,0.12)",
-          paddingTop: "0.8rem"
+          borderTop: "1px solid var(--border)",
+          paddingTop: "var(--space-3)"
         }}
+        className="row row--between"
       >
         <span className="muted" style={{ fontSize: "0.85rem" }}>
           {sharedLabel(expense.sharedWithMemberIds.length)}
         </span>
-        <div style={{ display: "flex", gap: "0.5rem" }}>
+        <div className="cluster">
           {expense.receiptId && (
             <button
-              className="secondary"
-              style={{ paddingInline: "0.65rem", fontSize: "0.85rem" }}
+              className="secondary btn-sm btn-quiet"
               disabled={
                 isLoadingPreview ||
                 receiptStatus === "FAILED" ||
@@ -453,14 +450,7 @@ export const ExpenseCard = ({
           {expense.lineItems && expense.lineItems.length > 0 && (
             <button
               type="button"
-              className="secondary"
-              style={{
-                paddingInline: "0.7rem",
-                fontSize: "0.85rem",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "0.3rem"
-              }}
+              className="secondary btn-sm btn-quiet"
               disabled={splitBusy === "open"}
               title="A link where anyone can claim their items and pay — no account needed"
               onClick={() => void handleSplitLink()}
@@ -477,14 +467,7 @@ export const ExpenseCard = ({
           )}
           <button
             type="button"
-            className="secondary"
-            style={{
-              paddingInline: "0.7rem",
-              fontSize: "0.85rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem"
-            }}
+            className="secondary btn-sm btn-quiet"
             title="Discuss this expense"
             onClick={onToggleComments}
             aria-expanded={commentsOpen}
@@ -493,14 +476,7 @@ export const ExpenseCard = ({
           </button>
           <button
             type="button"
-            className="secondary"
-            style={{
-              paddingInline: "0.7rem",
-              fontSize: "0.85rem",
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "0.3rem"
-            }}
+            className="secondary btn-sm btn-quiet"
             title="Clone this expense into the form"
             onClick={() => onRepeatExpense(expense)}
           >
@@ -510,14 +486,7 @@ export const ExpenseCard = ({
             <>
               <button
                 type="button"
-                className="secondary"
-                style={{
-                  paddingInline: "0.7rem",
-                  fontSize: "0.85rem",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "0.3rem"
-                }}
+                className="secondary btn-sm btn-quiet"
                 title="Load this expense into the form and save changes to it"
                 onClick={() => onEditExpense(expense)}
               >
@@ -525,12 +494,7 @@ export const ExpenseCard = ({
               </button>
               <button
                 type="button"
-                className="secondary"
-                style={{
-                  paddingInline: "0.7rem",
-                  opacity: 0.6,
-                  fontSize: "0.85rem"
-                }}
+                className="secondary btn-sm btn-danger"
                 disabled={deleteDisabled}
                 title="Move to Recently deleted (undoable for now)"
                 onClick={() => {
@@ -544,19 +508,9 @@ export const ExpenseCard = ({
         </div>
       </div>
       {(splitUrl || splitError) && (
-        <div
-          style={{
-            border: "1px solid rgba(148,163,184,0.14)",
-            borderRadius: "0.9rem",
-            padding: "0.75rem 0.9rem",
-            background: "var(--inset)",
-            display: "flex",
-            flexDirection: "column",
-            gap: "0.6rem"
-          }}
-        >
+        <div className="panel stack stack--tight">
           {splitError ? (
-            <p style={{ margin: 0, color: "#f87171", fontSize: "0.85rem" }}>
+            <p style={{ margin: 0, color: "var(--danger)", fontSize: "0.85rem" }}>
               {splitError}
             </p>
           ) : (
@@ -613,7 +567,7 @@ export const ExpenseCard = ({
         <div
           style={{
             marginTop: "0.85rem",
-            border: "1px solid rgba(148,163,184,0.14)",
+            border: "1px solid var(--border)",
             borderRadius: "0.9rem",
             padding: "0.75rem",
             background: "var(--inset)",
