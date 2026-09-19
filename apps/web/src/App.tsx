@@ -8,6 +8,7 @@ import {
   Route,
   Navigate,
   NavLink,
+  useLocation,
   Outlet
 } from "react-router-dom";
 import TripListPage from "./pages/TripListPage";
@@ -40,11 +41,43 @@ import { useHarmonyLedgerAccess } from "./modules/useHarmonyLedgerAccess";
 import { useStackTimeAccess } from "./modules/useStackTimeAccess";
 import { getInitials, seedAvatar } from "./lib/avatarPalette";
 import { ConfirmDialogProvider } from "./components/ConfirmDialog";
+import { TripsRail } from "./components/trip/TripsRail";
 
 const queryClient = new QueryClient();
-const GroupExpensesModule = () => <Outlet />;
-const HarmonyModule = () => <Outlet />;
-const MeetModule = () => <Outlet />;
+
+/** Pages without a context rail keep a comfortable centred reading column. */
+const Centered = ({ children }: { children: React.ReactNode }) => (
+  <div className="canvas canvas--centered">{children}</div>
+);
+const CenteredOutlet = () => (
+  <Centered>
+    <Outlet />
+  </Centered>
+);
+
+/** Group expenses is the one module with a context rail: the trip you are
+ *  looking at is one of several you move between. The print view and the
+ *  invite-accept page are single-purpose, so they keep the plain column. */
+const GroupExpensesModule = () => {
+  const { pathname } = useLocation();
+  const railed =
+    pathname.startsWith("/group-expenses/trips") &&
+    !pathname.endsWith("/summary");
+
+  if (!railed) return <CenteredOutlet />;
+
+  return (
+    <div className="appframe">
+      <TripsRail />
+      <div className="canvas">
+        <Outlet />
+      </div>
+    </div>
+  );
+};
+
+const HarmonyModule = CenteredOutlet;
+const MeetModule = CenteredOutlet;
 
 interface AmplifyUser {
   attributes?: Record<string, string>;
@@ -111,30 +144,46 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
   return (
     <BrowserRouter>
       <ConfirmDialogProvider>
-      <main className="app-container">
-        <header className="shell-header">
-          <div className="shell-header__lockup">
-            <NavLink to="/" className="shell-wordmark-link" aria-label="The Stack Core — home">
-              <span className="shell-wordmark">
-                <span className="shell-wordmark__the">The</span>
-                <span className="shell-wordmark__stack">Stack</span>
-                <span className="shell-wordmark__core">Core</span>
-              </span>
-            </NavLink>
-            {displayName && (
-              <p className="shell-greeting">
-                {greeting},{" "}
-                <span className="shell-greeting__name">{firstName ?? displayName}</span>.
-              </p>
-            )}
-          </div>
+      <div className="appshell">
+        <header className="topbar">
+          <NavLink to="/" className="topbar__wordmark" aria-label="The Stack Core — home">
+            <span className="shell-wordmark">
+              <span className="shell-wordmark__the">The</span>
+              <span className="shell-wordmark__stack">Stack</span>
+              <span className="shell-wordmark__core">Core</span>
+            </span>
+          </NavLink>
 
-          <div className="shell-actions">
+          <nav className="topnav" aria-label="Tools">
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                isActive ? "topnav__link topnav__link--active" : "topnav__link"
+              }
+            >
+              All tools
+            </NavLink>
+            {availableModules.map((module) => (
+              <NavLink
+                key={module.id}
+                to={module.path}
+                className={({ isActive }) =>
+                  isActive ? "topnav__link topnav__link--active" : "topnav__link"
+                }
+              >
+                {module.name}
+              </NavLink>
+            ))}
+          </nav>
+
+          <div className="topbar__who">
             <NavLink
               to="/profile"
               className={({ isActive }) =>
                 isActive ? "shell-user shell-user--active" : "shell-user"
               }
+              title={greeting + (firstName ? `, ${firstName}` : "")}
             >
               <span
                 className="shell-user__avatar"
@@ -155,42 +204,29 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
               Sign out
             </button>
           </div>
-
-          <nav className="shell-nav" aria-label="Tools">
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                isActive ? "shell-nav__link shell-nav__link--active" : "shell-nav__link"
-              }
-            >
-              All tools
-            </NavLink>
-            {availableModules.map((module) => (
-              <NavLink
-                key={module.id}
-                to={module.path}
-                className={({ isActive }) =>
-                  isActive ? "shell-nav__link shell-nav__link--active" : "shell-nav__link"
-                }
-              >
-                {module.name}
-              </NavLink>
-            ))}
-          </nav>
         </header>
 
+        <div className="appbody">
         <Routes>
           <Route
             path="/"
             element={
-              <ModuleHub
-                modules={availableModules}
-                firstName={firstName ?? displayName}
-              />
+              <Centered>
+                <ModuleHub
+                  modules={availableModules}
+                  firstName={firstName ?? displayName}
+                />
+              </Centered>
             }
           />
-          <Route path="/profile" element={<ProfilePage />} />
+          <Route
+            path="/profile"
+            element={
+              <Centered>
+                <ProfilePage />
+              </Centered>
+            }
+          />
           <Route path="/group-expenses" element={<GroupExpensesModule />}>
             <Route index element={<Navigate to="trips" replace />} />
             <Route path="trips" element={<TripListPage />} />
@@ -215,10 +251,18 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
               element={<HarmonyStatementReviewPage />}
             />
           </Route>
-          <Route path="/stack-time" element={<StackTimePage />} />
+          <Route
+            path="/stack-time"
+            element={
+              <Centered>
+                <StackTimePage />
+              </Centered>
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-      </main>
+        </div>
+      </div>
       </ConfirmDialogProvider>
     </BrowserRouter>
   );

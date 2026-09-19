@@ -590,10 +590,6 @@ export const ExpensesTab = ({
       )}
 
       <section className="card">
-        <div className="section-title">
-          <h2>Expense History</h2>
-          <span className="muted">{expenses.length} recorded</span>
-        </div>
         {expenses.length === 0 ? (
           <p className="muted">No expenses yet.</p>
         ) : (
@@ -622,14 +618,7 @@ export const ExpensesTab = ({
               <p style={{ color: "var(--danger)" }}>{viewReceiptError}</p>
             )}
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-                gap: "1.5rem",
-                alignItems: "start"
-              }}
-            >
+            <div className="stack stack--loose">
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 {filteredExpenses.length === 0 ? (
                   <div className="empty-state">

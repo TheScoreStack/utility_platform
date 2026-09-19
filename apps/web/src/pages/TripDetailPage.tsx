@@ -15,7 +15,7 @@ import { SettlementsTab } from "../components/trip/SettlementsTab";
 import { ActivityTab } from "../components/trip/ActivityTab";
 import { PeopleTab, type PaymentMethodsInput } from "../components/trip/PeopleTab";
 import { SidePanel } from "../components/trip/SidePanel";
-import { TripBalanceStrip } from "../components/trip/TripBalanceStrip";
+import { TripSummaryStrip } from "../components/trip/TripSummaryStrip";
 import type {
   TripSummary,
   Expense,
@@ -746,39 +746,23 @@ const TripDetailPage = () => {
         </div>
       )}
 
-      <section className="card" style={{ marginBottom: "1rem" }}>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            gap: "1rem",
-            flexWrap: "wrap"
-          }}
-        >
-          <div style={{ flex: "1 1 16rem", minWidth: 0 }}>
-            <button
-              type="button"
-              className="trip-back"
-              onClick={() => navigate("/group-expenses/trips")}
-            >
-              ← All trips
-            </button>
-            <h2 style={{ margin: 0 }}>{trip.name}</h2>
-            <p className="muted" style={{ margin: "0.5rem 0 0" }}>
-              {formatTripRange(trip.startDate, trip.endDate)}
-            </p>
-          </div>
-          <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+      <div className="triphead">
+        <div style={{ flex: "1 1 16rem", minWidth: 0 }}>
+          <h1 className="triphead__name">{trip.name}</h1>
+          <p className="triphead__meta" style={{ margin: 0 }}>
+            {formatTripRange(trip.startDate, trip.endDate)}
+          </p>
+        </div>
+        <div className="triphead__actions">
             {canManageMembers && !isEditingDetails && (
-              <button type="button" className="secondary" onClick={handleStartEditingDetails}>
+              <button type="button" className="secondary btn-sm" onClick={handleStartEditingDetails}>
                 Edit details
               </button>
             )}
             {!isEditingDetails && (
               <button
                 type="button"
-                className="secondary"
+                className="secondary btn-sm"
                 title="Open a printable one-page summary"
                 onClick={() => navigate(`/group-expenses/trips/${trip.tripId}/summary`)}
               >
@@ -788,7 +772,7 @@ const TripDetailPage = () => {
             {canManageMembers && !isEditingDetails && !trip.archivedAt && (
               <button
                 type="button"
-                className="secondary"
+                className="secondary btn-sm"
                 title="Archive this trip — it'll move out of your active tabs but stays viewable."
                 disabled={archiveTripMutation.isPending}
                 onClick={async () => {
@@ -804,13 +788,14 @@ const TripDetailPage = () => {
                 {archiveTripMutation.isPending ? "Archiving…" : "Archive"}
               </button>
             )}
-          </div>
         </div>
-        {canManageMembers && isEditingDetails && (
+      </div>
+
+      {canManageMembers && isEditingDetails && (
           <form
             onSubmit={handleDetailsSubmit}
-            className="list"
-            style={{ marginTop: "1rem" }}
+            className="list card"
+            style={{ marginTop: "var(--space-4)" }}
           >
             <div className="input-group">
               <label htmlFor="group-name">Group name</label>
@@ -870,57 +855,55 @@ const TripDetailPage = () => {
             {detailsMessage.text}
           </p>
         )}
-        <div className="tabbar" role="tablist" aria-label="Trip sections">
-          {([
-            { id: "expenses", label: "Expenses" },
-            { id: "settle", label: "Settle up" }
-          ] as const).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              className="tabbar__tab"
-              onClick={() => handleTabChange(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-          <span className="tabbar__spacer" />
-          {isFetching && !isLoading && (
-            <span className="muted" style={{ alignSelf: "center" }}>
-              Refreshing…
-            </span>
-          )}
-        </div>
-
-        {/* Everything that used to be its own tab. Quiet by design: these
-            are places you visit occasionally, not the job at hand. */}
-        <div className="trip-toolbar" style={{ marginTop: "var(--space-3)" }}>
-          {([
-            { id: "insights", label: "Insights" },
-            { id: "activity", label: "Activity" },
-            { id: "people", label: "People" }
-          ] as const).map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              className="secondary btn-sm btn-quiet"
-              onClick={() => setOpenPanel(entry.id)}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
-      </section>
+      <div className="tabbar" role="tablist" aria-label="Trip sections">
+        {([
+          { id: "expenses", label: "Expenses" },
+          { id: "settle", label: "Settle up" }
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === tab.id}
+            className="tabbar__tab"
+            onClick={() => handleTabChange(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+        <span className="tabbar__spacer" />
+        {isFetching && !isLoading && (
+          <span className="muted" style={{ alignSelf: "center", marginRight: "var(--space-3)" }}>
+            Refreshing…
+          </span>
+        )}
+        {/* Occasional work, kept visibly quieter than the two destinations. */}
+        {([
+          { id: "insights", label: "Insights" },
+          { id: "activity", label: "Activity" },
+          { id: "people", label: "People" }
+        ] as const).map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            className="tabbar__tab tabbar__tab--quiet"
+            onClick={() => setOpenPanel(entry.id)}
+          >
+            {entry.label}
+          </button>
+        ))}
+      </div>
 
       {activeTab === "expenses" && (
         <>
-          <TripBalanceStrip
+          <TripSummaryStrip
             balances={balances}
+            membersById={membersById}
+            suggestions={settlementSuggestions}
+            expenses={expenses}
             currency={trip.currency}
             currentUserId={effectiveCurrentUserId}
-            onGoToSettle={() => handleTabChange("settle")}
+            onUseSuggestion={handleUseSuggestion}
           />
           <ExpensesTab
             receipts={receipts}

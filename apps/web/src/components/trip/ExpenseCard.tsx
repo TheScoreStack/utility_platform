@@ -53,6 +53,8 @@ export const ExpenseCard = ({
 }: ExpenseCardProps) => {
   const confirm = useConfirm();
   const queryClient = useQueryClient();
+  // A ledger row shows the summary; everything else opens underneath it.
+  const [expanded, setExpanded] = useState(false);
   const [splitUrl, setSplitUrl] = useState<string | null>(null);
   const [claimBusy, setClaimBusy] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
@@ -161,6 +163,39 @@ export const ExpenseCard = ({
       ? expense.createdBy === currentUserId
       : expense.paidByMemberId === currentUserId);
 
+  const payerName = membersById[expense.paidByMemberId] ?? "Someone";
+  const paidByYou = expense.paidByMemberId === currentUserId;
+  const myShare = currentUserId
+    ? expense.allocations.find((a) => a.memberId === currentUserId)?.amount
+    : undefined;
+
+  /** One short phrase for how this expense divides, for the ledger column. */
+  const splitSummary = (() => {
+    const itemCount = expense.lineItems?.length ?? 0;
+    if (itemCount > 0) {
+      return (
+        <>
+          {itemCount} {itemCount === 1 ? "item" : "items"}
+          {unclaimedCount > 0 && (
+            <>
+              {" · "}
+              <span className="warn">{unclaimedCount} unclaimed</span>
+            </>
+          )}
+        </>
+      );
+    }
+    const shareCount = expense.sharedWithMemberIds.length;
+    if (shareCount === 0) return "unsplit";
+    const even = expense.allocations.every(
+      (a) =>
+        Math.abs(a.amount - expense.total / Math.max(shareCount, 1)) <= 0.02
+    );
+    return even
+      ? `split evenly, ${shareCount} ${shareCount === 1 ? "person" : "people"}`
+      : `${shareCount} ${shareCount === 1 ? "person" : "people"}`;
+  })();
+
   const badges: string[] = [];
   if (typeof expense.tax === "number" && expense.tax > 0) {
     badges.push(`Tax ${formatCurrency.format(expense.tax)}`);
@@ -173,41 +208,47 @@ export const ExpenseCard = ({
   }
 
   return (
-    <div
-      className="card"
-      style={{
-        padding: "1.35rem 1.6rem",
-        borderRadius: "1.1rem",
-        border: "1px solid var(--border)",
-        background: "var(--surface-2)",
-        display: "flex",
-        flexDirection: "column",
-        gap: "1rem"
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          gap: "1rem",
-          flexWrap: "wrap"
-        }}
-      >
-        <div>
-          <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 600 }}>
-            {expense.description}
-          </h3>
-          <p className="muted" style={{ marginTop: "0.45rem" }}>
-            {formatDate(expense.createdAt)} · Paid by {membersById[expense.paidByMemberId] ?? expense.paidByMemberId}
-          </p>
-        </div>
-        <div style={{ textAlign: "right" }}>
-          <span style={{ fontSize: "1.45rem", fontWeight: 700 }}>
-            {formatCurrency.format(expense.total)}
+    <>
+      <div className="erow">
+        <div className="erow__desc">
+          <span className="erow__title">{expense.description}</span>
+          <span className="erow__sub">
+            {expense.vendor || expense.category || formatDate(expense.createdAt)}
           </span>
         </div>
+        <div className="erow__payer">
+          <span className="initial" aria-hidden="true">
+            {payerName
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((part) => part[0]?.toUpperCase() ?? "")
+              .join("") || "?"}
+          </span>
+          {paidByYou ? "You paid" : `${payerName.split(/\s+/)[0]} paid`}
+        </div>
+        <div className="erow__split">{splitSummary}</div>
+        <div className="erow__amount">
+          {formatCurrency.format(expense.total)}
+          {typeof myShare === "number" && (
+            <span className="erow__share">
+              you: {formatCurrency.format(myShare)}
+            </span>
+          )}
+        </div>
+        <button
+          type="button"
+          className="erow__more"
+          aria-expanded={expanded}
+          aria-label={expanded ? "Hide expense detail" : "Show expense detail"}
+          onClick={() => setExpanded((open) => !open)}
+        >
+          {expanded ? "\u2013" : "\u22ef"}
+        </button>
       </div>
+
+      {expanded && (
+      <div className="erow__detail">
 
       {(expense.vendor || expense.category || badges.length > 0) && (
         <div
@@ -622,6 +663,8 @@ export const ExpenseCard = ({
           )}
         </div>
       )}
-    </div>
+      </div>
+      )}
+    </>
   );
 };
