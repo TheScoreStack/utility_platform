@@ -9,6 +9,8 @@ export interface ItemizedAllocationInput {
   lineItems: ItemizedLineItem[];
   tax?: number;
   tip?: number;
+  /** Delivery / service / other charges, treated exactly like tax and tip. */
+  fees?: number;
   extrasSplitMode?: ExtrasSplitMode;
   /** Items with no assignees are attributed to this member (typically the
    *  payer) instead of being skipped — used for split-link expenses where
@@ -38,10 +40,10 @@ const toCents = (value: number): number => Math.round(value * 100);
 /**
  * Converts per-line-item member assignments into cent-accurate per-person
  * allocations. Each item's cost is split evenly among the members assigned to
- * it; tax + tip are then layered on top either proportionally to each
- * person's item subtotal or evenly across everyone with an assignment.
+ * it; tax + tip + fees are then layered on top either proportionally to
+ * each person's item subtotal or evenly across everyone with an assignment.
  * The returned allocation amounts always sum exactly to
- * items subtotal + tax + tip.
+ * items subtotal + tax + tip + fees.
  *
  * Single source of truth: the API derives stored allocations from this and
  * the web form previews with it, so both sides always agree to the cent.
@@ -53,6 +55,7 @@ export const buildItemizedAllocations = (
     lineItems,
     tax = 0,
     tip = 0,
+    fees = 0,
     extrasSplitMode = "proportional",
     unassignedMemberId
   } = input;
@@ -97,7 +100,7 @@ export const buildItemizedAllocations = (
     }
   });
 
-  const extrasCents = toCents(tax) + toCents(tip);
+  const extrasCents = toCents(tax) + toCents(tip) + toCents(fees);
   const extrasByMember = new Map<string, number>();
 
   if (memberOrder.length > 0 && extrasCents !== 0) {

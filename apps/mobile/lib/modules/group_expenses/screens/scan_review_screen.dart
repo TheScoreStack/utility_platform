@@ -77,6 +77,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   final _descriptionController = TextEditingController();
   final _taxController = TextEditingController();
   final _tipController = TextEditingController();
+  final _feesController = TextEditingController();
   final List<EditableReceiptItem> _items = [];
   String _extrasSplitMode = 'proportional';
   String? _receiptDate;
@@ -120,6 +121,9 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     if ((expense.tip ?? 0) > 0) {
       _tipController.text = expense.tip!.toStringAsFixed(2);
     }
+    if ((expense.fees ?? 0) > 0) {
+      _feesController.text = expense.fees!.toStringAsFixed(2);
+    }
     for (final item in expense.lineItems ?? const <ExpenseLineItem>[]) {
       _items.add(
         EditableReceiptItem(
@@ -144,6 +148,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
     _descriptionController.dispose();
     _taxController.dispose();
     _tipController.dispose();
+    _feesController.dispose();
     for (final item in _items) {
       item.dispose();
     }
@@ -277,18 +282,32 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       _taxController.text = tax.toStringAsFixed(2);
     }
     var tip = extraction.tip;
-    if (tip == null && extraction.total != null) {
-      // Textract often misses the tip; infer it from total − subtotal − tax.
+    var fees = extraction.fees;
+    if (extraction.total != null) {
+      // Whatever the printed total exceeds subtotal + tax + tip + fees by is
+      // something OCR missed. With no tip on the receipt it's usually a
+      // handwritten tip; once a tip IS printed (delivery orders), the gap is
+      // fees — service, delivery, small-order… — so it isn't lost.
       final itemsSum = extraction.lineItems.fold<double>(
         0,
         (sum, item) => sum + (item.total ?? 0),
       );
       final subtotal = extraction.subtotal ?? itemsSum;
-      final gap = extraction.total! - subtotal - (tax ?? 0);
-      if (gap > 0.009) tip = roundCents(gap);
+      final gap =
+          extraction.total! - subtotal - (tax ?? 0) - (tip ?? 0) - (fees ?? 0);
+      if (gap > 0.009) {
+        if (tip == null) {
+          tip = roundCents(gap);
+        } else {
+          fees = roundCents((fees ?? 0) + gap);
+        }
+      }
     }
     if (tip != null && tip > 0) {
       _tipController.text = tip.toStringAsFixed(2);
+    }
+    if (fees != null && fees > 0) {
+      _feesController.text = fees.toStringAsFixed(2);
     }
   }
 
@@ -329,6 +348,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
           .toList(),
       tax: _parseAmount(_taxController),
       tip: _parseAmount(_tipController),
+      fees: _parseAmount(_feesController),
       extrasSplitMode: _extrasSplitMode,
       // Unassigned items ride with the payer (same rule the server applies)
       // until someone claims them via the split link.
@@ -378,6 +398,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
   }) {
     final tax = _parseAmount(_taxController);
     final tip = _parseAmount(_tipController);
+    final fees = _parseAmount(_feesController);
     final description = _descriptionController.text.trim();
     final sharedWith = <String>{
       for (final item in _items) ...item.assignedMemberIds,
@@ -397,6 +418,7 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
       // as "unchanged", which would resurrect a cleared tax or tip.
       if (tax > 0 || _isEditing) 'tax': tax,
       if (tip > 0 || _isEditing) 'tip': tip,
+      if (fees > 0 || _isEditing) 'fees': fees,
       'paidByMemberId': payerId,
       'sharedWithMemberIds': sharedWith.toList(),
       'splitEvenly': false,
@@ -803,8 +825,11 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
               ),
               const SizedBox(height: 20),
 
-              // Extras: tax, tip, split mode.
-              Text('Tax & tip', style: Theme.of(context).textTheme.titleMedium),
+              // Extras: tax, tip, fees, split mode.
+              Text(
+                'Tax, tip & fees',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
               const SizedBox(height: 8),
               Row(
                 children: [
@@ -825,7 +850,21 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
                       onChanged: () => setState(() {}),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _AmountField(
+                      controller: _feesController,
+                      label: 'Fees',
+                      currency: _currency,
+                      onChanged: () => setState(() {}),
+                    ),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Fees cover delivery, service, and other surcharges.',
+                style: TextStyle(fontSize: 12, color: Colors.white54),
               ),
               const SizedBox(height: 12),
               SegmentedButton<String>(
@@ -845,8 +884,8 @@ class _ScanReviewScreenState extends State<ScanReviewScreen> {
               const SizedBox(height: 6),
               Text(
                 _extrasSplitMode == 'proportional'
-                    ? 'Tax & tip follow each person’s share of the items.'
-                    : 'Tax & tip are split evenly across everyone assigned.',
+                    ? 'Tax, tip & fees follow each person’s share of the items.'
+                    : 'Tax, tip & fees are split evenly across everyone assigned.',
                 style: const TextStyle(fontSize: 12, color: Colors.white70),
               ),
             ],

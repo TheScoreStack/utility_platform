@@ -102,6 +102,8 @@ export interface Expense {
   currency: string;
   tax?: number;
   tip?: number;
+  /** Delivery, service, and other surcharges — split like tax and tip. */
+  fees?: number;
   paidByMemberId: string;
   sharedWithMemberIds: string[];
   allocations: ExpenseAllocation[];
@@ -139,6 +141,8 @@ export interface TextractExtraction {
   subtotal?: number;
   tax?: number;
   tip?: number;
+  /** Service / delivery / handling charges summed from the receipt. */
+  fees?: number;
   date?: string;
   lineItems?: Array<{
     description?: string;

@@ -90,14 +90,16 @@ List<EvenSplitAllocation> buildEvenSplitAllocations(
 
 /// Converts per-line-item member assignments into cent-accurate per-person
 /// allocations. Each item's cost is split evenly among the members assigned to
-/// it; tax + tip are then layered on top either proportionally to each
-/// person's item subtotal or evenly across everyone with an assignment.
+/// it; tax + tip + fees are then layered on top either proportionally to
+/// each person's item subtotal or evenly across everyone with an assignment.
 /// The returned allocation amounts always sum exactly to
-/// items subtotal + tax + tip.
+/// items subtotal + tax + tip + fees.
 ItemizedAllocationResult buildItemizedAllocations({
   required List<ItemizedLineItem> lineItems,
   double tax = 0,
   double tip = 0,
+  // Delivery / service / other charges, treated exactly like tax and tip.
+  double fees = 0,
   String extrasSplitMode = 'proportional',
   // Items with no assignees are attributed to this member (typically the
   // payer) instead of being skipped — mirrors the shared TS implementation,
@@ -143,7 +145,7 @@ ItemizedAllocationResult buildItemizedAllocations({
     }
   }
 
-  final extrasCents = _toCents(tax) + _toCents(tip);
+  final extrasCents = _toCents(tax) + _toCents(tip) + _toCents(fees);
   final extrasByMember = <String, int>{};
 
   if (memberOrder.isNotEmpty && extrasCents != 0) {

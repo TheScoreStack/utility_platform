@@ -178,6 +178,7 @@ const expenseSchema = z.object({
   currency: z.string().default("USD"),
   tax: z.number().nonnegative().optional(),
   tip: z.number().nonnegative().optional(),
+  fees: z.number().nonnegative().optional(),
   paidByMemberId: z.string().min(1),
   sharedWithMemberIds: z.array(z.string().min(1)).nonempty(),
   allocations: z
@@ -206,6 +207,7 @@ const updateExpenseSchema = z.object({
   total: z.number().positive().optional(),
   tax: z.number().nonnegative().optional(),
   tip: z.number().nonnegative().optional(),
+  fees: z.number().nonnegative().optional(),
   sharedWithMemberIds: z.array(z.string().min(1)).nonempty().optional(),
   allocations: z
     .array(
@@ -1216,6 +1218,7 @@ export class TripService {
         lineItems,
         tax: parsed.data.tax,
         tip: parsed.data.tip,
+        fees: parsed.data.fees,
         extrasSplitMode: parsed.data.extrasSplitMode,
         unassignedMemberId: parsed.data.paidByMemberId
       }).allocations;
@@ -1254,6 +1257,7 @@ export class TripService {
       currency: parsed.data.currency ?? details.trip.currency,
       tax: parsed.data.tax,
       tip: parsed.data.tip,
+      fees: parsed.data.fees,
       paidByMemberId: parsed.data.paidByMemberId,
       sharedWithMemberIds: parsed.data.sharedWithMemberIds,
       allocations,
@@ -1382,6 +1386,7 @@ export class TripService {
         lineItems,
         tax: parsed.data.tax ?? expense.tax,
         tip: parsed.data.tip ?? expense.tip,
+        fees: parsed.data.fees ?? expense.fees,
         extrasSplitMode:
           parsed.data.extrasSplitMode ?? expense.extrasSplitMode,
         unassignedMemberId:
@@ -1430,6 +1435,7 @@ export class TripService {
       total: parsed.data.total,
       tax: parsed.data.tax,
       tip: parsed.data.tip,
+      fees: parsed.data.fees,
       sharedWithMemberIds: parsed.data.sharedWithMemberIds,
       allocations,
       lineItems:

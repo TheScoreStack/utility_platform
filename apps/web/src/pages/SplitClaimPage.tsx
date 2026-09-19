@@ -230,6 +230,7 @@ const SplitClaimPage = () => {
       }),
       tax: snapshot.expense.tax,
       tip: snapshot.expense.tip,
+      fees: snapshot.expense.fees,
       extrasSplitMode: snapshot.expense.extrasSplitMode,
       unassignedMemberId: snapshot.payer.memberId
     }).allocations;
@@ -455,7 +456,15 @@ const SplitClaimPage = () => {
     (sum, item) => sum + item.total,
     0
   );
-  const extrasTotal = (expense.tax ?? 0) + (expense.tip ?? 0);
+  const extrasTotal =
+    (expense.tax ?? 0) + (expense.tip ?? 0) + (expense.fees ?? 0);
+  const extrasLabel = [
+    expense.tax ? "tax" : null,
+    expense.tip ? "tip" : null,
+    expense.fees ? "fees" : null
+  ]
+    .filter(Boolean)
+    .join(" & ");
 
   const panelStyle = {
     border: "1px solid rgba(148,163,184,0.18)",
@@ -472,8 +481,9 @@ const SplitClaimPage = () => {
       <p className="pub-lede">
         {expense.vendor ? `${expense.vendor} · ` : ""}
         {formatAmount.format(expense.total)} paid by {payerName}.
-        {" Tap what you had — tax"}
-        {expense.tip ? " and tip are" : " is"}
+        {" Tap what you had — "}
+        {extrasLabel || "tax"}
+        {extrasTotal > 0 && extrasLabel.includes("&") ? " are" : " is"}
         {expense.extrasSplitMode === "even"
           ? " split evenly."
           : " added in proportion to your part of the bill."}
@@ -760,6 +770,9 @@ const SplitClaimPage = () => {
           {typeof expense.tip === "number" && expense.tip > 0 && (
             <> · Tip {formatAmount.format(expense.tip)}</>
           )}
+          {typeof expense.fees === "number" && expense.fees > 0 && (
+            <> · Fees {formatAmount.format(expense.fees)}</>
+          )}
           {" · Total "}
           {formatAmount.format(expense.total)}
         </p>
@@ -799,8 +812,8 @@ const SplitClaimPage = () => {
               {extrasTotal > 0 && (
                 <>
                   {" + "}
-                  {formatAmount.format(myShare.extrasAmount)} of the tax
-                  {expense.tip ? " & tip" : ""}
+                  {formatAmount.format(myShare.extrasAmount)} of the{" "}
+                  {extrasLabel || "tax"}
                 </>
               )}
             </p>

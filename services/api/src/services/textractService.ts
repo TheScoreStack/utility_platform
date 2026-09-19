@@ -5,6 +5,7 @@ import {
   type AnalyzeExpenseCommandInput
 } from "@aws-sdk/client-textract";
 import { loadConfig } from "../config.js";
+import { sumReceiptFees } from "../lib/receiptFees.js";
 import type { TextractExtraction } from "../types.js";
 
 let textractClient: TextractClient | null = null;
@@ -81,6 +82,9 @@ const analyzeDocument = async (
     subtotal: getSummaryNumber(document, "SUBTOTAL"),
     tax: getSummaryNumber(document, "TAX"),
     tip: getSummaryNumber(document, "GRATUITY", "TIP"),
+    // Delivery / service / handling charges (DoorDash-style receipts) so
+    // they can be split like tax and tip instead of vanishing from the bill.
+    fees: sumReceiptFees(document.SummaryFields ?? []),
     date: getSummaryValue(document, "INVOICE_RECEIPT_DATE")
   };
 

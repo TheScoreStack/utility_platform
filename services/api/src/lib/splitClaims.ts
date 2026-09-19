@@ -10,13 +10,19 @@ import type { Expense } from "../types.js";
 export const computeSplitShares = (
   expense: Pick<
     Expense,
-    "lineItems" | "tax" | "tip" | "extrasSplitMode" | "paidByMemberId"
+    | "lineItems"
+    | "tax"
+    | "tip"
+    | "fees"
+    | "extrasSplitMode"
+    | "paidByMemberId"
   >
 ) =>
   buildItemizedAllocations({
     lineItems: expense.lineItems ?? [],
     tax: expense.tax,
     tip: expense.tip,
+    fees: expense.fees,
     extrasSplitMode: expense.extrasSplitMode ?? "proportional",
     unassignedMemberId: expense.paidByMemberId
   }).allocations;

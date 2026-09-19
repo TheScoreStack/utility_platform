@@ -149,7 +149,11 @@ const TripDetailPage = () => {
   const buildExpensePrefill = useCallback((expense: Expense): ExpensePrefill => {
     const taxAmount = expense.tax ?? 0;
     const tipAmount = expense.tip ?? 0;
-    const subtotal = Math.max(0, expense.total - taxAmount - tipAmount);
+    const feesAmount = expense.fees ?? 0;
+    const subtotal = Math.max(
+      0,
+      expense.total - taxAmount - tipAmount - feesAmount
+    );
     const hasItems = Boolean(expense.lineItems?.length);
     const shareCount = expense.sharedWithMemberIds.length;
     const evenShare = shareCount > 0 ? expense.total / shareCount : 0;
@@ -167,6 +171,7 @@ const TripDetailPage = () => {
       subtotal: subtotal.toFixed(2),
       tax: taxAmount > 0 ? taxAmount.toFixed(2) : "",
       tip: tipAmount > 0 ? tipAmount.toFixed(2) : "",
+      fees: feesAmount > 0 ? feesAmount.toFixed(2) : "",
       paidByMemberId: expense.paidByMemberId,
       sharedWithMemberIds: expense.sharedWithMemberIds,
       splitEvenly: isEven,
@@ -263,6 +268,7 @@ const TripDetailPage = () => {
           total: input.total,
           tax: input.tax ?? 0,
           tip: input.tip ?? 0,
+          fees: input.fees ?? 0,
           sharedWithMemberIds: input.sharedWithMemberIds,
           allocations: input.allocations,
           lineItems: input.lineItems ?? [],

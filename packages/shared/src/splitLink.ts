@@ -54,6 +54,7 @@ export interface SplitLinkSnapshot {
     total: number;
     tax?: number;
     tip?: number;
+    fees?: number;
     extrasSplitMode: ExtrasSplitMode;
     lineItems: SplitSnapshotItem[];
   };

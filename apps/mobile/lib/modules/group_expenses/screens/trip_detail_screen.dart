@@ -1878,6 +1878,10 @@ class _ExpenseCardState extends State<_ExpenseCard> {
                     _SmallChip(
                       label: 'Tip ${formatCurrency(expense.tip!, currency)}',
                     ),
+                  if ((expense.fees ?? 0) > 0)
+                    _SmallChip(
+                      label: 'Fees ${formatCurrency(expense.fees!, currency)}',
+                    ),
                   _SmallChip(
                     label: 'Comments',
                     icon: Icons.mode_comment_outlined,

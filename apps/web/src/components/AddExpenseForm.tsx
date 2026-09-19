@@ -145,6 +145,7 @@ export interface CreateExpenseInput {
   currency: string;
   tax?: number;
   tip?: number;
+  fees?: number;
   paidByMemberId: string;
   sharedWithMemberIds: string[];
   splitEvenly: boolean;
@@ -191,6 +192,7 @@ export type ExpensePrefill = {
   subtotal: string;
   tax?: string;
   tip?: string;
+  fees?: string;
   paidByMemberId: string;
   sharedWithMemberIds: string[];
   splitEvenly: boolean;
@@ -266,6 +268,7 @@ const AddExpenseForm = ({
   const [subtotalInput, setSubtotalInput] = useState("");
   const [taxInput, setTaxInput] = useState("");
   const [tipInput, setTipInput] = useState("");
+  const [feesInput, setFeesInput] = useState("");
 
   const resolvedCategory = useMemo(() => resolveExpenseCategory(category), [category]);
 
@@ -348,6 +351,7 @@ const AddExpenseForm = ({
     setSubtotalInput(prefill.subtotal);
     setTaxInput(prefill.tax ?? "");
     setTipInput(prefill.tip ?? "");
+    setFeesInput(prefill.fees ?? "");
     setPaidBy(prefill.paidByMemberId);
     setPayerManuallySelected(true);
     setSharedWith(prefill.sharedWithMemberIds);
@@ -451,10 +455,11 @@ const AddExpenseForm = ({
   const subtotalValue = useMemo(() => parseCurrencyInput(subtotalInput), [subtotalInput]);
   const taxValue = useMemo(() => parseCurrencyInput(taxInput), [taxInput]);
   const tipValue = useMemo(() => parseCurrencyInput(tipInput), [tipInput]);
+  const feesValue = useMemo(() => parseCurrencyInput(feesInput), [feesInput]);
 
   const extrasTotal = useMemo(
-    () => roundToCents(taxValue + tipValue),
-    [taxValue, tipValue]
+    () => roundToCents(taxValue + tipValue + feesValue),
+    [taxValue, tipValue, feesValue]
   );
   const itemsSubtotal = useMemo(
     () =>
@@ -468,8 +473,8 @@ const AddExpenseForm = ({
   );
   const effectiveSubtotal = splitMode === "items" ? itemsSubtotal : subtotalValue;
   const grossTotal = useMemo(
-    () => roundToCents(effectiveSubtotal + taxValue + tipValue),
-    [effectiveSubtotal, taxValue, tipValue]
+    () => roundToCents(effectiveSubtotal + taxValue + tipValue + feesValue),
+    [effectiveSubtotal, taxValue, tipValue, feesValue]
   );
   const hasExtras = extrasTotal > 0.0001;
 
@@ -482,12 +487,13 @@ const AddExpenseForm = ({
         })),
         tax: taxValue,
         tip: tipValue,
+        fees: feesValue,
         extrasSplitMode,
         // Unassigned items ride with the payer (same rule the server
         // applies) — they can be claimed later via the split link.
         unassignedMemberId: paidBy || undefined
       }),
-    [itemRows, taxValue, tipValue, extrasSplitMode, paidBy]
+    [itemRows, taxValue, tipValue, feesValue, extrasSplitMode, paidBy]
   );
 
   const unassignedItemCount = useMemo(
@@ -612,6 +618,7 @@ const AddExpenseForm = ({
         total: extractedTotal,
         tax: extractedTax,
         tip: extractedTip,
+        fees: extractedFees,
         lineItems
       } = extraction;
 
@@ -644,7 +651,10 @@ const AddExpenseForm = ({
         setSubtotalInput(extractedSubtotal.toString());
       } else if (typeof extractedTotal === "number") {
         const derivedSubtotal = roundToCents(
-          extractedTotal - (extractedTax ?? 0) - (extractedTip ?? 0)
+          extractedTotal -
+            (extractedTax ?? 0) -
+            (extractedTip ?? 0) -
+            (extractedFees ?? 0)
         );
         if (derivedSubtotal > 0) {
           setSubtotalInput(derivedSubtotal.toString());
@@ -658,17 +668,31 @@ const AddExpenseForm = ({
       }
       if (typeof extractedTip === "number") {
         setTipInput(extractedTip.toString());
-      } else if (
+      }
+      if (typeof extractedFees === "number") {
+        setFeesInput(extractedFees.toString());
+      }
+      if (
         typeof extractedTotal === "number" &&
         typeof extractedSubtotal === "number"
       ) {
-        // OCR often misses a handwritten or oddly-labeled tip; when the
-        // printed total exceeds subtotal + tax, the difference is the tip.
-        const inferredTip = roundToCents(
-          extractedTotal - extractedSubtotal - (extractedTax ?? 0)
+        // Whatever the printed total exceeds subtotal + tax + tip + fees by
+        // is something OCR missed. With no tip on the receipt it's usually a
+        // handwritten tip; once a tip IS printed (delivery orders), the gap
+        // is fees — service, delivery, small-order… — so it isn't lost.
+        const gap = roundToCents(
+          extractedTotal -
+            extractedSubtotal -
+            (extractedTax ?? 0) -
+            (extractedTip ?? 0) -
+            (extractedFees ?? 0)
         );
-        if (inferredTip > 0.009) {
-          setTipInput(inferredTip.toFixed(2));
+        if (gap > 0.009) {
+          if (typeof extractedTip !== "number") {
+            setTipInput(gap.toFixed(2));
+          } else {
+            setFeesInput(roundToCents((extractedFees ?? 0) + gap).toFixed(2));
+          }
         }
       }
 
@@ -684,7 +708,8 @@ const AddExpenseForm = ({
         extraction.total,
         extraction.subtotal,
         extraction.tax,
-        extraction.tip
+        extraction.tip,
+        extraction.fees
       ]);
       if (
         usableItems.length &&
@@ -1116,7 +1141,7 @@ const AddExpenseForm = ({
       setError(
         splitMode === "items"
           ? "Add at least one line item with an amount before saving."
-          : "Enter a positive subtotal, tax, or tip before saving."
+          : "Enter a positive subtotal, tax, tip, or fees before saving."
       );
       return null;
     }
@@ -1211,6 +1236,7 @@ const AddExpenseForm = ({
       currency: expenseCurrency,
       tax: taxValue > 0 ? taxValue : undefined,
       tip: tipValue > 0 ? tipValue : undefined,
+      fees: feesValue > 0 ? feesValue : undefined,
       paidByMemberId: paidBy,
       sharedWithMemberIds: sharedWithPayload,
       splitEvenly,
@@ -1718,10 +1744,26 @@ const AddExpenseForm = ({
             onWheel={handleNumberInputWheel}
           />
         </div>
+        <div className="input-group" style={{ flex: 1 }}>
+          <label htmlFor="expense-fees" title="Delivery, service, and other surcharges">
+            Fees
+          </label>
+          <input
+            id="expense-fees"
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.01"
+            value={feesInput}
+            onChange={(event) => setFeesInput(event.target.value)}
+            onWheel={handleNumberInputWheel}
+            placeholder="Delivery, service…"
+          />
+        </div>
       </div>
 
       <div className="input-group">
-        <label>Total (with tax & tip)</label>
+        <label>Total (with tax, tip & fees)</label>
         <input type="text" readOnly value={formatAmount(grossTotal)} style={{ opacity: 0.75 }} />
       </div>
 
@@ -1735,9 +1777,9 @@ const AddExpenseForm = ({
       >
         <label>Quick receipt scan</label>
         <p className="muted" style={{ marginTop: "0.25rem" }}>
-          Upload a receipt or invoice to automatically fill subtotal, tax, and
-          tip — line items are pulled out too so you can assign them to people
-          below.
+          Upload a receipt or invoice to automatically fill subtotal, tax,
+          tip, and fees — line items are pulled out too so you can assign
+          them to people below.
         </p>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <button
@@ -2147,7 +2189,7 @@ const AddExpenseForm = ({
           </div>
 
           <div className="input-group">
-            <label>Tax &amp; tip split</label>
+            <label>Tax, tip &amp; fees split</label>
             <div style={{ display: "flex", gap: "0.5rem" }}>
               <button
                 type="button"
@@ -2167,9 +2209,9 @@ const AddExpenseForm = ({
             <p className="muted" style={{ marginTop: "0.5rem" }}>
               {hasExtras
                 ? extrasSplitMode === "proportional"
-                  ? `The ${formatAmount(extrasTotal)} in tax & tip is split in proportion to each person's items.`
-                  : `The ${formatAmount(extrasTotal)} in tax & tip is split evenly among everyone with an item.`
-                : "Enter tax or tip above to include them automatically."}
+                  ? `The ${formatAmount(extrasTotal)} in tax, tip & fees is split in proportion to each person's items.`
+                  : `The ${formatAmount(extrasTotal)} in tax, tip & fees is split evenly among everyone with an item.`
+                : "Enter tax, tip, or fees above to include them automatically."}
             </p>
           </div>
 
@@ -2198,7 +2240,7 @@ const AddExpenseForm = ({
                       <span className="muted" style={{ fontSize: "0.82rem" }}>
                         {formatAmount(detail.itemsAmount)} items
                         {detail.extrasAmount > 0
-                          ? ` + ${formatAmount(detail.extrasAmount)} tax & tip`
+                          ? ` + ${formatAmount(detail.extrasAmount)} extras`
                           : ""}{" "}
                         = <strong style={{ color: "#f1f5f9" }}>{formatAmount(detail.amount)}</strong>
                       </span>
@@ -2208,7 +2250,7 @@ const AddExpenseForm = ({
               </div>
               <p className="muted" style={{ marginTop: "0.5rem" }}>
                 Items {formatAmount(itemsSubtotal)}
-                {extrasTotal > 0 ? ` + tax & tip ${formatAmount(extrasTotal)}` : ""} ={" "}
+                {extrasTotal > 0 ? ` + tax, tip & fees ${formatAmount(extrasTotal)}` : ""} ={" "}
                 {formatAmount(grossTotal)}
               </p>
             </div>
@@ -2242,7 +2284,7 @@ const AddExpenseForm = ({
                   />
                   {splitExtrasEvenly && Math.abs(extrasShare) >= 0.005 && (
                     <p className="muted" style={{ marginTop: "0.25rem" }}>
-                      Includes {formatAmount(extrasShare)} tax & tip · Final:{" "}
+                      Includes {formatAmount(extrasShare)} extras · Final:{" "}
                       {formatAmount(finalAmount)}
                     </p>
                   )}
@@ -2251,7 +2293,7 @@ const AddExpenseForm = ({
             })}
           </div>
           <div className="input-group">
-            <label>Tax & tip sharing</label>
+            <label>Tax, tip & fees sharing</label>
             <label
               style={{
                 display: "flex",
@@ -2265,7 +2307,7 @@ const AddExpenseForm = ({
                 checked={splitExtrasEvenly}
                 onChange={(event) => setSplitExtrasEvenly(event.target.checked)}
               />
-              Split tax and tip evenly
+              Split tax, tip and fees evenly
             </label>
             <p className="muted" style={{ marginTop: "0.5rem" }}>
               {hasExtras
@@ -2273,8 +2315,8 @@ const AddExpenseForm = ({
                   ? `Adds ${formatAmount(extrasTotal)} across ${sharedMembers.length} ${
                       sharedMembers.length === 1 ? "person" : "people"
                     }.`
-                  : "Select at least one person to split the tax and tip."
-                : "Enter tax or tip above to include them automatically."}
+                  : "Select at least one person to split the tax, tip and fees."
+                : "Enter tax, tip, or fees above to include them automatically."}
             </p>
           </div>
           <div className="input-group">
@@ -2292,7 +2334,7 @@ const AddExpenseForm = ({
                   {formatAmount(grossTotal)} · {allocationStatusMessage}
                 </>
               ) : (
-                "Enter a subtotal, tax, or tip to start allocating."
+                "Enter a subtotal, tax, tip, or fees to start allocating."
               )}
             </p>
           </div>

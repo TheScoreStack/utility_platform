@@ -262,6 +262,9 @@ class Expense {
   final String currency;
   final double? tax;
   final double? tip;
+
+  /// Delivery, service, and other surcharges — split like tax and tip.
+  final double? fees;
   final String paidByMemberId;
   final List<String> sharedWithMemberIds;
   final List<ExpenseAllocation> allocations;
@@ -289,6 +292,7 @@ class Expense {
     required this.currency,
     this.tax,
     this.tip,
+    this.fees,
     required this.paidByMemberId,
     required this.sharedWithMemberIds,
     required this.allocations,
@@ -314,6 +318,7 @@ class Expense {
     currency: (json['currency'] as String?) ?? 'USD',
     tax: _optDouble(json['tax']),
     tip: _optDouble(json['tip']),
+    fees: _optDouble(json['fees']),
     paidByMemberId: _reqString(json['paidByMemberId']),
     sharedWithMemberIds: _stringList(json['sharedWithMemberIds']),
     allocations: _mapList(json['allocations'], ExpenseAllocation.fromJson),
@@ -341,6 +346,7 @@ class Expense {
     'currency': currency,
     'tax': tax,
     'tip': tip,
+    'fees': fees,
     'paidByMemberId': paidByMemberId,
     'sharedWithMemberIds': sharedWithMemberIds,
     'allocations': allocations.map((a) => a.toJson()).toList(),
@@ -441,6 +447,9 @@ class TextractExtraction {
   final double? subtotal;
   final double? tax;
   final double? tip;
+
+  /// Service / delivery / handling charges summed from the receipt.
+  final double? fees;
   final String? date;
   final List<ExtractedLineItem> lineItems;
 
@@ -450,6 +459,7 @@ class TextractExtraction {
     this.subtotal,
     this.tax,
     this.tip,
+    this.fees,
     this.date,
     this.lineItems = const [],
   });
@@ -461,6 +471,7 @@ class TextractExtraction {
         subtotal: _optDouble(json['subtotal']),
         tax: _optDouble(json['tax']),
         tip: _optDouble(json['tip']),
+        fees: _optDouble(json['fees']),
         date: json['date'] as String?,
         lineItems: _mapList(json['lineItems'], ExtractedLineItem.fromJson),
       );
@@ -471,6 +482,7 @@ class TextractExtraction {
     'subtotal': subtotal,
     'tax': tax,
     'tip': tip,
+    'fees': fees,
     'date': date,
     'lineItems': lineItems.map((item) => item.toJson()).toList(),
   });

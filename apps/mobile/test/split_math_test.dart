@@ -79,6 +79,34 @@ void main() {
       },
     );
 
+    test('treats fees exactly like tax and tip when layering extras', () {
+      final withFees = buildItemizedAllocations(
+        lineItems: const [
+          ItemizedLineItem(total: 30, assignedMemberIds: ['a']),
+          ItemizedLineItem(total: 10, assignedMemberIds: ['b']),
+        ],
+        tax: 2,
+        tip: 4,
+        fees: 6,
+      );
+      final asTip = buildItemizedAllocations(
+        lineItems: const [
+          ItemizedLineItem(total: 30, assignedMemberIds: ['a']),
+          ItemizedLineItem(total: 10, assignedMemberIds: ['b']),
+        ],
+        tax: 2,
+        tip: 10,
+      );
+
+      expect(withFees.extrasTotal, 12);
+      expect(withFees.grandTotal, 52);
+      expect(
+        withFees.allocations.map((a) => a.amount).toList(),
+        asTip.allocations.map((a) => a.amount).toList(),
+      );
+      expect(withFees.allocations.map((a) => a.amount).toList(), [39, 13]);
+    });
+
     test('distributes leftover extras cents by largest remainder and still '
         'sums exactly', () {
       final result = buildItemizedAllocations(

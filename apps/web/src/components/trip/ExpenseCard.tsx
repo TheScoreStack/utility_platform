@@ -168,6 +168,9 @@ export const ExpenseCard = ({
   if (typeof expense.tip === "number" && expense.tip > 0) {
     badges.push(`Tip ${formatCurrency.format(expense.tip)}`);
   }
+  if (typeof expense.fees === "number" && expense.fees > 0) {
+    badges.push(`Fees ${formatCurrency.format(expense.fees)}`);
+  }
 
   return (
     <div
@@ -245,8 +248,8 @@ export const ExpenseCard = ({
             {expense.lineItems.length === 1 ? "item" : "items"} · split by
             item
             {expense.extrasSplitMode === "even"
-              ? " · tax & tip split evenly"
-              : " · tax & tip proportional"}
+              ? " · tax, tip & fees split evenly"
+              : " · tax, tip & fees proportional"}
             {unclaimedCount > 0 && (
               <strong style={{ marginLeft: "0.4rem" }}>
                 · {unclaimedCount} unclaimed

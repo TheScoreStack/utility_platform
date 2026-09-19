@@ -211,6 +211,7 @@ export class SplitLinkService {
         total: expense.total,
         tax: expense.tax,
         tip: expense.tip,
+        fees: expense.fees,
         extrasSplitMode: expense.extrasSplitMode ?? "proportional",
         lineItems: (expense.lineItems ?? []).map((item) => ({
           lineItemId: item.lineItemId,
