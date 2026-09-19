@@ -528,7 +528,13 @@ export class GroupExpensesStack extends Stack {
 
     httpApi.addRoutes({
       path: "/trips/{proxy+}",
-      methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PATCH, HttpMethod.DELETE],
+      methods: [
+        HttpMethod.GET,
+        HttpMethod.POST,
+        HttpMethod.PUT,
+        HttpMethod.PATCH,
+        HttpMethod.DELETE
+      ],
       integration: httpIntegration,
       authorizer
     });
