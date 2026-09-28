@@ -127,6 +127,19 @@ class Trip {
   });
 }
 
+/// When a trip "happened", for ordering: its own start date when it has one,
+/// otherwise when the tab was opened.
+int _tripTime(Trip trip) {
+  final iso = trip.startDate ?? trip.endDate ?? trip.createdAt;
+  return DateTime.tryParse(iso)?.millisecondsSinceEpoch ?? 0;
+}
+
+/// Newest trip first, so the tab you're most likely to want is at the top.
+int compareTripsNewestFirst(Trip a, Trip b) {
+  final byDate = _tripTime(b).compareTo(_tripTime(a));
+  return byDate != 0 ? byDate : b.createdAt.compareTo(a.createdAt);
+}
+
 /// `GET /trips` list rows: the trip plus the caller's balance summary.
 class TripListItem {
   final Trip trip;

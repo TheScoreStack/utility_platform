@@ -121,7 +121,8 @@ class _TripListScreenState extends State<TripListScreen> {
       final trips = (data['trips'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(TripListItem.fromJson)
-          .toList();
+          .toList()
+        ..sort((a, b) => compareTripsNewestFirst(a.trip, b.trip));
       if (!mounted) return;
       setState(() {
         _trips = trips;

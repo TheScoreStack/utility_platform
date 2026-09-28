@@ -138,3 +138,23 @@ export const formatTripRange = (
   }
   return fmt(startDate ?? endDate!);
 };
+
+type TripDates = {
+  startDate?: string | null;
+  endDate?: string | null;
+  createdAt?: string | null;
+};
+
+/** When a trip "happened", for ordering: its own start date when it has one,
+ *  otherwise when the tab was opened. */
+const tripTime = (trip: TripDates): number => {
+  const iso = trip.startDate ?? trip.endDate ?? trip.createdAt;
+  if (!iso) return 0;
+  const d = parseLocalDay(iso);
+  return Number.isNaN(d.getTime()) ? 0 : d.getTime();
+};
+
+/** Newest trip first, so the tab you're most likely to want is at the top. */
+export const compareTripsNewestFirst = (a: TripDates, b: TripDates): number =>
+  tripTime(b) - tripTime(a) ||
+  (b.createdAt ?? "").localeCompare(a.createdAt ?? "");

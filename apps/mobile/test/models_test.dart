@@ -269,4 +269,43 @@ void main() {
       expect(summary.draftExpenses.single.createdBy, 'a');
     });
   });
+
+  group('compareTripsNewestFirst', () {
+    Trip trip(String name, {String? start, String? end, String created = ''}) =>
+        Trip(
+          tripId: name,
+          ownerId: 'a',
+          name: name,
+          startDate: start,
+          endDate: end,
+          createdAt: created,
+          updatedAt: created,
+          currency: 'USD',
+        );
+
+    test('orders dated trips newest first, dateless ones by creation', () {
+      final trips = [
+        trip('Ogden', start: '2025-09-26', end: '2025-09-28',
+            created: '2025-09-20T00:00:00.000Z'),
+        trip('RMHC', created: '2026-02-01T10:00:00.000Z'),
+        trip('Internationals', created: '2026-01-05T10:00:00.000Z'),
+        trip('RMD', start: '2026-08-31', end: '2026-09-28',
+            created: '2026-03-01T10:00:00.000Z'),
+      ]..sort(compareTripsNewestFirst);
+
+      expect(
+        trips.map((t) => t.name),
+        ['RMD', 'RMHC', 'Internationals', 'Ogden'],
+      );
+    });
+
+    test('sinks trips with unparseable dates to the bottom', () {
+      final trips = [
+        trip('junk', start: 'not-a-date', created: 'also-junk'),
+        trip('dated', start: '2025-01-01', created: '2025-01-01T00:00:00.000Z'),
+      ]..sort(compareTripsNewestFirst);
+
+      expect(trips.first.name, 'dated');
+    });
+  });
 }

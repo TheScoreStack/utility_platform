@@ -4,7 +4,11 @@ import { Link, useNavigate } from "react-router-dom";
 import { api, ApiError, searchUsers as searchUsersRequest } from "../lib/api";
 import type { Trip, TripListResponse, UserProfile } from "../types";
 import { getInitials, seedAvatar } from "../lib/avatarPalette";
-import { formatTripRange, formatTripStamp } from "../lib/tripFormat";
+import {
+  compareTripsNewestFirst,
+  formatTripRange,
+  formatTripStamp
+} from "../lib/tripFormat";
 
 interface FormState {
   name: string;
@@ -58,7 +62,10 @@ const TripListPage = () => {
     [data]
   );
   const trips = useMemo(
-    () => allTrips.filter((trip) => !trip.archivedAt),
+    () =>
+      allTrips
+        .filter((trip) => !trip.archivedAt)
+        .sort(compareTripsNewestFirst),
     [allTrips]
   );
   const archivedTrips = useMemo(
