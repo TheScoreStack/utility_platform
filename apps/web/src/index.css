@@ -3543,6 +3543,35 @@ button.ghost {
   cursor: not-allowed;
 }
 
+/* "that's me" — claiming a placeholder spot as your own. Affirmative, so it
+   reads as an invitation rather than sitting next to remove as a twin. */
+.ppl-member__claim {
+  background: var(--accent-soft);
+  border: 1px solid rgba(116, 143, 252, 0.4);
+  border-radius: 999px;
+  color: var(--accent-bright);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  padding: 0.3rem 0.7rem;
+  align-self: flex-start;
+  white-space: nowrap;
+  transition:
+    background 140ms ease,
+    border-color 140ms ease;
+}
+
+.ppl-member__claim:hover:not(:disabled) {
+  background: rgba(76, 110, 245, 0.24);
+  border-color: var(--accent-bright);
+}
+
+.ppl-member__claim:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Rail (search + payment methods) */
 .ppl-rail {
   display: flex;

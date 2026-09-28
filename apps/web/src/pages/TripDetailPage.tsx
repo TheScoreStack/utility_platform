@@ -541,6 +541,33 @@ const TripDetailPage = () => {
     }
   });
 
+  // A placeholder someone added by name turns out to be you: fold its
+  // expenses, shares and settlements onto your account. The join flow offers
+  // this too, but only in the moment you join — this is the way back to it.
+  const claimPlaceholderMutation = useMutation<void, unknown, string>({
+    mutationFn: (memberId: string) => {
+      if (!tripId) {
+        throw new Error("Trip not found");
+      }
+      return api.post<void>(`/trips/${tripId}/members/${memberId}/claim`);
+    },
+    onMutate: () => {
+      setMemberFeedback(null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
+      queryClient.invalidateQueries({ queryKey: ["trips"] });
+      setMemberFeedback("Claimed — everything they were on is yours now");
+    },
+    onError: (err: unknown) => {
+      if (err instanceof ApiError) {
+        setMemberFeedback(err.message);
+      } else {
+        setMemberFeedback("Failed to claim that spot");
+      }
+    }
+  });
+
   const removeMemberMutation = useMutation<void, unknown, string>({
     mutationFn: (memberId: string) => {
       if (!tripId) {
@@ -1053,6 +1080,11 @@ const TripDetailPage = () => {
           }
           removeLoading={removeMemberMutation.isPending}
           removingMemberId={removeMemberMutation.variables}
+          onClaimPlaceholder={(memberId) =>
+            claimPlaceholderMutation.mutateAsync(memberId)
+          }
+          claimLoading={claimPlaceholderMutation.isPending}
+          claimingMemberId={claimPlaceholderMutation.variables}
           currentUserId={effectiveCurrentUserId}
           membersById={membersById}
           paymentMethodsByMember={paymentMethodsByMember}

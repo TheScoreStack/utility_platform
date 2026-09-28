@@ -124,6 +124,78 @@ class _MembersScreenState extends State<MembersScreen> {
     }
   }
 
+  /// A placeholder someone added by name turns out to be you. The join flow
+  /// offers this too, but only in the moment you join — once you're on the
+  /// trip this is the way back to it.
+  Future<void> _confirmClaim(TripMember member) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Are you ${member.displayName}?',
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Everything ${member.displayName} is on — expenses, shares '
+                'and settlements — moves onto your account, and the '
+                'placeholder is removed. This can’t be undone.',
+                style: const TextStyle(fontSize: 13, color: Colors.white70),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () => Navigator.of(sheetContext).pop(true),
+                style: FilledButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                child: Text('Yes, I’m ${member.displayName}'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(sheetContext).pop(false),
+                child: const Text('Cancel'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _busyMemberId = member.memberId);
+    try {
+      await widget.api.post(
+        '/trips/${_trip.tripId}/members/${member.memberId}/claim',
+        const <String, dynamic>{},
+      );
+      if (!mounted) return;
+      HapticFeedback.mediumImpact();
+      setState(() {
+        _members.removeWhere((item) => item.memberId == member.memberId);
+        _busyMemberId = null;
+      });
+      showAppSnackBar(
+        context,
+        'Claimed — everything ${member.displayName} was on is yours now',
+        success: true,
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      setState(() => _busyMemberId = null);
+      showAppSnackBar(context, error.message, error: true);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _busyMemberId = null);
+      showAppSnackBar(context, 'Could not claim that spot.', error: true);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final currentUserId = widget.summary.currentUserId;
@@ -217,19 +289,35 @@ class _MembersScreenState extends State<MembersScreen> {
                         ],
                       ),
                     ),
-                    if (canRemove)
-                      busy
-                          ? const Padding(
-                              padding: EdgeInsets.all(12),
-                              child: SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
+                    if (busy)
+                      const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                      )
+                    else
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (member.placeholder == true)
+                            TextButton(
+                              onPressed: _busyMemberId != null
+                                  ? null
+                                  : () => _confirmClaim(member),
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.accent,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
                                 ),
                               ),
-                            )
-                          : TextButton(
+                              child: const Text('That’s me'),
+                            ),
+                          if (canRemove)
+                            TextButton(
                               onPressed: _busyMemberId != null
                                   ? null
                                   : () => _confirmRemove(member),
@@ -237,9 +325,15 @@ class _MembersScreenState extends State<MembersScreen> {
                                 foregroundColor: isSelf
                                     ? AppColors.warning
                                     : AppColors.danger,
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                ),
                               ),
                               child: Text(isSelf ? 'Leave' : 'Remove'),
                             ),
+                        ],
+                      ),
                   ],
                 ),
               ),

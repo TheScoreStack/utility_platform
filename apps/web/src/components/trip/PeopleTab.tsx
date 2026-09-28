@@ -139,6 +139,9 @@ interface PeopleTabProps {
   onRemoveMember: (memberId: string) => Promise<void>;
   removeLoading: boolean;
   removingMemberId?: string;
+  onClaimPlaceholder: (memberId: string) => Promise<unknown>;
+  claimLoading: boolean;
+  claimingMemberId?: string;
   currentUserId?: string;
   membersById: Record<string, string>;
   paymentMethodsByMember: Record<string, PaymentMethods>;
@@ -168,6 +171,9 @@ export const PeopleTab = ({
   onRemoveMember,
   removeLoading,
   removingMemberId,
+  onClaimPlaceholder,
+  claimLoading,
+  claimingMemberId,
   currentUserId,
   membersById,
   paymentMethodsByMember,
@@ -292,7 +298,7 @@ export const PeopleTab = ({
                           {member.placeholder && (
                             <span
                               className="ppl-member__tag"
-                              title="Added by name — they'll claim this spot when they join from the invite link"
+                              title="Added by name — whoever this is can claim the spot once they're on the trip"
                               style={{
                                 background: "rgba(250,204,21,0.15)",
                                 color: "#fde68a"
@@ -326,6 +332,31 @@ export const PeopleTab = ({
                         </p>
                       )}
                     </div>
+
+                    {member.placeholder && (
+                      <button
+                        type="button"
+                        className="ppl-member__claim"
+                        disabled={claimLoading && claimingMemberId === member.memberId}
+                        title={`Fold ${label}'s expenses and shares into your account`}
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: `Are you ${label}?`,
+                            body:
+                              `Everything ${label} is on — expenses, shares and ` +
+                              "settlements — moves onto your account, and the " +
+                              "placeholder is removed. This can't be undone.",
+                            confirmLabel: `Yes, I'm ${label}`
+                          });
+                          if (!ok) return;
+                          onClaimPlaceholder(member.memberId).catch(() => {});
+                        }}
+                      >
+                        {claimLoading && claimingMemberId === member.memberId
+                          ? "claiming…"
+                          : "that's me"}
+                      </button>
+                    )}
 
                     {canRemove && (
                       <button
