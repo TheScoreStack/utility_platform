@@ -6,6 +6,7 @@ import { HarmonyLedgerService } from "../services/harmonyLedgerService.js";
 import { StackTimeService } from "../services/stackTimeService.js";
 import { MeetService } from "../services/meetService.js";
 import { SplitLinkService } from "../services/splitLinkService.js";
+import { routeAtlas } from "./atlasRoutes.js";
 import { getAuthContext } from "../auth.js";
 import {
   handleError,
@@ -527,6 +528,11 @@ export const handler = async (
     }
 
     // Stack Time routes
+    const atlasResponse = await routeAtlas(path, method, event, auth, origin);
+    if (atlasResponse) {
+      return atlasResponse;
+    }
+
     if (path === "/stack-time/access" && method === "GET") {
       const response = await stackTimeService.getAccessOverview(auth);
       return ok(response, origin);

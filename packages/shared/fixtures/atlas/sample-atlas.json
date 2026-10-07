@@ -1,0 +1,75 @@
+{
+  "circles": [
+    { "circleId": "circle_wife", "name": "Wife", "color": "rose", "sortOrder": 0, "createdAt": "2025-01-01T00:00:00.000Z" },
+    { "circleId": "circle_shop", "name": "Barbershop", "color": "emerald", "sortOrder": 1, "createdAt": "2025-01-01T00:00:00.000Z" },
+    { "circleId": "solo", "name": "Solo", "color": "slate", "sortOrder": 999, "builtIn": true, "createdAt": "2025-01-01T00:00:00.000Z" }
+  ],
+  "trips": [
+    {
+      "tripId": "t_napa", "title": "Napa anniversary", "start": "2025-06-12", "end": "2025-06-15", "datePrecision": "day",
+      "circleIds": ["circle_wife"], "personIds": [],
+      "stops": [
+        { "stopId": "s1", "place": { "providerId": "p_sf", "name": "San Francisco", "kind": "city", "locality": "San Francisco", "regionCode": "US-CA", "countryCode": "US", "lat": 37.77, "lng": -122.42 } },
+        { "stopId": "s2", "place": { "providerId": "p_yv", "name": "Yountville", "kind": "city", "locality": "Yountville", "regionCode": "US-CA", "countryCode": "US", "lat": 38.40, "lng": -122.36 } }
+      ],
+      "legs": [
+        { "legId": "l1", "mode": "flight", "airline": "Alaska",
+          "from": { "providerId": "iata:LAX", "name": "Los Angeles International Airport", "kind": "airport", "locality": "Los Angeles", "regionCode": "US-CA", "countryCode": "US", "lat": 33.9425, "lng": -118.4081, "iata": "LAX" },
+          "to": { "providerId": "iata:SFO", "name": "San Francisco International Airport", "kind": "airport", "locality": "San Francisco", "regionCode": "US-CA", "countryCode": "US", "lat": 37.619, "lng": -122.375, "iata": "SFO" } }
+      ],
+      "createdAt": "2025-06-16T00:00:00.000Z", "updatedAt": "2025-06-16T00:00:00.000Z"
+    },
+    {
+      "tripId": "t_nash", "title": "Nashville bachelor run", "start": "2025-04", "datePrecision": "month",
+      "circleIds": ["circle_shop"], "personIds": [],
+      "stops": [
+        { "stopId": "s3", "place": { "providerId": "p_nash", "name": "Nashville", "kind": "city", "locality": "Nashville", "regionCode": "US-TN", "countryCode": "US", "lat": 36.16, "lng": -86.78 } }
+      ],
+      "legs": [
+        { "legId": "l2", "mode": "flight", "airline": "Southwest",
+          "from": { "providerId": "iata:SFO", "name": "San Francisco International Airport", "kind": "airport", "locality": "San Francisco", "regionCode": "US-CA", "countryCode": "US", "lat": 37.619, "lng": -122.375, "iata": "SFO" },
+          "to": { "providerId": "iata:BNA", "name": "Nashville International Airport", "kind": "airport", "locality": "Nashville", "regionCode": "US-TN", "countryCode": "US", "lat": 36.1245, "lng": -86.6782, "iata": "BNA" } },
+        { "legId": "l3", "mode": "flight", "airline": "Southwest",
+          "from": { "providerId": "iata:BNA", "name": "Nashville International Airport", "kind": "airport", "locality": "Nashville", "regionCode": "US-TN", "countryCode": "US", "lat": 36.1245, "lng": -86.6782, "iata": "BNA" },
+          "to": { "providerId": "iata:SFO", "name": "San Francisco International Airport", "kind": "airport", "locality": "San Francisco", "regionCode": "US-CA", "countryCode": "US", "lat": 37.619, "lng": -122.375, "iata": "SFO" } }
+      ],
+      "createdAt": "2025-04-20T00:00:00.000Z", "updatedAt": "2025-04-20T00:00:00.000Z"
+    },
+    {
+      "tripId": "t_lis", "title": "Lisbon, on my own", "start": "2025-02", "datePrecision": "month",
+      "circleIds": ["solo"], "personIds": [],
+      "stops": [
+        { "stopId": "s4", "place": { "providerId": "p_lis", "name": "Lisbon", "kind": "city", "locality": "Lisbon", "countryCode": "PT", "lat": 38.72, "lng": -9.14 } },
+        { "stopId": "s5", "place": { "providerId": "p_opo", "name": "Porto", "kind": "city", "locality": "Porto", "countryCode": "PT", "lat": 41.15, "lng": -8.61 } }
+      ],
+      "legs": [
+        { "legId": "l4", "mode": "flight", "airline": "TAP",
+          "from": { "providerId": "iata:SFO", "name": "San Francisco International Airport", "kind": "airport", "locality": "San Francisco", "regionCode": "US-CA", "countryCode": "US", "lat": 37.619, "lng": -122.375, "iata": "SFO" },
+          "to": { "providerId": "iata:LIS", "name": "Humberto Delgado Airport", "kind": "airport", "locality": "Lisbon", "countryCode": "PT", "lat": 38.7813, "lng": -9.1359, "iata": "LIS" } },
+        { "legId": "l5", "mode": "train",
+          "from": { "providerId": "p_lis", "name": "Lisbon", "kind": "city", "locality": "Lisbon", "countryCode": "PT", "lat": 38.72, "lng": -9.14 },
+          "to": { "providerId": "p_opo", "name": "Porto", "kind": "city", "locality": "Porto", "countryCode": "PT", "lat": 41.15, "lng": -8.61 } }
+      ],
+      "createdAt": "2025-02-28T00:00:00.000Z", "updatedAt": "2025-02-28T00:00:00.000Z"
+    },
+    {
+      "tripId": "t_cabo", "title": "Cabo with the shop", "start": "2024-10", "datePrecision": "month",
+      "circleIds": ["circle_shop"], "personIds": [],
+      "stops": [
+        { "stopId": "s6", "place": { "providerId": "p_cabo", "name": "Cabo San Lucas", "kind": "city", "locality": "Cabo San Lucas", "regionCode": "MX-BCS", "countryCode": "MX", "lat": 22.89, "lng": -109.91 } }
+      ],
+      "legs": [],
+      "createdAt": "2024-10-30T00:00:00.000Z", "updatedAt": "2024-10-30T00:00:00.000Z"
+    },
+    {
+      "tripId": "t_kyoto", "title": "Japan", "start": "2019", "datePrecision": "year",
+      "circleIds": ["circle_wife"], "personIds": [],
+      "stops": [
+        { "stopId": "s7", "place": { "providerId": "p_kyoto", "name": "Kyoto", "kind": "city", "locality": "Kyoto", "countryCode": "JP", "lat": 35.01, "lng": 135.77 } },
+        { "stopId": "s8", "place": { "providerId": "country:JP", "name": "Japan", "kind": "country", "countryCode": "JP", "lat": 36.2, "lng": 138.25 } }
+      ],
+      "legs": [],
+      "createdAt": "2019-12-01T00:00:00.000Z", "updatedAt": "2019-12-01T00:00:00.000Z"
+    }
+  ]
+}

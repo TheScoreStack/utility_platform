@@ -228,3 +228,28 @@ export const TimeClockGlyphIcon = ({
     />
   </svg>
 );
+
+export const AtlasGlyphIcon = ({
+  className,
+  ...props
+}: SVGProps<SVGSVGElement>) => (
+  <svg
+    viewBox="0 0 48 48"
+    xmlns="http://www.w3.org/2000/svg"
+    className={className}
+    {...props}
+  >
+    <defs>
+      <linearGradient id="atlasGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stopColor="#f472b6" />
+        <stop offset="100%" stopColor="#4c6ef5" />
+      </linearGradient>
+    </defs>
+    {/* Globe with a meridian, the equator and one flight arc */}
+    <circle cx="24" cy="24" r="15" fill="rgba(76, 110, 245, 0.08)" stroke="url(#atlasGradient)" strokeWidth="1.5" />
+    <path {...gradientProps} stroke="url(#atlasGradient)" d="M9 24h30M24 9c-5 4.5-5 25.5 0 30M24 9c5 4.5 5 25.5 0 30" opacity="0.6" />
+    <path {...gradientProps} stroke="#f472b6" d="M14 30c4-9 13-13 21-11" strokeDasharray="2 2.5" />
+    <circle cx="14" cy="30" r="2.4" fill="#f472b6" />
+    <circle cx="35" cy="19" r="2.4" fill="#748ffc" />
+  </svg>
+);

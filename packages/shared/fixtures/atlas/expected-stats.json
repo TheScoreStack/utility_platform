@@ -1,0 +1,195 @@
+{
+  "all": {
+    "lens": {
+      "mode": "footprint",
+      "circle": "all"
+    },
+    "tripIds": [
+      "t_napa",
+      "t_nash",
+      "t_lis",
+      "t_cabo",
+      "t_kyoto"
+    ],
+    "stats": {
+      "trips": 5,
+      "countries": 4,
+      "usStates": 2,
+      "cities": 8,
+      "continents": 3,
+      "countryVisits": {
+        "US": 3,
+        "PT": 1,
+        "MX": 1,
+        "JP": 1
+      },
+      "regionVisits": {
+        "US-CA": 3,
+        "US-TN": 1,
+        "MX-BCS": 1
+      },
+      "flights": 4,
+      "flightMiles": 9933,
+      "airports": 4,
+      "topRoute": {
+        "route": "BNA-SFO",
+        "count": 2
+      },
+      "topAirline": {
+        "airline": "Southwest",
+        "count": 2
+      },
+      "firstYear": 2019,
+      "lastYear": 2025
+    }
+  },
+  "wife": {
+    "lens": {
+      "mode": "footprint",
+      "circle": "circle_wife"
+    },
+    "tripIds": [
+      "t_napa",
+      "t_kyoto"
+    ],
+    "stats": {
+      "trips": 2,
+      "countries": 2,
+      "usStates": 1,
+      "cities": 4,
+      "continents": 2,
+      "countryVisits": {
+        "US": 1,
+        "JP": 1
+      },
+      "regionVisits": {
+        "US-CA": 1
+      },
+      "flights": 1,
+      "flightMiles": 338,
+      "airports": 2,
+      "topRoute": {
+        "route": "LAX-SFO",
+        "count": 1
+      },
+      "topAirline": {
+        "airline": "Alaska",
+        "count": 1
+      },
+      "firstYear": 2019,
+      "lastYear": 2025
+    }
+  },
+  "shopFlights": {
+    "lens": {
+      "mode": "flights",
+      "circle": "circle_shop"
+    },
+    "tripIds": [
+      "t_nash"
+    ],
+    "stats": {
+      "trips": 1,
+      "countries": 1,
+      "usStates": 2,
+      "cities": 2,
+      "continents": 1,
+      "countryVisits": {
+        "US": 1
+      },
+      "regionVisits": {
+        "US-TN": 1,
+        "US-CA": 1
+      },
+      "flights": 2,
+      "flightMiles": 3928,
+      "airports": 2,
+      "topRoute": {
+        "route": "BNA-SFO",
+        "count": 2
+      },
+      "topAirline": {
+        "airline": "Southwest",
+        "count": 2
+      },
+      "firstYear": 2025,
+      "lastYear": 2025
+    }
+  },
+  "solo": {
+    "lens": {
+      "mode": "footprint",
+      "circle": "solo"
+    },
+    "tripIds": [
+      "t_lis"
+    ],
+    "stats": {
+      "trips": 1,
+      "countries": 2,
+      "usStates": 1,
+      "cities": 3,
+      "continents": 2,
+      "countryVisits": {
+        "PT": 1,
+        "US": 1
+      },
+      "regionVisits": {
+        "US-CA": 1
+      },
+      "flights": 1,
+      "flightMiles": 5668,
+      "airports": 2,
+      "topRoute": {
+        "route": "LIS-SFO",
+        "count": 1
+      },
+      "topAirline": {
+        "airline": "TAP",
+        "count": 1
+      },
+      "firstYear": 2025,
+      "lastYear": 2025
+    }
+  },
+  "since2025": {
+    "lens": {
+      "mode": "footprint",
+      "circle": "all",
+      "fromYear": 2025
+    },
+    "tripIds": [
+      "t_napa",
+      "t_nash",
+      "t_lis"
+    ],
+    "stats": {
+      "trips": 3,
+      "countries": 2,
+      "usStates": 2,
+      "cities": 6,
+      "continents": 2,
+      "countryVisits": {
+        "US": 3,
+        "PT": 1
+      },
+      "regionVisits": {
+        "US-CA": 3,
+        "US-TN": 1
+      },
+      "flights": 4,
+      "flightMiles": 9933,
+      "airports": 4,
+      "topRoute": {
+        "route": "BNA-SFO",
+        "count": 2
+      },
+      "topAirline": {
+        "airline": "Southwest",
+        "count": 2
+      },
+      "firstYear": 2025,
+      "lastYear": 2025
+    }
+  }
+}

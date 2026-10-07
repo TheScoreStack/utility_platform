@@ -3,6 +3,7 @@ import 'package:meet_kit/meet_kit.dart';
 
 import '../app_config.dart';
 import '../core/auth_service.dart';
+import 'atlas/screens/atlas_home_screen.dart';
 import 'group_expenses/group_expenses_screen.dart';
 import 'harmony/harmony_module_screen.dart';
 
@@ -32,8 +33,7 @@ final List<ModuleDefinition> registeredModules = [
   ModuleDefinition(
     id: 'group-expenses',
     name: 'Group Expenses',
-    description:
-        'Create trips, digitize receipts, and settle up with friends.',
+    description: 'Create trips, digitize receipts, and settle up with friends.',
     tags: ['travel', 'finance', 'receipts'],
     icon: Icons.currency_exchange_rounded,
     builder: (_) => const GroupExpensesScreen(),
@@ -54,6 +54,14 @@ final List<ModuleDefinition> registeredModules = [
         shareBaseUrl: 'https://thestackcore.com/m/',
       ),
     ),
+  ),
+  ModuleDefinition(
+    id: 'atlas',
+    name: 'Atlas',
+    description: "Every place you've been, on one map.",
+    tags: ['travel', 'map'],
+    icon: Icons.public,
+    builder: (_) => const AtlasHomeScreen(),
   ),
   ModuleDefinition(
     id: 'harmony-ledger',

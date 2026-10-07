@@ -37,6 +37,12 @@ import MeetEventPage from "./pages/MeetEventPage";
 import MeetRespondPage from "./pages/MeetRespondPage";
 import MeetJoinPage from "./pages/MeetJoinPage";
 import SplitClaimPage from "./pages/SplitClaimPage";
+import AtlasMapPage from "./pages/AtlasMapPage";
+import AtlasTripPage from "./pages/AtlasTripPage";
+import AtlasTripEditorPage from "./pages/AtlasTripEditorPage";
+import AtlasStatsPage from "./pages/AtlasStatsPage";
+import AtlasCirclesPage from "./pages/AtlasCirclesPage";
+import AtlasQuickAddPage from "./pages/AtlasQuickAddPage";
 import { useHarmonyLedgerAccess } from "./modules/useHarmonyLedgerAccess";
 import { useStackTimeAccess } from "./modules/useStackTimeAccess";
 import { getInitials, seedAvatar } from "./lib/avatarPalette";
@@ -74,6 +80,19 @@ const GroupExpensesModule = () => {
       </div>
     </div>
   );
+};
+
+/** Atlas' map is edge to edge; its other pages keep the reading column. */
+const AtlasModule = () => {
+  const { pathname } = useLocation();
+  if (pathname === "/atlas" || pathname === "/atlas/") {
+    return (
+      <div className="atlas-canvas">
+        <Outlet />
+      </div>
+    );
+  }
+  return <CenteredOutlet />;
 };
 
 const HarmonyModule = CenteredOutlet;
@@ -233,6 +252,15 @@ const AppContent = ({ user, signOut }: AppContentProps) => {
             <Route path="trips/:tripId" element={<TripDetailPage />} />
             <Route path="trips/:tripId/summary" element={<TripSummaryPrintPage />} />
             <Route path="join/:inviteId" element={<JoinTripPage />} />
+          </Route>
+          <Route path="/atlas" element={<AtlasModule />}>
+            <Route index element={<AtlasMapPage />} />
+            <Route path="new" element={<AtlasTripEditorPage />} />
+            <Route path="trips/:tripId" element={<AtlasTripPage />} />
+            <Route path="trips/:tripId/edit" element={<AtlasTripEditorPage />} />
+            <Route path="stats" element={<AtlasStatsPage />} />
+            <Route path="circles" element={<AtlasCirclesPage />} />
+            <Route path="quick-add" element={<AtlasQuickAddPage />} />
           </Route>
           <Route path="/meet" element={<MeetModule />}>
             <Route index element={<MeetListPage />} />

@@ -214,6 +214,9 @@ export class GroupExpensesStack extends Stack {
 
     const httpLambda = new NodejsFunction(this, "HttpHandler", {
       ...sharedFunctionProps,
+      // Atlas quick add makes one model call plus a place lookup per line;
+      // stay just under API Gateway's 30 s integration limit.
+      timeout: Duration.seconds(29),
       entry: path.join(stackDir, "../../../services/api/src/handlers/http.ts"),
       logRetention: RetentionDays.ONE_WEEK,
       environment: {
@@ -221,6 +224,8 @@ export class GroupExpensesStack extends Stack {
         TABLE_NAME: table.tableName,
         RECEIPT_BUCKET: receiptBucket.bucketName,
         SIGNED_URL_EXPIRY_SECONDS: "900",
+        BEDROCK_MODEL_ID:
+          process.env.BEDROCK_MODEL_ID ?? "anthropic.claude-haiku-4-5",
         AWS_NODEJS_CONNECTION_REUSE_ENABLED: "1",
         ...(pushPlatformAppArn
           ? { PUSH_PLATFORM_APP_ARN: pushPlatformAppArn }
@@ -300,23 +305,35 @@ export class GroupExpensesStack extends Stack {
       }
     );
 
-    harmonyParserLambda.addToRolePolicy(
+    const bedrockPolicies = [
       new PolicyStatement({
         actions: ["bedrock:InvokeModel", "bedrock:InvokeModelWithResponseStream"],
         resources: [
           "arn:aws:bedrock:*::foundation-model/anthropic.*",
           `arn:aws:bedrock:*:${this.account}:inference-profile/us.anthropic.*`
         ]
-      })
-    );
-    // The Bedrock Mantle (Messages API) endpoint authorizes with its own
-    // action/resource pair, separate from classic bedrock:InvokeModel.
-    harmonyParserLambda.addToRolePolicy(
+      }),
+      // The Bedrock Mantle (Messages API) endpoint authorizes with its own
+      // action/resource pair, separate from classic bedrock:InvokeModel.
       new PolicyStatement({
         actions: ["bedrock-mantle:CreateInference"],
         resources: [
           `arn:aws:bedrock-mantle:*:${this.account}:project/*`
         ]
+      })
+    ];
+    // Statement parsing, and Atlas quick add on the HTTP handler.
+    for (const policy of bedrockPolicies) {
+      harmonyParserLambda.addToRolePolicy(policy);
+      httpLambda.addToRolePolicy(policy);
+    }
+
+    // Atlas place search: Amazon Location Places v2 needs no place index
+    // resource, only these actions on the AWS-managed provider.
+    httpLambda.addToRolePolicy(
+      new PolicyStatement({
+        actions: ["geo-places:Autocomplete", "geo-places:GetPlace"],
+        resources: [`arn:aws:geo-places:${this.region}::provider/default`]
       })
     );
     if (pushPolicy) {
@@ -577,6 +594,13 @@ export class GroupExpensesStack extends Stack {
     httpApi.addRoutes({
       path: "/stack-time/{proxy+}",
       methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.DELETE, HttpMethod.PATCH],
+      integration: httpIntegration,
+      authorizer
+    });
+
+    httpApi.addRoutes({
+      path: "/atlas/{proxy+}",
+      methods: [HttpMethod.GET, HttpMethod.POST, HttpMethod.PATCH, HttpMethod.DELETE],
       integration: httpIntegration,
       authorizer
     });

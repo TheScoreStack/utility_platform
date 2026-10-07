@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import {
+  AtlasGlyphIcon,
   ExpensesGlyphIcon,
   LedgerGlyphIcon,
   MeetGlyphIcon,
@@ -27,6 +28,16 @@ export const modules: ModuleDefinition[] = [
     tags: ["travel", "finance", "receipts"],
     maturity: "beta",
     icon: <ExpensesGlyphIcon />
+  },
+  {
+    id: "atlas",
+    name: "Atlas",
+    description:
+      "Every place you've been, on one map. Log trips, see who you went with, and watch the world fill in.",
+    path: "/atlas",
+    tags: ["travel", "map", "memories"],
+    maturity: "alpha",
+    icon: <AtlasGlyphIcon />
   },
   {
     id: "meet",
