@@ -51,13 +51,7 @@ class WishlistScreen extends StatelessWidget {
       isScrollControlled: true,
       showDragHandle: true,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            0,
-            20,
-            20 + MediaQuery.viewInsetsOf(ctx).bottom,
-          ),
+        builder: (ctx, setSheet) => KeyboardSafeSheet(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -100,6 +94,8 @@ class WishlistScreen extends StatelessWidget {
               TextField(
                 controller: note,
                 maxLength: 500,
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.done,
                 decoration: const InputDecoration(labelText: 'Note (optional)'),
               ),
               const SizedBox(height: 8),

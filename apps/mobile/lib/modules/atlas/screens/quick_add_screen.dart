@@ -102,76 +102,128 @@ class _QuickAddScreenState extends State<QuickAddScreen> {
     Navigator.of(context).pop();
   }
 
+  /// The API reads at most this many lines per request.
+  static const _maxLines = 40;
+
+  int get _lineCount =>
+      _text.text.split('\n').where((l) => l.trim().isNotEmpty).length;
+
   @override
   Widget build(BuildContext context) {
     final drafts = _drafts;
+    final lines = _lineCount;
+    final tooMany = lines > _maxLines;
+    final canRead = lines > 0 && !tooMany && !_parsing;
     return Scaffold(
       appBar: AppBar(title: const Text('Quick add')),
-      bottomNavigationBar: drafts == null
-          ? null
-          : SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                child: FilledButton(
-                  onPressed: _selected.isEmpty || _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(
-                          'Save ${_selected.length} ${_selected.length == 1 ? 'trip' : 'trips'}',
+      // The action bar is part of the body so it rides above the keyboard.
+      body: GestureDetector(
+        behavior: HitTestBehavior.translucent,
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Column(
+          children: [
+            Expanded(
+              child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+                children: [
+                  const Text(
+                    'One trip per line. Dates and circles are optional.',
+                    style: TextStyle(color: Colors.white60),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _text,
+                    minLines: 5,
+                    maxLines: 12,
+                    maxLength: 4000,
+                    keyboardType: TextInputType.multiline,
+                    textCapitalization: TextCapitalization.sentences,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText:
+                          'Lisbon and Porto, May 2025, solo\n'
+                          'Kyoto 2019 with Wife\n'
+                          'Nashville Apr 2025 barbershop',
+                      border: const OutlineInputBorder(),
+                      helperText: lines == 0
+                          ? null
+                          : '$lines of $_maxLines lines',
+                      errorText: tooMany
+                          ? 'Up to $_maxLines lines at a time — split the list'
+                          : null,
+                    ),
+                  ),
+                  if (drafts != null) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Text(
+                          '${drafts.length} ${drafts.length == 1 ? 'DRAFT' : 'DRAFTS'}',
+                          style: kEyebrow,
                         ),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: canRead ? _parse : null,
+                          icon: const Icon(Icons.refresh_rounded, size: 18),
+                          label: const Text('Read again'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    for (var i = 0; i < drafts.length; i++)
+                      _draftCard(i, drafts[i]),
+                  ],
+                ],
+              ),
+            ),
+            DecoratedBox(
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.white10)),
+              ),
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: drafts == null
+                        ? FilledButton.icon(
+                            onPressed: canRead ? _parse : null,
+                            icon: _parsing
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : const Icon(Icons.auto_awesome_rounded),
+                            label: const Text('Read my list'),
+                          )
+                        : FilledButton(
+                            onPressed: _selected.isEmpty || _saving
+                                ? null
+                                : _save,
+                            child: _saving
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    'Save ${_selected.length} ${_selected.length == 1 ? 'trip' : 'trips'}',
+                                  ),
+                          ),
+                  ),
                 ),
               ),
             ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
-        children: [
-          const Text(
-            'One trip per line. Dates and circles are optional.',
-            style: TextStyle(color: Colors.white60),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _text,
-            minLines: 5,
-            maxLines: 12,
-            maxLength: 4000,
-            decoration: const InputDecoration(
-              hintText:
-                  'Lisbon and Porto, May 2025, solo\n'
-                  'Kyoto 2019 with Wife\n'
-                  'Nashville Apr 2025 barbershop',
-              border: OutlineInputBorder(),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: OutlinedButton.icon(
-              onPressed: _parsing ? null : _parse,
-              icon: _parsing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.auto_awesome_rounded),
-              label: Text(drafts == null ? 'Read my list' : 'Read again'),
-            ),
-          ),
-          if (drafts != null) ...[
-            const SizedBox(height: 16),
-            Text(
-              '${drafts.length} ${drafts.length == 1 ? 'DRAFT' : 'DRAFTS'}',
-              style: kEyebrow,
-            ),
-            const SizedBox(height: 8),
-            for (var i = 0; i < drafts.length; i++) _draftCard(i, drafts[i]),
           ],
-        ],
+        ),
       ),
     );
   }

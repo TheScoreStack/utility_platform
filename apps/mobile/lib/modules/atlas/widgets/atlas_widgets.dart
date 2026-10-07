@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 
 import '../../../core/app_theme.dart';
@@ -334,13 +335,7 @@ Future<({String name, String color})?> showCircleEditor(
           Navigator.of(context).pop((name: name, color: color));
         }
 
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            20,
-            0,
-            20,
-            20 + MediaQuery.viewInsetsOf(context).bottom,
-          ),
+        return KeyboardSafeSheet(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -355,6 +350,8 @@ Future<({String name, String color})?> showCircleEditor(
                 autofocus: circle == null,
                 maxLength: 40,
                 textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.done,
+                onChanged: (_) => setSheet(() {}),
                 onSubmitted: (_) => submit(),
                 decoration: const InputDecoration(
                   labelText: 'Name',
@@ -400,7 +397,7 @@ Future<({String name, String color})?> showCircleEditor(
               SizedBox(
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: submit,
+                  onPressed: controller.text.trim().isEmpty ? null : submit,
                   child: Text(circle == null ? 'Create circle' : 'Save'),
                 ),
               ),
@@ -419,4 +416,44 @@ String nextCircleColor(List<AtlasCircle> circles) {
     (c) => !used.contains(c),
     orElse: () => atlasCircleColors[circles.length % atlasCircleColors.length],
   );
+}
+
+/// Flight numbers: letters and digits only, upper-cased, e.g. "UA 837" ->
+/// "UA837". Matches the API's 16-char cap with room to spare.
+class FlightNumberFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final cleaned = newValue.text.toUpperCase().replaceAll(
+      RegExp(r'[^A-Z0-9]'),
+      '',
+    );
+    final text = cleaned.length > 8 ? cleaned.substring(0, 8) : cleaned;
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+  }
+}
+
+/// Wraps a modal sheet's content so it scrolls instead of overflowing when
+/// the keyboard takes most of a small screen.
+class KeyboardSafeSheet extends StatelessWidget {
+  const KeyboardSafeSheet({super.key, required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        child: child,
+      ),
+    );
+  }
 }

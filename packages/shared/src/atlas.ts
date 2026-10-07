@@ -414,3 +414,55 @@ export const tripDays = (trip: Pick<AtlasTrip, "start" | "end" | "datePrecision"
   const ms = Date.parse(`${end}T00:00:00Z`) - Date.parse(`${trip.start}T00:00:00Z`);
   return Math.round(ms / 86400000) + 1;
 };
+
+// ------------------------------------------------------------------ quick picks
+
+const pickKey = (p: AtlasPlace) => p.iata ?? p.providerId;
+
+/**
+ * Places you've used most, for one-tap picks: airports from flight legs, or
+ * stop places (no airports). Ranked by how many trips include the place, then
+ * by the most recent of those trips, then by name; capped at `limit`.
+ */
+export const frequentPlaces = (
+  trips: AtlasTrip[],
+  kind: "airports" | "stops",
+  limit = 6
+): AtlasPlace[] => {
+  const seen = new Map<string, { place: AtlasPlace; trips: number; latest: string }>();
+  for (const trip of trips) {
+    const places =
+      kind === "airports"
+        ? trip.legs
+            .filter((l) => l.mode === "flight")
+            .flatMap((l) => [l.from, l.to])
+            .filter((p) => p.iata)
+        : trip.stops.map((s) => s.place).filter((p) => p.kind !== "airport");
+    const inTrip = new Set<string>();
+    for (const place of places) {
+      const key = pickKey(place);
+      if (inTrip.has(key)) continue;
+      inTrip.add(key);
+      const entry = seen.get(key);
+      if (entry) {
+        entry.trips += 1;
+        if (trip.start > entry.latest) entry.latest = trip.start;
+      } else {
+        seen.set(key, { place, trips: 1, latest: trip.start });
+      }
+    }
+  }
+  return [...seen.values()]
+    .sort(
+      (a, b) =>
+        b.trips - a.trips ||
+        b.latest.localeCompare(a.latest) ||
+        a.place.name.localeCompare(b.place.name)
+    )
+    .slice(0, limit)
+    .map((e) => e.place);
+};
+
+/** Same place, by IATA code when both have one, else provider id. */
+export const samePlace = (a: AtlasPlace, b: AtlasPlace): boolean =>
+  pickKey(a) === pickKey(b);

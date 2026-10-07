@@ -12,7 +12,8 @@ import {
 } from "../types";
 import { useAtlasSnapshot } from "../modules/atlas/useAtlas";
 import { ALL_HEX, CIRCLE_HEX, circleHex, useLens } from "../modules/atlas/lens";
-import { CircleChip, Counter } from "../components/atlas/AtlasParts";
+import { CircleChip } from "../components/atlas/Controls";
+import { Counter } from "../components/atlas/Counter";
 
 const Progress = ({ label, value, total, color }: { label: string; value: number; total: number; color: string }) => (
   <div className="atlas-progress">

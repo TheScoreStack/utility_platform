@@ -15,6 +15,25 @@ IconData placeKindIcon(String kind) => switch (kind) {
   _ => Icons.location_city_rounded,
 };
 
+/// A one-tap shortcut shown above the results while the query is empty.
+class QuickPick {
+  final AtlasPlace place;
+  final String label;
+  final IconData icon;
+
+  const QuickPick(this.place, this.label, this.icon);
+
+  /// "SFO · San Francisco" for airports, else the place name.
+  factory QuickPick.place(AtlasPlace p) => QuickPick(
+    p,
+    p.iata != null ? '${p.iata} · ${p.locality ?? p.name}' : p.name,
+    placeKindIcon(p.kind),
+  );
+
+  factory QuickPick.home(AtlasPlace p) =>
+      QuickPick(p, 'Home · ${p.name}', Icons.home_rounded);
+}
+
 /// Full-height search sheet backed by GET /atlas/places/search. Resolves to
 /// a complete [AtlasPlace] (calling GET /atlas/places/{id} when needed), or
 /// null when dismissed.
@@ -23,13 +42,19 @@ Future<AtlasPlace?> showPlaceSearch(
   required AtlasStore store,
   String title = 'Search places',
   String hint = 'City, country, or airport',
+  List<QuickPick> quickPicks = const [],
 }) {
   return showModalBottomSheet<AtlasPlace>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
     useSafeArea: true,
-    builder: (_) => _PlaceSearchSheet(store: store, title: title, hint: hint),
+    builder: (_) => _PlaceSearchSheet(
+      store: store,
+      title: title,
+      hint: hint,
+      quickPicks: quickPicks,
+    ),
   );
 }
 
@@ -37,11 +62,13 @@ class _PlaceSearchSheet extends StatefulWidget {
   final AtlasStore store;
   final String title;
   final String hint;
+  final List<QuickPick> quickPicks;
 
   const _PlaceSearchSheet({
     required this.store,
     required this.title,
     required this.hint,
+    required this.quickPicks,
   });
 
   @override
@@ -126,13 +153,45 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
     }
   }
 
+  Widget _quickPicks() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('QUICK PICKS', style: eyebrowStyle()),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final q in widget.quickPicks)
+                ActionChip(
+                  avatar: Icon(q.icon, size: 16),
+                  label: Text(q.label),
+                  onPressed: () => Navigator.of(context).pop(q.place),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final insets = MediaQuery.viewInsetsOf(context);
+    final screen = MediaQuery.sizeOf(context).height;
+    final topInset = MediaQuery.paddingOf(context).top;
     return Padding(
       padding: EdgeInsets.only(bottom: insets.bottom),
+      // 85% of the screen, but never taller than the space left above the
+      // keyboard, or the search field gets pushed off the top.
       child: SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.85,
+        height: (screen * 0.85).clamp(
+          0.0,
+          screen - insets.bottom - topInset - 24,
+        ),
         child: Column(
           children: [
             Padding(
@@ -152,11 +211,18 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
                 controller: _controller,
                 autofocus: true,
                 textInputAction: TextInputAction.search,
+                // Place names: capitalize words, and keep autocorrect away
+                // from them ("Yountville" is not a typo).
+                textCapitalization: TextCapitalization.words,
+                autocorrect: false,
+                enableSuggestions: false,
+                maxLength: 120,
                 onChanged: _onChanged,
                 onSubmitted: (v) {
                   if (v.trim().length >= 2) _search(v.trim());
                 },
                 decoration: InputDecoration(
+                  counterText: '',
                   hintText: widget.hint,
                   prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: _searching
@@ -179,6 +245,8 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
               ),
             ),
             const SizedBox(height: 8),
+            if (widget.quickPicks.isNotEmpty && _controller.text.trim().isEmpty)
+              _quickPicks(),
             if (_error != null)
               Padding(
                 padding: const EdgeInsets.all(16),
@@ -189,6 +257,8 @@ class _PlaceSearchSheetState extends State<_PlaceSearchSheet> {
               ),
             Expanded(
               child: ListView.builder(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 itemCount: _results.length,
                 itemBuilder: (context, i) {
                   final r = _results[i];

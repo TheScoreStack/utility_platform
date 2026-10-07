@@ -9,7 +9,7 @@ import '../map/trip_route_map.dart';
 import '../models/atlas_models.dart';
 import '../widgets/atlas_widgets.dart';
 import '../widgets/place_search_sheet.dart';
-import 'add_trip_flow.dart';
+import 'add_trip/add_trip_flow.dart';
 import 'atlas_home_screen.dart' show handleTripSaved;
 
 class TripDetailScreen extends StatelessWidget {
@@ -227,7 +227,7 @@ class TripDetailScreen extends StatelessWidget {
                     ],
                     if (trip.legs.isNotEmpty) ...[
                       const SizedBox(height: 18),
-                      Text('GETTING THERE', style: kEyebrow),
+                      Text('TRAVEL', style: kEyebrow),
                       const SizedBox(height: 6),
                       for (final leg in trip.legs)
                         ListTile(

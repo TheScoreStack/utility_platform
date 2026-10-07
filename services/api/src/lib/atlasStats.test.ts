@@ -5,6 +5,7 @@ import {
   computeStats,
   firstsForTrip,
   formatTripDates,
+  frequentPlaces,
   greatCircleMiles,
   tripDays,
   type AtlasLens,
@@ -72,5 +73,20 @@ describe("formatTripDates / tripDays", () => {
     expect(tripDays({ start: "2025-06-12", end: "2025-06-15", datePrecision: "day" })).toBe(4);
     expect(tripDays({ start: "2025-06-12", datePrecision: "day" })).toBe(1);
     expect(tripDays({ start: "2025-06", datePrecision: "month" })).toBeUndefined();
+  });
+});
+
+describe("frequentPlaces", () => {
+  it("ranks airports by how many trips used them, then recency", () => {
+    expect(frequentPlaces(atlas.trips, "airports").map((p) => p.iata)).toEqual([
+      "SFO",
+      "LAX",
+      "BNA",
+      "LIS"
+    ]);
+  });
+  it("ranks stop places (never airports) the same way", () => {
+    const names = frequentPlaces(atlas.trips, "stops", 3).map((p) => p.name);
+    expect(names).toEqual(["San Francisco", "Yountville", "Nashville"]);
   });
 });

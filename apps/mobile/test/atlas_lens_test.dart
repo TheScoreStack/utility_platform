@@ -138,4 +138,14 @@ void main() {
     final north = EqualEarth.project(0, 90);
     expect(north.dy, closeTo(EqualEarth.maxY, 1e-9));
   });
+
+  test('frequentPlaces ranks airports by trips, then recency, then name', () {
+    final airports = frequentPlaces(trips, airports: true);
+    expect(airports.first.iata, 'SFO'); // in 3 trips
+    expect(airports.map((p) => p.iata).toSet().length, airports.length);
+    expect(airports.length, lessThanOrEqualTo(6));
+    final stops = frequentPlaces(trips, airports: false, limit: 3);
+    expect(stops.length, 3);
+    expect(stops.every((p) => p.kind != 'airport'), isTrue);
+  });
 }

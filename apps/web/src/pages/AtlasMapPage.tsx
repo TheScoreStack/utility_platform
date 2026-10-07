@@ -1,26 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import clsx from "clsx";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   applyLens,
   computeStats,
   countryName,
   firstsForTrip,
-  formatTripDates,
   regionName,
   tripPlaces,
   tripsByCircle,
   EARTH_CIRCUMFERENCE_MI,
   type AtlasPlace,
-  type AtlasSnapshot,
-  type AtlasTrip
+  type AtlasSnapshot
 } from "../types";
-import { useAtlasSnapshot, useUpdateAtlasProfile, useWishMutations } from "../modules/atlas/useAtlas";
+import { useAtlasSnapshot } from "../modules/atlas/useAtlas";
 import { useAtlasGeo } from "../modules/atlas/geo";
-import { ALL_HEX, circleHex, tripHex, useLens, type AtlasShow } from "../modules/atlas/lens";
+import { ALL_HEX, circleHex, tripHex, useLens } from "../modules/atlas/lens";
 import { WorldMap, type MapArc, type MapPin, type WorldMapHandle } from "../components/atlas/WorldMap";
-import { CircleChip, Counter, PlaceSearch, Segmented } from "../components/atlas/AtlasParts";
-import { useConfirm } from "../components/ConfirmDialog";
+import { LensControls } from "../components/atlas/LensControls";
+import { Counter } from "../components/atlas/Counter";
+import { TripPanel } from "../components/atlas/TripPanel";
+import { WishPanel } from "../components/atlas/WishPanel";
+import { HomeOnboarding } from "../components/atlas/HomeOnboarding";
 
 const AtlasMapPage = () => {
   const { data: snapshot, isLoading, error } = useAtlasSnapshot();
@@ -59,10 +59,6 @@ const AtlasMap = ({ snapshot, geo }: { snapshot: Snapshot; geo: NonNullable<Retu
   const stats = useMemo(() => computeStats(lensTrips), [lensTrips]);
   const allStats = useMemo(() => computeStats(trips), [trips]);
   const circleCounts = useMemo(() => tripsByCircle(trips), [trips]);
-  const years = useMemo(() => {
-    const ys = trips.map((t) => Number(t.start.slice(0, 4))).filter(Number.isFinite);
-    return ys.length ? { min: Math.min(...ys), max: Math.max(...ys) } : undefined;
-  }, [trips]);
 
   // Trips shown in the side list: the lens, narrowed by a clicked country.
   const listTrips = useMemo(
@@ -168,89 +164,7 @@ const AtlasMap = ({ snapshot, geo }: { snapshot: Snapshot; geo: NonNullable<Retu
 
   return (
     <div className="atlas-layout">
-      <aside className="atlas-controls" aria-label="Map lens">
-        <div className="atlas-controls__head">
-          <h1 className="atlas-title">Atlas</h1>
-          <p className="atlas-sub">
-            {allStats.countries} countries · {trips.length} trips
-          </p>
-        </div>
-
-        <Segmented
-          label="Map mode"
-          value={lens.mode}
-          options={[
-            { value: "footprint", label: "Footprint" },
-            { value: "flights", label: "Flights" }
-          ]}
-          onChange={(mode) => update({ mode })}
-        />
-        <Segmented<AtlasShow>
-          label="Show"
-          value={show}
-          options={[
-            { value: "been", label: "Been" },
-            { value: "want", label: "Want to go" }
-          ]}
-          onChange={(value) => update({ show: value })}
-        />
-
-        <div className="atlas-controls__group">
-          <p className="atlas-eyebrow">Circles</p>
-          <div className="atlas-chips">
-            <CircleChip active={lens.circle === "all"} count={trips.length} onClick={() => update({ circle: "all" })} />
-            {circles.map((c) => (
-              <CircleChip
-                key={c.circleId}
-                circle={c}
-                active={lens.circle === c.circleId}
-                count={circleCounts[c.circleId] ?? 0}
-                onClick={() => update({ circle: lens.circle === c.circleId ? "all" : c.circleId })}
-              />
-            ))}
-          </div>
-          <Link to="/atlas/circles" className="atlas-link">
-            Manage circles
-          </Link>
-        </div>
-
-        {years && years.max > years.min && (
-          <div className="atlas-controls__group">
-            <p className="atlas-eyebrow">Years</p>
-            <div className="atlas-years">
-              <select
-                aria-label="From year"
-                value={lens.fromYear ?? years.min}
-                onChange={(e) => update({ from: Number(e.target.value) === years.min ? undefined : e.target.value })}
-              >
-                {range(years.min, years.max).map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-              <span className="muted">to</span>
-              <select
-                aria-label="To year"
-                value={lens.toYear ?? years.max}
-                onChange={(e) => update({ to: Number(e.target.value) === years.max ? undefined : e.target.value })}
-              >
-                {range(years.min, years.max).map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        )}
-
-        <div className="atlas-controls__actions">
-          <button type="button" className="primary" onClick={() => navigate("/atlas/new")}>
-            + Add trip
-          </button>
-          <div className="atlas-controls__links">
-            <Link to={`/atlas/stats${window.location.search}`} className="atlas-link">Stats</Link>
-            <Link to="/atlas/quick-add" className="atlas-link">Quick add</Link>
-          </div>
-        </div>
-      </aside>
+      <LensControls snapshot={snapshot} circleCounts={circleCounts} countryCount={allStats.countries} />
 
       <section className="atlas-stage" aria-label="Map">
         <div className="atlas-counters" aria-live="polite">
@@ -368,196 +282,5 @@ const AtlasMap = ({ snapshot, geo }: { snapshot: Snapshot; geo: NonNullable<Retu
   );
 };
 
-const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
-
-const TripPanel = ({
-  trips,
-  snapshot,
-  country,
-  onClearCountry,
-  onFly
-}: {
-  trips: AtlasTrip[];
-  snapshot: Snapshot;
-  country?: string;
-  onClearCountry: () => void;
-  onFly: (trip: AtlasTrip) => void;
-}) => {
-  const byYear = useMemo(() => {
-    const groups: { year: string; trips: AtlasTrip[] }[] = [];
-    for (const t of trips) {
-      const year = t.start.slice(0, 4);
-      const last = groups[groups.length - 1];
-      if (last?.year === year) last.trips.push(t);
-      else groups.push({ year, trips: [t] });
-    }
-    return groups;
-  }, [trips]);
-
-  return (
-    <>
-      <div className="atlas-panel__head">
-        <h2 className="atlas-panel__title">Trips</h2>
-        <span className="muted">{trips.length}</span>
-      </div>
-      {country && (
-        <button type="button" className="atlas-filter-pill" onClick={onClearCountry}>
-          {country.includes("-") ? regionName(country) : countryName(country)} ✕
-        </button>
-      )}
-      {!trips.length && <p className="muted atlas-panel__empty">No trips in this view yet.</p>}
-      {byYear.map((group) => (
-        <div key={group.year} className="atlas-year">
-          <p className="atlas-eyebrow">{group.year}</p>
-          <ul className="atlas-trips">
-            {group.trips.map((t) => (
-              <li key={t.tripId}>
-                <Link
-                  to={`/atlas/trips/${t.tripId}`}
-                  className="atlas-trip"
-                  style={{ ["--trip" as string]: tripHex(snapshot.circles, t.circleIds) }}
-                  onMouseEnter={() => onFly(t)}
-                  onFocus={() => onFly(t)}
-                >
-                  {t.coverUrl ? (
-                    <img className="atlas-trip__thumb" src={t.coverUrl} alt="" loading="lazy" />
-                  ) : (
-                    <span className="atlas-trip__bar" aria-hidden="true" />
-                  )}
-                  <span className="atlas-trip__text">
-                    <span className="atlas-trip__title">{t.title}</span>
-                    <span className="atlas-trip__sub">
-                      {[
-                        formatTripDates(t).replace(/,? \d{4}$/, "").replace(/^\d{4}$/, "") || null,
-                        circleNames(snapshot, t.circleIds),
-                        summarizeTrip(t)
-                      ]
-                        .filter(Boolean)
-                        .join(" · ")}
-                    </span>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </>
-  );
-};
-
-const circleNames = (snapshot: Snapshot, ids: string[]) =>
-  ids
-    .map((id) => snapshot.circles.find((c) => c.circleId === id)?.name)
-    .filter(Boolean)
-    .join(", ");
-
-const summarizeTrip = (t: AtlasTrip) => {
-  const flights = t.legs.filter((l) => l.mode === "flight").length;
-  const parts = [`${t.stops.length || 1} ${t.stops.length === 1 ? "stop" : "stops"}`];
-  if (flights) parts.push(`${flights} flight${flights > 1 ? "s" : ""}`);
-  return parts.join(", ");
-};
-
-const WishPanel = ({
-  snapshot,
-  circleFilter,
-  onFly
-}: {
-  snapshot: Snapshot;
-  circleFilter: string;
-  onFly: (place: AtlasPlace) => void;
-}) => {
-  const { create, remove } = useWishMutations();
-  const confirm = useConfirm();
-  const navigate = useNavigate();
-  const [circleIds, setCircleIds] = useState<string[]>(
-    circleFilter !== "all" ? [circleFilter] : []
-  );
-  const open = snapshot.wishes.filter(
-    (w) => !w.fulfilledByTripId && (circleFilter === "all" || w.circleIds.includes(circleFilter))
-  );
-  const done = snapshot.wishes.filter((w) => w.fulfilledByTripId);
-
-  return (
-    <>
-      <div className="atlas-panel__head">
-        <h2 className="atlas-panel__title">Want to go</h2>
-        <span className="muted">{open.length}</span>
-      </div>
-      <div className="atlas-wish-add">
-        <PlaceSearch
-          placeholder="Add a place to the wishlist"
-          onPick={(place) => create.mutate({ place, circleIds })}
-        />
-        <div className="atlas-chips atlas-chips--small">
-          {snapshot.circles.map((c) => (
-            <CircleChip
-              key={c.circleId}
-              circle={c}
-              active={circleIds.includes(c.circleId)}
-              onClick={() =>
-                setCircleIds((ids) =>
-                  ids.includes(c.circleId) ? ids.filter((i) => i !== c.circleId) : [...ids, c.circleId]
-                )
-              }
-            />
-          ))}
-        </div>
-      </div>
-      <ul className="atlas-trips">
-        {open.map((w) => (
-          <li key={w.wishId} className="atlas-wish">
-            <button type="button" className="atlas-wish__main" onClick={() => onFly(w.place)}>
-              <span className="atlas-wish__pin" style={{ borderColor: w.circleIds.length ? circleHex(snapshot.circles, w.circleIds[0]) : ALL_HEX }} />
-              <span className="atlas-trip__text">
-                <span className="atlas-trip__title">{w.place.name}</span>
-                <span className="atlas-trip__sub">
-                  {[countryName(w.place.countryCode), circleNames(snapshot, w.circleIds) && `with ${circleNames(snapshot, w.circleIds)}`]
-                    .filter(Boolean)
-                    .join(" · ")}
-                </span>
-              </span>
-            </button>
-            <div className="atlas-wish__actions">
-              <button type="button" className="atlas-link" onClick={() => navigate(`/atlas/new?wish=${w.wishId}`)}>
-                Went!
-              </button>
-              <button
-                type="button"
-                className="atlas-link atlas-link--quiet"
-                aria-label={`Remove ${w.place.name}`}
-                onClick={async () => {
-                  if (await confirm({ title: `Remove ${w.place.name}?`, confirmLabel: "Remove", tone: "danger" })) {
-                    remove.mutate(w.wishId);
-                  }
-                }}
-              >
-                ✕
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
-      {!open.length && <p className="muted atlas-panel__empty">Add the places you’re dreaming about.</p>}
-      {done.length > 0 && (
-        <p className="muted atlas-panel__foot">
-          {done.length} wish{done.length > 1 ? "es" : ""} checked off
-        </p>
-      )}
-    </>
-  );
-};
-
-const HomeOnboarding = () => {
-  const updateProfile = useUpdateAtlasProfile();
-  return (
-    <div className={clsx("atlas-onboard", updateProfile.isPending && "atlas-onboard--busy")}>
-      <p className="atlas-onboard__title">Where’s home?</p>
-      <p className="muted">We’ll start your map there. You can change it any time.</p>
-      <PlaceSearch autoFocus onPick={(homePlace) => updateProfile.mutate({ homePlace })} />
-    </div>
-  );
-};
 
 export default AtlasMapPage;

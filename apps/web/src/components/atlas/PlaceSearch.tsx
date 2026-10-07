@@ -1,119 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import clsx from "clsx";
-import type { AtlasCircle, AtlasPlace, AtlasPlaceSuggestion } from "../../types";
-import { CIRCLE_HEX, ALL_HEX } from "../../modules/atlas/lens";
+import type { AtlasPlace, AtlasPlaceSuggestion } from "../../types";
 import { resolveSuggestion, searchPlaces } from "../../modules/atlas/useAtlas";
-
-/** A number that rolls to its new value like an odometer. */
-export const RollingNumber = ({ value, format }: { value: number; format?: (n: number) => string }) => {
-  const [shown, setShown] = useState(value);
-  const from = useRef(value);
-  useEffect(() => {
-    const reduced = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
-    const start = from.current;
-    if (reduced || start === value) {
-      setShown(value);
-      from.current = value;
-      return;
-    }
-    const began = performance.now();
-    const duration = 450;
-    let frame = 0;
-    const tick = (now: number) => {
-      const t = Math.min(1, (now - began) / duration);
-      const eased = 1 - (1 - t) ** 3;
-      setShown(Math.round(start + (value - start) * eased));
-      if (t < 1) frame = requestAnimationFrame(tick);
-      else from.current = value;
-    };
-    frame = requestAnimationFrame(tick);
-    return () => {
-      cancelAnimationFrame(frame);
-      from.current = value;
-    };
-  }, [value]);
-  return <>{format ? format(shown) : shown.toLocaleString()}</>;
-};
-
-export const Counter = ({ value, label, format }: { value: number; label: string; format?: (n: number) => string }) => (
-  <div className="atlas-counter">
-    <span className="atlas-counter__value">
-      <RollingNumber value={value} format={format} />
-    </span>
-    <span className="atlas-counter__label">{label}</span>
-  </div>
-);
-
-export const CircleChip = ({
-  circle,
-  active,
-  count,
-  onClick
-}: {
-  circle?: AtlasCircle;
-  active: boolean;
-  count?: number;
-  onClick: () => void;
-}) => (
-  <button
-    type="button"
-    className={clsx("atlas-chip", active && "atlas-chip--on")}
-    style={{ ["--chip" as string]: circle ? CIRCLE_HEX[circle.color] : ALL_HEX }}
-    aria-pressed={active}
-    onClick={onClick}
-  >
-    {circle && <span className="atlas-chip__dot" aria-hidden="true" />}
-    <span>{circle ? circle.name : "All"}</span>
-    {count !== undefined && <span className="atlas-chip__count">{count}</span>}
-  </button>
-);
-
-export const Segmented = <T extends string>({
-  value,
-  options,
-  onChange,
-  label
-}: {
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (value: T) => void;
-  label: string;
-}) => (
-  <div className="atlas-seg" role="radiogroup" aria-label={label}>
-    {options.map((o) => (
-      <button
-        key={o.value}
-        type="button"
-        role="radio"
-        aria-checked={value === o.value}
-        className={clsx("atlas-seg__btn", value === o.value && "atlas-seg__btn--on")}
-        onClick={() => onChange(o.value)}
-      >
-        {o.label}
-      </button>
-    ))}
-  </div>
-);
-
-export const Stars = ({ value, onChange }: { value?: number; onChange?: (v: number | undefined) => void }) => (
-  <div className="atlas-stars" role={onChange ? "radiogroup" : undefined} aria-label="Rating">
-    {[1, 2, 3, 4, 5].map((n) =>
-      onChange ? (
-        <button
-          key={n}
-          type="button"
-          role="radio"
-          aria-checked={value === n}
-          aria-label={`${n} of 5`}
-          className={clsx("atlas-stars__dot", value && n <= value && "atlas-stars__dot--on")}
-          onClick={() => onChange(value === n ? undefined : n)}
-        />
-      ) : (
-        <span key={n} className={clsx("atlas-stars__dot", value && n <= value && "atlas-stars__dot--on")} />
-      )
-    )}
-  </div>
-);
 
 const KIND_LABEL: Record<AtlasPlaceSuggestion["kind"], string> = {
   city: "City",
@@ -127,16 +15,26 @@ const KIND_LABEL: Record<AtlasPlaceSuggestion["kind"], string> = {
  * Debounced place search. Airports, countries and states arrive complete;
  * cities are resolved to coordinates when picked.
  */
+export interface QuickPick {
+  place: AtlasPlace;
+  /** Defaults to the place's IATA code or name. */
+  label?: string;
+  home?: boolean;
+}
+
 export const PlaceSearch = ({
   onPick,
   placeholder = "Search a city, country or airport",
   autoFocus,
-  airportsOnly
+  airportsOnly,
+  quickPicks = []
 }: {
   onPick: (place: AtlasPlace) => void;
   placeholder?: string;
   autoFocus?: boolean;
   airportsOnly?: boolean;
+  /** One-tap chips shown while the search box is empty. */
+  quickPicks?: QuickPick[];
 }) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AtlasPlaceSuggestion[]>([]);
@@ -202,6 +100,13 @@ export const PlaceSearch = ({
         type="search"
         className="atlas-search__input"
         value={query}
+        maxLength={120}
+        // Place names: capitalize words; autocorrect "fixes" real towns.
+        autoCapitalize="words"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        enterKeyHint="search"
         placeholder={placeholder}
         autoFocus={autoFocus}
         role="combobox"
@@ -246,6 +151,21 @@ export const PlaceSearch = ({
             </li>
           ))}
         </ul>
+      )}
+      {!query.trim() && quickPicks.length > 0 && (
+        <div className="atlas-picks" aria-label="Quick picks">
+          {quickPicks.map((q) => (
+            <button
+              key={q.place.iata ?? q.place.providerId}
+              type="button"
+              className={clsx("atlas-chip", q.home && "atlas-chip--home")}
+              onClick={() => onPick(q.place)}
+            >
+              {q.home && <span aria-hidden="true">⌂</span>}
+              {q.label ?? q.place.iata ?? q.place.name}
+            </button>
+          ))}
+        </div>
       )}
       {error && <p className="atlas-search__error">{error}</p>}
     </div>

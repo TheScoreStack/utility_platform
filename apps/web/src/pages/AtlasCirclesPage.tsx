@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { ATLAS_SOLO_CIRCLE_ID, tripsByCircle, type AtlasCircle, type AtlasCircleColor } from "../types";
 import { useAtlasSnapshot, useCircleMutations, usePersonMutations } from "../modules/atlas/useAtlas";
 import { CIRCLE_HEX } from "../modules/atlas/lens";
-import { ColorSwatches } from "./AtlasTripEditorPage";
+import { ColorSwatches } from "../components/atlas/Controls";
 import { useConfirm } from "../components/ConfirmDialog";
 
 const AtlasCirclesPage = () => {
@@ -36,7 +36,7 @@ const AtlasCirclesPage = () => {
           setName("");
         }}
       >
-        <input value={name} maxLength={40} placeholder="New circle — Wife, Barbershop, Family…" onChange={(e) => setName(e.target.value)} />
+        <input value={name} maxLength={40} autoCapitalize="words" enterKeyHint="done" placeholder="New circle — Wife, Barbershop, Family…" onChange={(e) => setName(e.target.value)} />
         <ColorSwatches value={color} onChange={setColor} />
         <button type="submit" className="primary" disabled={!name.trim()}>Add circle</button>
       </form>
@@ -102,7 +102,7 @@ const CircleRow = ({
               setEditing(false);
             }}
           >
-            <input autoFocus value={name} maxLength={40} onChange={(e) => setName(e.target.value)} onBlur={() => setEditing(false)} />
+            <input autoFocus value={name} maxLength={40} autoCapitalize="words" enterKeyHint="done" onChange={(e) => setName(e.target.value)} onBlur={() => setEditing(false)} />
           </form>
         ) : (
           <button type="button" className="atlas-circle-row__name" onClick={() => setEditing(true)} title="Rename">
@@ -134,7 +134,7 @@ const CircleRow = ({
               setPerson("");
             }}
           >
-            <input value={person} maxLength={80} placeholder="+ Add a person" onChange={(e) => setPerson(e.target.value)} />
+            <input value={person} maxLength={80} autoCapitalize="words" enterKeyHint="done" placeholder="+ Add a person" onChange={(e) => setPerson(e.target.value)} />
           </form>
         </div>
       )}

@@ -8893,53 +8893,109 @@ button.btn-danger:hover:not(:disabled) {
   gap: 1rem;
 }
 
+/* Wizard steps: pills that look like buttons, joined by a thin line so they
+   read as a sequence. Done = check, current = filled, locked = dimmed. */
 .atlas-steps {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
-  gap: 0.4rem;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
-.atlas-steps__step {
+.atlas-steps__item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.atlas-steps__item:not(:last-child)::after {
+  content: "";
+  width: 18px;
+  height: 1px;
+  background: var(--border-strong);
+}
+
+.atlas-steps__pill {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
-  border: none;
-  background: none;
-  color: #8190b0;
+  min-height: 36px;
+  padding: 0.3rem 0.85rem 0.3rem 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: #cbd5f5;
   font: inherit;
   font-size: 0.85rem;
-  padding: 0.3rem 0.6rem 0.3rem 0.3rem;
-  border-radius: 999px;
+  font-weight: 600;
   cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, transform 140ms var(--atlas-ease);
 }
 
-.atlas-steps__num {
-  width: 22px;
-  height: 22px;
+.atlas-steps__pill:hover:not(:disabled):not(.atlas-steps__pill--current) {
+  border-color: var(--accent-bright);
+  background: var(--accent-soft);
+  color: #f8fafc;
+}
+
+.atlas-steps__pill:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.atlas-steps__pill:focus-visible {
+  outline: 2px solid var(--accent-bright);
+  outline-offset: 2px;
+}
+
+.atlas-steps__badge {
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
   display: inline-grid;
   place-items: center;
   font-size: 0.75rem;
-  font-weight: 600;
   border: 1px solid var(--border-strong);
+  flex: none;
 }
 
-.atlas-steps__step--on {
-  color: #f8fafc;
-  background: var(--surface);
-}
-
-.atlas-steps__step--on .atlas-steps__num {
+.atlas-steps__pill--current {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+  cursor: default;
 }
 
-.atlas-steps__step--done .atlas-steps__num {
+.atlas-steps__pill--current .atlas-steps__badge {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: transparent;
+}
+
+.atlas-steps__pill--done {
+  border-color: rgba(116, 143, 252, 0.6);
+  color: #e2e8f0;
+}
+
+.atlas-steps__pill--done .atlas-steps__badge {
+  background: var(--accent-bright);
   border-color: var(--accent-bright);
-  color: var(--accent-bright);
+  color: #0f172a;
+}
+
+.atlas-steps__pill--locked {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+/* The global primary button has no disabled look; in Atlas a dead Next
+   must read as dead. */
+:is(.atlas-editor, .atlas-quick, .atlas-controls, .atlas-circles, .atlas-onboard) button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
 }
 
 .atlas-step {
@@ -9171,6 +9227,152 @@ button.btn-danger:hover:not(:disabled) {
 
 .atlas-leg__route {
   flex: 1;
+}
+
+.atlas-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.atlas-picks .atlas-chip {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+}
+
+.atlas-chip--home {
+  border-color: rgba(52, 211, 153, 0.5);
+}
+
+/* One calendar for the whole date range. */
+.atlas-cal {
+  width: min(100%, 340px);
+  padding: 0.9rem;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.atlas-cal__head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+}
+
+.atlas-cal__head select {
+  flex: 1;
+  min-width: 0;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  background: var(--inset);
+  color: #f8fafc;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.4rem;
+}
+
+.atlas-cal__nav {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.atlas-cal__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  row-gap: 2px;
+}
+
+.atlas-cal__weekday {
+  text-align: center;
+  font-size: 0.7rem;
+  color: #8190b0;
+  padding-bottom: 0.3rem;
+}
+
+.atlas-cal__day {
+  aspect-ratio: 1;
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 0.85rem;
+  border-radius: 50%;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.atlas-cal__day:hover:not(:disabled, .atlas-cal__day--start, .atlas-cal__day--end) {
+  background: var(--surface-2);
+}
+
+.atlas-cal__day:disabled {
+  color: #475569;
+  cursor: default;
+}
+
+.atlas-cal__day--today {
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.atlas-cal__day--between {
+  background: var(--accent-soft);
+  border-radius: 0;
+}
+
+.atlas-cal__day.atlas-cal__day--start,
+.atlas-cal__day.atlas-cal__day--end {
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.atlas-cal__summary {
+  margin: 0.6rem 0 0;
+  font-size: 0.82rem;
+  color: #cbd5f5;
+}
+
+.atlas-hint {
+  margin: -0.25rem 0 0;
+  font-size: 0.82rem;
+}
+
+.atlas-return {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--accent-bright);
+  background: var(--accent-soft);
+  color: #f8fafc;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 140ms var(--atlas-ease), background 140ms ease;
+}
+
+.atlas-return:hover {
+  background: rgba(76, 110, 245, 0.24);
+}
+
+.atlas-return:active {
+  transform: scale(0.97);
+}
+
+.atlas-return .muted {
+  font-weight: 400;
 }
 
 .atlas-leg-form {
@@ -9769,16 +9971,13 @@ button.atlas-stars__dot {
     font-size: 2rem;
   }
 
-  .atlas-steps__step {
-    font-size: 0;
-    gap: 0;
-    padding: 0.2rem;
+  .atlas-steps__item:not(:last-child)::after {
+    width: 8px;
   }
 
-  .atlas-steps__step--on {
-    font-size: 0.85rem;
-    gap: 0.45rem;
+  .atlas-steps__pill {
     padding-right: 0.6rem;
+    font-size: 0.8rem;
   }
 
   .atlas-bars__row {

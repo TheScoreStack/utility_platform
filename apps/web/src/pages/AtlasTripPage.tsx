@@ -11,7 +11,7 @@ import { useAtlasSnapshot, useDeleteTrip } from "../modules/atlas/useAtlas";
 import { useAtlasGeo } from "../modules/atlas/geo";
 import { CIRCLE_HEX, tripHex } from "../modules/atlas/lens";
 import { WorldMap, type WorldMapHandle } from "../components/atlas/WorldMap";
-import { Stars } from "../components/atlas/AtlasParts";
+import { Stars } from "../components/atlas/Controls";
 import { useConfirm } from "../components/ConfirmDialog";
 
 const LEG_LABEL = { flight: "Flight", drive: "Drive", train: "Train", boat: "Boat", other: "Travel" };
@@ -146,7 +146,7 @@ const AtlasTripPage = () => {
           )}
           {trip.legs.length > 0 && (
             <section>
-              <h2 className="atlas-eyebrow">Getting there</h2>
+              <h2 className="atlas-eyebrow">Travel</h2>
               <ul className="atlas-legs atlas-legs--read">
                 {trip.legs.map((l) => (
                   <li key={l.legId} className="atlas-leg">

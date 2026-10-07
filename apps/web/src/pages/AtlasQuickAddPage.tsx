@@ -5,6 +5,8 @@ import { countryName, formatTripDates, type AtlasDraftTrip } from "../types";
 import { quickAdd, useAtlasSnapshot, useSaveTrip } from "../modules/atlas/useAtlas";
 import { CIRCLE_HEX } from "../modules/atlas/lens";
 
+const MAX_LINES = 40;
+
 const EXAMPLE = `Lisbon and Porto 2019, by myself
 Napa with my wife, June 2025
 Nashville with the barbershop guys, April 2025
@@ -60,6 +62,10 @@ const AtlasQuickAddPage = () => {
     }
   };
 
+  // The API reads at most 40 lines per request; say so before sending.
+  const lineCount = text.split("\n").filter((l) => l.trim()).length;
+  const tooMany = lineCount > MAX_LINES;
+
   const circleById = (id: string) => snapshot?.circles.find((c) => c.circleId === id);
   const keepCount = drafts?.filter((d) => d.keep && d.places.length && d.start).length ?? 0;
 
@@ -79,16 +85,25 @@ const AtlasQuickAddPage = () => {
             className="atlas-quick__input"
             rows={8}
             maxLength={4000}
+            autoCapitalize="sentences"
+            aria-invalid={tooMany}
             value={text}
             placeholder={EXAMPLE}
             onChange={(e) => setText(e.target.value)}
           />
+          {lineCount > 0 && (
+            <p className={tooMany ? "atlas-error" : "muted atlas-quick__count"}>
+              {tooMany
+                ? `Up to ${MAX_LINES} lines at a time. Split the list.`
+                : `${lineCount} of ${MAX_LINES} lines`}
+            </p>
+          )}
           <div className="atlas-editor__nav">
             <button type="button" className="secondary" onClick={() => setText(EXAMPLE)} disabled={busy}>
               Try the example
             </button>
             <span className="atlas-editor__spacer" />
-            <button type="button" className="primary" onClick={parse} disabled={busy || !text.trim()}>
+            <button type="button" className="primary" onClick={parse} disabled={busy || !lineCount || tooMany}>
               {busy ? "Reading…" : "Read my trips"}
             </button>
           </div>
@@ -113,6 +128,8 @@ const AtlasQuickAddPage = () => {
                   <div className="atlas-draft__body">
                     <input
                       className="atlas-draft__title"
+                      maxLength={120}
+                      autoCapitalize="sentences"
                       value={d.title}
                       onChange={(e) => setDrafts(drafts.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
                     />

@@ -159,25 +159,35 @@ class _CircleDetail extends StatelessWidget {
     final controller = TextEditingController(text: initial);
     return showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(initial == null ? 'Add person' : 'Rename'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(hintText: 'Name'),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialog) {
+          final name = controller.text.trim();
+          return AlertDialog(
+            title: Text(initial == null ? 'Add person' : 'Rename'),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              maxLength: 80,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.done,
+              decoration: const InputDecoration(hintText: 'Name'),
+              onChanged: (_) => setDialog(() {}),
+              onSubmitted: (v) {
+                if (v.trim().isNotEmpty) Navigator.pop(ctx, v.trim());
+              },
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: name.isEmpty ? null : () => Navigator.pop(ctx, name),
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     ).whenComplete(controller.dispose);
   }

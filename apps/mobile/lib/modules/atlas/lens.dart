@@ -360,3 +360,61 @@ int? tripDays({
   if (a == null || b == null) return null;
   return (b.difference(a).inMilliseconds / 86400000).round() + 1;
 }
+
+// ------------------------------------------------------------------ quick picks
+
+/// Identity for quick picks and return legs: IATA code, else provider id.
+String placeKey(AtlasPlace p) => p.iata ?? p.providerId;
+
+/// Same place, by [placeKey].
+bool samePlace(AtlasPlace a, AtlasPlace b) => placeKey(a) == placeKey(b);
+
+/// Places you've used most, for one-tap picks: airports from flight legs, or
+/// stop places (no airports). Ranked by how many trips include the place,
+/// then by the most recent of those trips, then by name; capped at [limit].
+/// Mirrors `frequentPlaces` in packages/shared/src/atlas.ts.
+List<AtlasPlace> frequentPlaces(
+  List<AtlasTrip> trips, {
+  required bool airports,
+  int limit = 6,
+}) {
+  final seen = <String, ({AtlasPlace place, int trips, String latest})>{};
+  for (final trip in trips) {
+    final places = airports
+        ? [
+            for (final l in trip.legs.where((l) => l.mode == 'flight'))
+              for (final p in [l.from, l.to])
+                if (p.iata != null) p,
+          ]
+        : [
+            for (final s in trip.stops)
+              if (s.place.kind != 'airport') s.place,
+          ];
+    final inTrip = <String>{};
+    for (final place in places) {
+      final key = placeKey(place);
+      if (!inTrip.add(key)) continue;
+      final entry = seen[key];
+      seen[key] = entry == null
+          ? (place: place, trips: 1, latest: trip.start)
+          : (
+              place: entry.place,
+              trips: entry.trips + 1,
+              latest: trip.start.compareTo(entry.latest) > 0
+                  ? trip.start
+                  : entry.latest,
+            );
+    }
+  }
+  // Index tiebreak keeps the sort stable, like Array.prototype.sort.
+  final ranked = seen.values.indexed.toList()
+    ..sort((a, b) {
+      final x = a.$2, y = b.$2;
+      if (x.trips != y.trips) return y.trips - x.trips;
+      final recent = localeCompare(y.latest, x.latest);
+      if (recent != 0) return recent;
+      final name = localeCompare(x.place.name, y.place.name);
+      return name != 0 ? name : a.$1 - b.$1;
+    });
+  return [for (final e in ranked.take(limit)) e.$2.place];
+}
