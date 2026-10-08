@@ -76,7 +76,10 @@ class WhoStep extends StatelessWidget {
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
           children: [
-            Text('Who with?', style: Theme.of(context).textTheme.headlineSmall),
+            Text(
+              'Who came along?',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
             const SizedBox(height: 6),
             const Text(
               'Circles let you see the map you share with each group.',
@@ -101,9 +104,21 @@ class WhoStep extends StatelessWidget {
                     ),
                     onSelected: (v) => _toggleCircle(c.circleId, v),
                   ),
+                // An action, not a choice: no fill, accent label.
                 ActionChip(
-                  avatar: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('New circle'),
+                  avatar: const Icon(
+                    Icons.add_rounded,
+                    size: 18,
+                    color: AppColors.accent,
+                  ),
+                  label: const Text(
+                    'New circle',
+                    style: TextStyle(color: AppColors.accent),
+                  ),
+                  backgroundColor: Colors.transparent,
+                  side: BorderSide(
+                    color: AppColors.accent.withValues(alpha: 0.5),
+                  ),
                   onPressed: () => _newCircle(context),
                 ),
               ],

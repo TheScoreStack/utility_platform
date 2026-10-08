@@ -54,7 +54,11 @@ export const Segmented = <T extends string>({
 );
 
 export const Stars = ({ value, onChange }: { value?: number; onChange?: (v: number | undefined) => void }) => (
-  <div className="atlas-stars" role={onChange ? "radiogroup" : undefined} aria-label="Rating">
+  <div
+    className="atlas-stars"
+    role={onChange ? "radiogroup" : "img"}
+    aria-label={onChange ? "Rating" : `Rated ${value ?? 0} of 5`}
+  >
     {[1, 2, 3, 4, 5].map((n) =>
       onChange ? (
         <button
@@ -65,9 +69,13 @@ export const Stars = ({ value, onChange }: { value?: number; onChange?: (v: numb
           aria-label={`${n} of 5`}
           className={clsx("atlas-stars__dot", value && n <= value && "atlas-stars__dot--on")}
           onClick={() => onChange(value === n ? undefined : n)}
-        />
+        >
+          ★
+        </button>
       ) : (
-        <span key={n} className={clsx("atlas-stars__dot", value && n <= value && "atlas-stars__dot--on")} />
+        <span key={n} className={clsx("atlas-stars__dot", value && n <= value && "atlas-stars__dot--on")} aria-hidden="true">
+          ★
+        </span>
       )
     )}
   </div>

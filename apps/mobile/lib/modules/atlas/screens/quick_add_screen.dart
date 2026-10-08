@@ -129,7 +129,7 @@ class _QuickAddScreenState extends State<QuickAddScreen> {
                 padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
                 children: [
                   const Text(
-                    'One trip per line. Dates and circles are optional.',
+                    'One trip per line: where, the year (or month), and who with.',
                     style: TextStyle(color: Colors.white60),
                   ),
                   const SizedBox(height: 12),
@@ -138,6 +138,7 @@ class _QuickAddScreenState extends State<QuickAddScreen> {
                     minLines: 5,
                     maxLines: 12,
                     maxLength: 4000,
+                    maxLengthEnforcement: MaxLengthEnforcement.enforced,
                     keyboardType: TextInputType.multiline,
                     textCapitalization: TextCapitalization.sentences,
                     onChanged: (_) => setState(() {}),
@@ -147,6 +148,8 @@ class _QuickAddScreenState extends State<QuickAddScreen> {
                           'Kyoto 2019 with Wife\n'
                           'Nashville Apr 2025 barbershop',
                       border: const OutlineInputBorder(),
+                      // The line count is the limit that matters here.
+                      counterText: '',
                       helperText: lines == 0
                           ? null
                           : '$lines of $_maxLines lines',
@@ -253,15 +256,19 @@ class _QuickAddScreenState extends State<QuickAddScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
+            if (d.start == null)
+              const Text(
+                'No year yet: add one to the line and read again',
+                style: TextStyle(color: AppColors.warning),
+              ),
             Text(
               [
-                d.start == null
-                    ? 'No year: add one to the line and read again'
-                    : formatTripDates(
-                        start: d.start!,
-                        datePrecision:
-                            d.datePrecision ?? AtlasTrip.precisionOf(d.start!),
-                      ),
+                if (d.start != null)
+                  formatTripDates(
+                    start: d.start!,
+                    datePrecision:
+                        d.datePrecision ?? AtlasTrip.precisionOf(d.start!),
+                  ),
                 for (final c in circles) c.name,
               ].join('  ·  '),
               style: const TextStyle(color: Colors.white60),
@@ -294,7 +301,9 @@ class _QuickAddScreenState extends State<QuickAddScreen> {
                   ),
               ],
             ),
-            if (!usable)
+            // Only say "no places" when that's the reason; a missing year
+            // already shows in the date line above.
+            if (d.places.isEmpty)
               const Padding(
                 padding: EdgeInsets.only(top: 6),
                 child: Text(

@@ -85,6 +85,7 @@ const CircleRow = ({
   onRemovePerson: (personId: string) => void;
 }) => {
   const [editing, setEditing] = useState(false);
+  const [recoloring, setRecoloring] = useState(false);
   const [name, setName] = useState(circle.name);
   const [person, setPerson] = useState("");
   const solo = circle.circleId === ATLAS_SOLO_CIRCLE_ID;
@@ -92,7 +93,14 @@ const CircleRow = ({
   return (
     <li className="atlas-card atlas-circle-row" style={{ ["--chip" as string]: CIRCLE_HEX[circle.color] }}>
       <div className="atlas-circle-row__head">
-        <span className="atlas-circle-row__dot" />
+        {/* The dot is the color control: one swatch shown, eight on demand. */}
+        <button
+          type="button"
+          className="atlas-circle-row__dot"
+          aria-label={`Change ${circle.name}'s color`}
+          aria-expanded={recoloring}
+          onClick={() => setRecoloring((v) => !v)}
+        />
         {editing ? (
           <form
             className="atlas-circle-row__rename"
@@ -105,18 +113,29 @@ const CircleRow = ({
             <input autoFocus value={name} maxLength={40} autoCapitalize="words" enterKeyHint="done" onChange={(e) => setName(e.target.value)} onBlur={() => setEditing(false)} />
           </form>
         ) : (
-          <button type="button" className="atlas-circle-row__name" onClick={() => setEditing(true)} title="Rename">
-            {circle.name}
-          </button>
+          <span className="atlas-circle-row__name">{circle.name}</span>
         )}
         <span className="muted">{trips} trip{trips === 1 ? "" : "s"}</span>
+        {!solo && !editing && (
+          <button type="button" className="atlas-link" onClick={() => setEditing(true)}>
+            Rename
+          </button>
+        )}
         {!solo && (
           <button type="button" className="atlas-link atlas-link--danger" onClick={onDelete}>
             Delete
           </button>
         )}
       </div>
-      <ColorSwatches value={circle.color} onChange={(color) => onUpdate({ color })} />
+      {recoloring && (
+        <ColorSwatches
+          value={circle.color}
+          onChange={(color) => {
+            onUpdate({ color });
+            setRecoloring(false);
+          }}
+        />
+      )}
       {!solo && (
         <div className="atlas-chips atlas-chips--small">
           {people.map((p) => (

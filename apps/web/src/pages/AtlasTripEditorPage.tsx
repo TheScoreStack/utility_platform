@@ -208,7 +208,7 @@ const TripEditor = ({ trip }: { trip?: AtlasTrip }) => {
           )}
           {step < STEPS.length - 1 && canSave && (
             <button type="button" className="secondary" onClick={() => void save()} disabled={saveTrip.isPending || uploading}>
-              Save now
+              {trip ? "Save changes" : "Save now"}
             </button>
           )}
           <button

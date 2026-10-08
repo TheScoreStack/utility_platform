@@ -29,6 +29,8 @@ export const LegsEditor = ({
   const [airline, setAirline] = useState("");
   const flight = mode === "flight";
   const returnLeg = returnLegFor(legs);
+  // The add form is heavy; once a trip has legs it folds behind a button.
+  const [adding, setAdding] = useState(legs.length === 0);
   const modeWord = (m: AtlasLegMode) => LEG_MODES.find((x) => x.value === m)?.label.toLowerCase();
 
   // A leg is added as soon as both ends are picked, so it can't be lost by
@@ -45,6 +47,7 @@ export const LegsEditor = ({
     ]);
     setFrom(place);
     setTo(null);
+    setAdding(false);
   };
 
   return (
@@ -78,6 +81,12 @@ export const LegsEditor = ({
           </span>
         </button>
       )}
+      {!adding && (
+        <button type="button" className="atlas-add-leg" onClick={() => setAdding(true)}>
+          + Add a flight or drive
+        </button>
+      )}
+      {adding && (
       <div className="atlas-leg-form">
         <Segmented<AtlasLegMode> label="How" value={mode} options={LEG_MODES} onChange={setMode} />
         {flight && (
@@ -87,7 +96,13 @@ export const LegsEditor = ({
           <LegEnd label="From" value={from} onChange={setFrom} airports={flight} picks={legEndPicks(sources, mode, stops, to)} />
           <LegEnd label="To" value={to} onChange={pickTo} airports={flight} picks={legEndPicks(sources, mode, stops, from)} />
         </div>
+        {legs.length > 0 && (
+          <button type="button" className="atlas-link atlas-leg-form__close" onClick={() => setAdding(false)}>
+            Done adding
+          </button>
+        )}
       </div>
+      )}
     </div>
   );
 };

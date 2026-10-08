@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -218,54 +220,83 @@ class _AtlasHomeScreenState extends State<AtlasHomeScreen> {
       ),
       body: !_store.hasData
           ? AtlasLoadingOrError(store: _store)
-          : Stack(
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+          : LayoutBuilder(
+              builder: (context, body) {
+                // The map is a band about as tall as the inhabited world at
+                // full width; the trips sheet starts right under it instead
+                // of leaving empty ocean above and below.
+                final mapHeight = body.maxWidth * 0.46;
+                return Stack(
                   children: [
-                    AtlasModeRow(store: _store, onLens: _setLens),
-                    AtlasCountersRow(lens: lens, stats: stats, hue: hue),
-                    AtlasCircleChipRow(
-                      lens: lens,
-                      circles: _store.circles,
-                      onLens: _setLens,
-                    ),
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          Positioned.fill(
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 90),
-                              child: AtlasWorldMap(
-                                data: mapData,
-                                onTapCountry: _onTapCountry,
-                              ),
-                            ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        AtlasModeRow(store: _store, onLens: _setLens),
+                        AtlasCountersRow(lens: lens, stats: stats, hue: hue),
+                        AtlasCircleChipRow(
+                          lens: lens,
+                          circles: _store.circles,
+                          onLens: _setLens,
+                        ),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (context, area) {
+                              final band = math.min(mapHeight, area.maxHeight);
+                              return Stack(
+                                children: [
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    top: 0,
+                                    height: band,
+                                    child: AtlasWorldMap(
+                                      data: mapData,
+                                      onTapCountry: _onTapCountry,
+                                    ),
+                                  ),
+                                  if (empty)
+                                    Positioned(
+                                      left: 20,
+                                      right: 20,
+                                      top: 24,
+                                      child: HomePlacePrompt(
+                                        onPickHome: _pickHome,
+                                      ),
+                                    ),
+                                  // Lives under the controls, so dragging
+                                  // it up never hides the lens; it starts
+                                  // exactly at the map's bottom edge.
+                                  RecentTripsSheet(
+                                    store: _store,
+                                    onOpenTrip: _openTrip,
+                                    initialSize: area.maxHeight <= 0
+                                        ? 0.22
+                                        : ((area.maxHeight - band) /
+                                                  area.maxHeight)
+                                              .clamp(0.22, 0.75)
+                                              .toDouble(),
+                                  ),
+                                  Positioned(
+                                    left: 16,
+                                    right: 16,
+                                    top: 8,
+                                    child: CelebrationBanner(
+                                      text: _banner,
+                                      hue: hue,
+                                      onDismiss: () =>
+                                          setState(() => _banner = null),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
                           ),
-                          if (empty)
-                            Positioned(
-                              left: 20,
-                              right: 20,
-                              top: 24,
-                              child: HomePlacePrompt(onPickHome: _pickHome),
-                            ),
-                          Positioned(
-                            left: 16,
-                            right: 16,
-                            top: 8,
-                            child: CelebrationBanner(
-                              text: _banner,
-                              hue: hue,
-                              onDismiss: () => setState(() => _banner = null),
-                            ),
-                          ),
-                        ],
-                      ),
+                        ),
+                      ],
                     ),
                   ],
-                ),
-                RecentTripsSheet(store: _store, onOpenTrip: _openTrip),
-              ],
+                );
+              },
             ),
     );
   }

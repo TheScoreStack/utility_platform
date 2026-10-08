@@ -19,6 +19,7 @@ import 'add_trip_widgets.dart';
 class DetailsStep extends StatelessWidget {
   final TripDraft draft;
   final AtlasStore store;
+  final TextEditingController title;
   final TextEditingController notes;
   final bool uploading;
   final String? localCover;
@@ -30,6 +31,7 @@ class DetailsStep extends StatelessWidget {
     super.key,
     required this.draft,
     required this.store,
+    required this.title,
     required this.notes,
     required this.uploading,
     required this.localCover,
@@ -84,20 +86,32 @@ class DetailsStep extends StatelessWidget {
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
-        Text('Details', style: Theme.of(context).textTheme.headlineSmall),
+        Text(
+          'Anything else?',
+          style: Theme.of(context).textTheme.headlineSmall,
+        ),
         const SizedBox(height: 6),
         const Text(
-          'Flights draw arcs on your map. Everything here is optional.',
+          'All optional. Flights add arcs and miles to your map.',
           style: TextStyle(color: Colors.white54),
         ),
-        const StepSection('Travel (optional)'),
-        const Padding(
-          padding: EdgeInsets.only(bottom: 10),
-          child: Text(
-            'Each flight or drive, out and back',
-            style: TextStyle(color: Colors.white54),
+        const SizedBox(height: 16),
+        TextField(
+          controller: title,
+          // A trip name is a title: "Napa Anniversary".
+          textCapitalization: TextCapitalization.words,
+          textInputAction: TextInputAction.done,
+          maxLength: 120,
+          onChanged: (_) => onChanged(),
+          decoration: InputDecoration(
+            labelText: 'Trip name',
+            hintText: draft.hasPlaces
+                ? draft.effectiveTitle
+                : 'Napa Anniversary',
+            counterText: '',
           ),
         ),
+        const StepSection('Travel'),
         for (var i = 0; i < draft.legs.length; i++)
           _LegCard(
             // Keyed by leg so the airline / flight no. fields follow their
@@ -108,16 +122,9 @@ class DetailsStep extends StatelessWidget {
             store: store,
             onChanged: onChanged,
           ),
-        OutlinedButton.icon(
-          onPressed: _addLeg,
-          icon: const Icon(Icons.add_rounded),
-          label: Text(
-            draft.legs.isEmpty ? 'Add a flight or drive' : 'Add another leg',
-          ),
-        ),
+        // The return leg is the usual next step, so it leads.
         if (returnable != null) ...[
-          const SizedBox(height: 8),
-          OutlinedButton.icon(
+          FilledButton.tonalIcon(
             onPressed: () => _addReturn(returnable),
             icon: const Icon(Icons.u_turn_left_rounded),
             label: Column(
@@ -132,7 +139,15 @@ class DetailsStep extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: 8),
         ],
+        OutlinedButton.icon(
+          onPressed: _addLeg,
+          icon: const Icon(Icons.add_rounded),
+          label: Text(
+            draft.legs.isEmpty ? 'Add a flight or drive' : 'Add another leg',
+          ),
+        ),
         const StepSection('Cover photo'),
         _cover(),
         const StepSection('Rating'),
@@ -155,6 +170,7 @@ class DetailsStep extends StatelessWidget {
           decoration: const InputDecoration(
             hintText: 'The pastel de nata place by the tram stop…',
             border: OutlineInputBorder(),
+            counterText: '',
           ),
         ),
       ],

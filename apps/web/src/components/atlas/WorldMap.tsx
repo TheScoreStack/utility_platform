@@ -184,7 +184,11 @@ export const WorldMap = forwardRef<WorldMapHandle, WorldMapProps>(function World
       })();
       if (svg && behavior) {
         const selection = select(svg);
-        if (reducedMotion) selection.call(behavior.transform, target);
+        // Hidden tabs get no animation frames, so a transition would sit
+        // queued until the tab is shown; jump straight there instead.
+        if (reducedMotion || document.visibilityState === "hidden") {
+          selection.interrupt().call(behavior.transform, target);
+        }
         else selection.transition().duration(900).call(behavior.transform, target);
       } else {
         setTransform(target.toString());

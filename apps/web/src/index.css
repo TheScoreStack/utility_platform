@@ -9375,6 +9375,28 @@ button.btn-danger:hover:not(:disabled) {
   font-weight: 400;
 }
 
+.atlas-add-leg {
+  align-self: flex-start;
+  padding: 0.5rem 0.95rem;
+  border-radius: 12px;
+  border: 1px dashed var(--border-strong);
+  background: transparent;
+  color: #cbd5f5;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.atlas-add-leg:hover {
+  border-color: var(--accent-bright);
+  color: #f8fafc;
+}
+
+.atlas-leg-form__close {
+  align-self: flex-end;
+}
+
 .atlas-leg-form {
   display: flex;
   flex-direction: column;
@@ -9456,26 +9478,29 @@ button.btn-danger:hover:not(:disabled) {
   align-items: center;
 }
 
+/* Ratings are stars, so they read as a rating at a glance. */
 .atlas-stars__dot {
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  border: 1.5px solid var(--border-strong);
+  border: none;
   background: none;
   padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  color: rgba(148, 163, 184, 0.35);
   cursor: inherit;
-  transition: background 140ms ease, border-color 140ms ease;
+  transition: color 140ms ease, transform 140ms var(--atlas-ease);
 }
 
 button.atlas-stars__dot {
   cursor: pointer;
-  width: 20px;
-  height: 20px;
+  font-size: 1.5rem;
+}
+
+button.atlas-stars__dot:hover {
+  transform: scale(1.12);
 }
 
 .atlas-stars__dot--on {
-  background: #fbbf24;
-  border-color: #fbbf24;
+  color: #fbbf24;
 }
 
 .atlas-editor__nav {
@@ -9777,21 +9802,26 @@ button.atlas-stars__dot {
 }
 
 .atlas-circle-row__dot {
-  width: 12px;
-  height: 12px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.25);
   background: var(--chip);
+  padding: 0;
+  cursor: pointer;
+  transition: transform 140ms var(--atlas-ease), border-color 140ms ease;
+}
+
+.atlas-circle-row__dot:hover,
+.atlas-circle-row__dot[aria-expanded="true"] {
+  transform: scale(1.1);
+  border-color: #fff;
 }
 
 .atlas-circle-row__name {
-  border: none;
-  background: none;
   color: #f8fafc;
-  font: inherit;
   font-weight: 600;
   font-size: 1.05rem;
-  cursor: text;
-  padding: 0;
 }
 
 .atlas-circle-row__head .muted {

@@ -13,7 +13,6 @@ import 'add_trip_widgets.dart';
 class WhereStep extends StatelessWidget {
   final TripDraft draft;
   final AtlasStore store;
-  final TextEditingController title;
   final VoidCallback onChanged;
 
   /// The trip being edited, left out of the frequent-places picks.
@@ -23,7 +22,6 @@ class WhereStep extends StatelessWidget {
     super.key,
     required this.draft,
     required this.store,
-    required this.title,
     required this.onChanged,
     this.tripId,
   });
@@ -71,20 +69,6 @@ class WhereStep extends StatelessWidget {
         Text(
           'Where did you go?',
           style: Theme.of(context).textTheme.headlineSmall,
-        ),
-        const SizedBox(height: 16),
-        TextField(
-          controller: title,
-          textCapitalization: TextCapitalization.sentences,
-          textInputAction: TextInputAction.done,
-          maxLength: 120,
-          onChanged: (_) => onChanged(),
-          decoration: InputDecoration(
-            labelText: 'Trip name (optional)',
-            hintText: draft.hasPlaces
-                ? draft.effectiveTitle
-                : 'Lisbon with Ana',
-          ),
         ),
         const StepSection('Stops'),
         if (draft.stops.isEmpty)

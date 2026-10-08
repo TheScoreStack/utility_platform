@@ -8,7 +8,7 @@ import '../../lens.dart';
 import '../../models/atlas_models.dart';
 import '../../widgets/atlas_widgets.dart';
 
-/// Footprint / Flights toggle plus the Been / Want to go chip.
+/// Footprint / Flights toggle plus the Wishlist overlay chip.
 class AtlasModeRow extends StatelessWidget {
   final AtlasStore store;
   final ValueChanged<AtlasLens> onLens;
@@ -46,25 +46,23 @@ class AtlasModeRow extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-          Tooltip(
-            message: store.showWishes
-                ? 'Showing want to go'
-                : 'Show want to go',
-            child: FilterChip(
-              label: Text(store.showWishes ? 'Want to go' : 'Been'),
-              avatar: Icon(
-                store.showWishes
-                    ? Icons.bookmark_rounded
-                    : Icons.check_circle_outline_rounded,
-                size: 16,
-              ),
-              selected: store.showWishes,
-              showCheckmark: false,
-              onSelected: (v) {
-                HapticFeedback.selectionClick();
-                store.setShowWishes(v);
-              },
+          // An overlay toggle, so its label stays put and only its state
+          // changes: on = dashed wishlist pins drawn over the footprint.
+          FilterChip(
+            label: const Text('Wishlist'),
+            avatar: Icon(
+              store.showWishes
+                  ? Icons.bookmark_rounded
+                  : Icons.bookmark_border_rounded,
+              size: 16,
             ),
+            tooltip: store.showWishes ? 'Hide wishlist' : 'Show wishlist',
+            selected: store.showWishes,
+            showCheckmark: false,
+            onSelected: (v) {
+              HapticFeedback.selectionClick();
+              store.setShowWishes(v);
+            },
           ),
         ],
       ),
@@ -151,15 +149,24 @@ class AtlasCircleChipRow extends StatelessWidget {
       );
     }
 
+    // Fade the right edge so a clipped chip reads as "scroll for more".
     return SizedBox(
       height: 44,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
-        children: [
-          chip('all', 'All', AppColors.accent),
-          for (final c in circles) chip(c.circleId, c.name, circleHue(c.color)),
-        ],
+      child: ShaderMask(
+        blendMode: BlendMode.dstIn,
+        shaderCallback: (rect) => const LinearGradient(
+          colors: [Colors.white, Colors.white, Colors.transparent],
+          stops: [0, 0.88, 1],
+        ).createShader(rect),
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(16, 0, 40, 0),
+          children: [
+            chip('all', 'All', AppColors.accent),
+            for (final c in circles)
+              chip(c.circleId, c.name, circleHue(c.color)),
+          ],
+        ),
       ),
     );
   }

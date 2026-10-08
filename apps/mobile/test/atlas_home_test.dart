@@ -129,7 +129,7 @@ void main() {
     });
     expect(find.text('Edit trip'), findsOneWidget);
     expect(find.text('San Francisco'), findsOneWidget);
-    for (final title in ['When?', 'Who with?', 'TRAVEL (OPTIONAL)']) {
+    for (final title in ['When was it?', 'Who came along?', 'Anything else?']) {
       await tester.tap(find.text('Next'));
       await tester.pumpAndSettle();
       expect(find.text(title), findsWidgets);
@@ -246,7 +246,7 @@ void main() {
     );
     await tester.tap(find.text('Who'));
     await tester.pumpAndSettle();
-    expect(find.text('Who with?'), findsOneWidget);
+    expect(find.text('Who came along?'), findsOneWidget);
     expect(
       find.bySemanticsLabel(RegExp(r'^Step 3 of 4, Who, current$')),
       findsOneWidget,
@@ -263,7 +263,7 @@ void main() {
     await tester.tap(find.text('Details'));
     await tester.pumpAndSettle();
     expect(find.text('Where did you go?'), findsOneWidget);
-    expect(find.text('When?'), findsNothing);
+    expect(find.text('When was it?'), findsNothing);
   });
 
   Finder pill(String label) => find.bySemanticsLabel(RegExp('^$label\$'));
@@ -362,7 +362,7 @@ void main() {
       find.byType(SegmentedButton<String>),
     );
     expect(seg.selected, {'day'});
-    expect(find.text('Pick dates'), findsOneWidget);
+    expect(find.text('Tap to pick the first and last day'), findsOneWidget);
   });
 
   testWidgets('legs reorder with up/down arrows', (tester) async {
@@ -430,5 +430,31 @@ void main() {
     expect(format('ua 837'), 'UA837');
     expect(format('dl-1234'), 'DL1234');
     expect(format('ABCDEFGHIJK'), 'ABCDEFGH');
+  });
+
+  testWidgets('trip name capitalizes each word', (tester) async {
+    await pumpScreen(
+      tester,
+      (store) => AddTripFlow(store: store, existing: store.tripById('t_napa')),
+    );
+    // The name lives with the other optional details, not before the places.
+    await tester.tap(find.text('Details'));
+    await tester.pumpAndSettle();
+    final name = tester.widget<TextField>(
+      find.widgetWithText(TextField, 'Trip name'),
+    );
+    expect(name.textCapitalization, TextCapitalization.words);
+  });
+
+  test('rolling counters come to rest on whole numbers', () {
+    // Regression: "9,933" left its thousands digit a third of a turn off.
+    for (final place in [0, 1, 2, 3]) {
+      expect(wheelFraction(9933, place), 0, reason: 'place $place');
+      expect(wheelFraction(195, place), 0, reason: 'place $place');
+    }
+    // Mid-roll, a higher digit only moves while the lower ones carry.
+    expect(wheelFraction(19.5, 1), closeTo(0.5, 1e-9));
+    expect(wheelFraction(15.5, 1), 0);
+    expect(wheelFraction(999.25, 2), closeTo(0.25, 1e-9));
   });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/app_theme.dart';
 import '../../lens.dart';
 import '../../models/trip_draft.dart';
 import 'add_trip_widgets.dart';
@@ -118,7 +119,7 @@ class WhenStep extends StatelessWidget {
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
       children: [
-        Text('When?', style: Theme.of(context).textTheme.headlineSmall),
+        Text('When was it?', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 6),
         const Text(
           'Only remember the year? That works.',
@@ -136,21 +137,34 @@ class WhenStep extends StatelessWidget {
           onSelectionChanged: (s) => _update(() => dates.precision = s.first),
         ),
         const SizedBox(height: 20),
+        // Drawn as a field with a chevron so it reads as something to tap.
         if (dates.precision == 'day')
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.date_range_rounded),
-            title: const Text('Dates'),
-            subtitle: Text(
-              dates.startDay == null
-                  ? 'Pick dates'
-                  : formatTripDates(
-                      start: draft.start,
-                      end: draft.end,
-                      datePrecision: 'day',
-                    ),
+          Material(
+            color: Colors.white.withValues(alpha: 0.05),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(
+                color: dates.startDay == null
+                    ? AppColors.accent.withValues(alpha: 0.6)
+                    : Colors.white24,
+              ),
             ),
-            onTap: () => _pickRange(context),
+            clipBehavior: Clip.antiAlias,
+            child: ListTile(
+              leading: const Icon(Icons.date_range_rounded),
+              title: const Text('Dates'),
+              subtitle: Text(
+                dates.startDay == null
+                    ? 'Tap to pick the first and last day'
+                    : formatTripDates(
+                        start: draft.start,
+                        end: draft.end,
+                        datePrecision: 'day',
+                      ),
+              ),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: () => _pickRange(context),
+            ),
           )
         else
           Row(

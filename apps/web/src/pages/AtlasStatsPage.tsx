@@ -166,7 +166,7 @@ const AtlasStatsPage = () => {
         </section>
 
         <section className="atlas-card">
-          <h2 className="atlas-eyebrow">Continents</h2>
+          <h2 className="atlas-eyebrow">Countries by continent</h2>
           <ul className="atlas-ranked">
             {(Object.keys(ATLAS_CONTINENTS) as AtlasContinent[])
               .filter((c) => c !== "AN" || byContinent.AN)

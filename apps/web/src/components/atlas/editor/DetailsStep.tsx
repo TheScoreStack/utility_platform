@@ -49,9 +49,9 @@ export const DetailsStep = ({
       <input
         value={title}
         maxLength={120}
-        autoCapitalize="sentences"
+        autoCapitalize="words"
         enterKeyHint="done"
-        placeholder="Napa anniversary"
+        placeholder="Napa Anniversary"
         onChange={(e) => onTitleChange(e.target.value)}
       />
     </label>

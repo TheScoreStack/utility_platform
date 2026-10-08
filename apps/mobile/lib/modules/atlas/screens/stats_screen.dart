@@ -114,10 +114,12 @@ class StatsScreen extends StatelessWidget {
                         value: stats.cities,
                         color: hue,
                       ),
+                      // Countries already have a progress bar above.
                       AtlasCounter(
-                        label: 'Countries',
-                        value: stats.countries,
+                        label: 'First trip',
+                        value: stats.firstYear ?? 0,
                         color: hue,
+                        plain: true,
                       ),
                     ],
                   ),

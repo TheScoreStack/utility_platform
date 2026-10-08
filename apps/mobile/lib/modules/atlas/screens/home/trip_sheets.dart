@@ -5,26 +5,33 @@ import '../../atlas_store.dart';
 import '../../models/atlas_models.dart';
 import '../../widgets/atlas_widgets.dart';
 
-/// The draggable "Recent trips" sheet over the bottom of the map.
+/// The draggable "Recent trips" sheet under the map band.
 class RecentTripsSheet extends StatelessWidget {
   final AtlasStore store;
   final ValueChanged<AtlasTrip> onOpenTrip;
+
+  /// Fraction of the body the sheet starts at: just under the map band.
+  final double initialSize;
 
   const RecentTripsSheet({
     super.key,
     required this.store,
     required this.onOpenTrip,
+    this.initialSize = 0.22,
   });
 
   @override
   Widget build(BuildContext context) {
     final trips = store.lensTrips;
     return DraggableScrollableSheet(
-      initialChildSize: 0.22,
+      initialChildSize: initialSize,
       minChildSize: 0.12,
-      maxChildSize: 0.88,
+      maxChildSize: 0.98,
       snap: true,
-      snapSizes: const [0.22, 0.55],
+      snapSizes: [
+        if (initialSize < 0.8) initialSize,
+        if (initialSize < 0.55) 0.55,
+      ].where((v) => v > 0.12 && v < 0.88).toList(),
       builder: (context, controller) => Material(
         color: const Color(0xFF141C33),
         elevation: 12,

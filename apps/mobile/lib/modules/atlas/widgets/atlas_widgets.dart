@@ -20,7 +20,15 @@ class RollingNumber extends StatelessWidget {
   final int value;
   final TextStyle style;
 
-  const RollingNumber({super.key, required this.value, required this.style});
+  /// No thousands separator (for years: "2019", not "2,019").
+  final bool plain;
+
+  const RollingNumber({
+    super.key,
+    required this.value,
+    required this.style,
+    this.plain = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -35,7 +43,7 @@ class RollingNumber extends StatelessWidget {
       duration: duration,
       curve: Curves.easeOutCubic,
       builder: (context, v, _) {
-        final target = formatCount(value);
+        final target = plain ? '$value' : formatCount(value);
         final digits = target.replaceAll(RegExp(r'[^0-9]'), '').length;
         final children = <Widget>[];
         var place = digits - 1;
@@ -57,6 +65,22 @@ class RollingNumber extends StatelessWidget {
   }
 }
 
+/// How far the digit at [place] (0 = ones) has rolled toward the next
+/// digit, 0 to 1, for a counter currently showing [value]. The ones digit
+/// spins continuously; a higher digit moves only while everything below it
+/// rolls over (e.g. tens move between 9 and 10, 19 and 20), like an
+/// odometer. At a whole number every digit is at rest (0).
+@visibleForTesting
+double wheelFraction(double value, int place) {
+  if (place == 0) return value - value.floor();
+  var divisor = 1.0;
+  for (var i = 0; i < place; i++) {
+    divisor *= 10;
+  }
+  final lower = value % divisor;
+  return (lower - (divisor - 1)).clamp(0.0, 1.0).toDouble();
+}
+
 class _DigitWheel extends StatelessWidget {
   final double value;
   final int place;
@@ -74,14 +98,8 @@ class _DigitWheel extends StatelessWidget {
     for (var i = 0; i < place; i++) {
       divisor *= 10;
     }
-    final scaled = value / divisor;
-    // Lower places spin freely; this place only moves in the last step.
-    final whole = scaled.floor();
-    final frac = place == 0
-        ? scaled - whole
-        : ((value % divisor) / divisor > 0.9
-              ? ((value % divisor) / divisor - 0.9) * 10
-              : 0.0);
+    final whole = (value / divisor).floor();
+    final frac = wheelFraction(value, place);
     final digit = whole % 10;
     final next = (digit + 1) % 10;
     final height = (style.fontSize ?? 20) * (style.height ?? 1.2);
@@ -112,11 +130,15 @@ class AtlasCounter extends StatelessWidget {
   final int value;
   final Color color;
 
+  /// Show the number without grouping, e.g. a year.
+  final bool plain;
+
   const AtlasCounter({
     super.key,
     required this.label,
     required this.value,
     required this.color,
+    this.plain = false,
   });
 
   @override
@@ -127,6 +149,7 @@ class AtlasCounter extends StatelessWidget {
       children: [
         RollingNumber(
           value: value,
+          plain: plain,
           style: const TextStyle(
             fontSize: 24,
             height: 1.15,

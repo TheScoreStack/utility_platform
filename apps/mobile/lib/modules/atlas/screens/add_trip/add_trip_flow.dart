@@ -241,7 +241,6 @@ class _AddTripFlowState extends State<AddTripFlow> {
                   WhereStep(
                     draft: _draft,
                     store: store,
-                    title: _title,
                     onChanged: _changed,
                     tripId: widget.existing?.tripId,
                   ),
@@ -250,6 +249,7 @@ class _AddTripFlowState extends State<AddTripFlow> {
                   DetailsStep(
                     draft: _draft,
                     store: store,
+                    title: _title,
                     notes: _notes,
                     uploading: _uploading,
                     localCover: _localCover,

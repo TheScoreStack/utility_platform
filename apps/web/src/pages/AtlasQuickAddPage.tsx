@@ -129,7 +129,7 @@ const AtlasQuickAddPage = () => {
                     <input
                       className="atlas-draft__title"
                       maxLength={120}
-                      autoCapitalize="sentences"
+                      autoCapitalize="words"
                       value={d.title}
                       onChange={(e) => setDrafts(drafts.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
                     />

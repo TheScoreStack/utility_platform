@@ -55,7 +55,8 @@ class AtlasMapData {
 /// Fill for a visit count: grows from a soft tint toward the full hue.
 Color visitFill(Color hue, int visits) {
   if (visits <= 0) return AtlasPalette.land;
-  final strength = 0.42 + 0.58 * (1 - math.exp(-(visits - 1) / 2.2));
+  // One visit already reads clearly at phone size; more visits deepen it.
+  final strength = 0.6 + 0.4 * (1 - math.exp(-(visits - 1) / 2.2));
   return Color.lerp(AtlasPalette.land, hue, strength)!;
 }
 
@@ -71,8 +72,28 @@ class AtlasWorldMap extends StatefulWidget {
 }
 
 class _AtlasWorldMapState extends State<AtlasWorldMap>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   final _transform = TransformationController();
+  late final AnimationController _fly =
+      AnimationController(
+        vsync: this,
+        duration: const Duration(milliseconds: 650),
+      )..addListener(() {
+        final tween = _flyTween;
+        if (tween != null) {
+          _transform.value = tween.evaluate(
+            CurvedAnimation(parent: _fly, curve: Curves.easeInOutCubic),
+          );
+        }
+      });
+  Matrix4Tween? _flyTween;
+
+  /// Layout facts from the last build, for fitting the view.
+  Size? _viewport;
+  double _contentHeight = 0;
+  double _mapTop = 0;
+  double _worldScale = 1;
+  bool _needsFit = true;
   late final AnimationController _fade = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 520),
@@ -93,6 +114,7 @@ class _AtlasWorldMapState extends State<AtlasWorldMap>
       if (!mounted) return;
       setState(() => _geo = geo);
       _from = const AtlasMapData();
+      _needsFit = true;
       _run();
     });
   }
@@ -113,6 +135,7 @@ class _AtlasWorldMapState extends State<AtlasWorldMap>
       // Cross-fade from whatever is on screen right now.
       _from = _snapshotFills(_from, _to, _curve.value);
       _to = widget.data;
+      _needsFit = true;
       _run();
     }
   }
@@ -130,8 +153,78 @@ class _AtlasWorldMapState extends State<AtlasWorldMap>
     );
   }
 
+  /// Content-space box around what this lens shows: pins, airports, wish
+  /// pins, and small visited countries (large ones such as the US or Russia
+  /// would stretch the box to the whole map, so their pins stand in).
+  Rect? _focusBounds(AtlasMapData data, AtlasGeometry geo) {
+    final points = <Offset>[
+      for (final p in [...data.pins, ...data.airports, ...data.wishes])
+        EqualEarth.toWorld(p.lng, p.lat),
+    ];
+    final world = EqualEarth.worldSize;
+    for (final c in geo.countries) {
+      if (!data.countryFills.containsKey(c.id)) continue;
+      if (c.bounds.width > world.width * 0.18) continue;
+      points
+        ..add(c.bounds.topLeft)
+        ..add(c.bounds.bottomRight);
+    }
+    if (points.isEmpty) return null;
+    var box = Rect.fromPoints(points.first, points.first);
+    for (final p in points) {
+      box = box.expandToInclude(Rect.fromPoints(p, p));
+    }
+    return Rect.fromLTRB(
+      box.left * _worldScale,
+      box.top * _worldScale + _mapTop,
+      box.right * _worldScale,
+      box.bottom * _worldScale + _mapTop,
+    );
+  }
+
+  /// Zooms so the lens's places fill the view (capped, never below 1), and
+  /// keeps the content covering the viewport so no empty margin shows.
+  void _fit() {
+    final geo = _geo;
+    final viewport = _viewport;
+    if (geo == null || viewport == null || !mounted) return;
+    _needsFit = false;
+    final focus = _focusBounds(_to, geo);
+    var target = Matrix4.identity();
+    if (focus != null) {
+      const pad = 28.0;
+      // Never zoom tighter than about a region, even for a single city.
+      final minW = viewport.width / 5;
+      final minH = viewport.height / 5;
+      final w = math.max(focus.width, minW);
+      final h = math.max(focus.height, minH);
+      final s = math
+          .min((viewport.width - 2 * pad) / w, (viewport.height - 2 * pad) / h)
+          .clamp(1.0, 6.0)
+          .toDouble();
+      final contentW = viewport.width * s;
+      final contentH = _contentHeight * s;
+      final tx = (viewport.width / 2 - focus.center.dx * s)
+          .clamp(viewport.width - contentW, 0.0)
+          .toDouble();
+      final ty = (viewport.height / 2 - focus.center.dy * s)
+          .clamp(math.min(0.0, viewport.height - contentH), 0.0)
+          .toDouble();
+      target = Matrix4.identity()
+        ..translateByDouble(tx, ty, 0, 1)
+        ..scaleByDouble(s, s, 1, 1);
+    }
+    if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+      _transform.value = target;
+      return;
+    }
+    _flyTween = Matrix4Tween(begin: _transform.value.clone(), end: target);
+    _fly.forward(from: 0);
+  }
+
   @override
   void dispose() {
+    _fly.dispose();
     _transform.dispose();
     _curve.dispose();
     _fade.dispose();
@@ -156,6 +249,16 @@ class _AtlasWorldMapState extends State<AtlasWorldMap>
         final scale = width / world.width;
         final height = world.height * scale;
         final geo = _geo;
+        final viewport = Size(width, constraints.maxHeight);
+        final contentHeight = math.max(height, constraints.maxHeight);
+        if (viewport != _viewport) _needsFit = true;
+        _viewport = viewport;
+        _contentHeight = contentHeight;
+        _mapTop = (contentHeight - height) / 2;
+        _worldScale = scale;
+        if (_needsFit && geo != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) => _fit());
+        }
         return InteractiveViewer(
           transformationController: _transform,
           minScale: 1,
@@ -167,7 +270,7 @@ class _AtlasWorldMapState extends State<AtlasWorldMap>
             onTapUp: (d) => _handleTap(d, scale),
             child: SizedBox(
               width: width,
-              height: math.max(height, constraints.maxHeight),
+              height: contentHeight,
               child: Center(
                 child: SizedBox(
                   width: width,
@@ -238,7 +341,11 @@ class _WorldPainter extends CustomPainter {
         to.countryFills[c.id] ?? AtlasPalette.land,
         progress,
       )!;
-      fill.color = (regionsOn && c.id == 'US') ? AtlasPalette.land : color;
+      // With states drawn on top, a visited US keeps a soft base tint so it
+      // still reads as visited; the visited states carry the strong fill.
+      fill.color = (regionsOn && c.id == 'US')
+          ? Color.lerp(AtlasPalette.land, color, 0.35)!
+          : color;
       canvas.drawPath(c.path, fill);
       canvas.drawPath(c.path, border);
     }
@@ -249,13 +356,19 @@ class _WorldPainter extends CustomPainter {
         ..strokeWidth = 0.4 * px
         ..color = AtlasPalette.border.withValues(alpha: 0.8);
       for (final r in geo.regions) {
-        final color = Color.lerp(
-          from.regionFills[r.id] ?? AtlasPalette.land,
-          to.regionFills[r.id] ?? AtlasPalette.land,
-          progress,
-        )!;
-        fill.color = color;
-        canvas.drawPath(r.path, fill);
+        final a = from.regionFills[r.id];
+        final b = to.regionFills[r.id];
+        // Unvisited states only draw their outline, so the US base tint
+        // shows through instead of being painted over with plain land.
+        if (a != null || b != null) {
+          final usBase = Color.lerp(
+            AtlasPalette.land,
+            to.countryFills['US'] ?? AtlasPalette.land,
+            0.35,
+          )!;
+          fill.color = Color.lerp(a ?? usBase, b ?? usBase, progress)!;
+          canvas.drawPath(r.path, fill);
+        }
         canvas.drawPath(r.path, regionBorder);
       }
     }
