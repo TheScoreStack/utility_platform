@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import type { AtlasSnapshot } from "../../types";
 import { useLens, type AtlasShow } from "../../modules/atlas/lens";
@@ -19,6 +19,9 @@ export const LensControls = ({
   const { lens, show, update } = useLens();
   const navigate = useNavigate();
   const { circles, trips } = snapshot;
+  // On a phone the secondary controls fold away so the map is near the top.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const yearsFiltered = lens.fromYear !== undefined || lens.toYear !== undefined;
   const years = useMemo(() => {
     const ys = trips.map((t) => Number(t.start.slice(0, 4))).filter(Number.isFinite);
     return ys.length ? { min: Math.min(...ys), max: Math.max(...ys) } : undefined;
@@ -27,12 +30,18 @@ export const LensControls = ({
   return (
   <aside className="atlas-controls" aria-label="Map lens">
       <div className="atlas-controls__head">
-        <h1 className="atlas-title">Atlas</h1>
-        <p className="atlas-sub">
-          {countryCount} countries · {trips.length} trips
-        </p>
+        <div>
+          <h1 className="atlas-title">Atlas</h1>
+          <p className="atlas-sub">
+            {countryCount} countries · {trips.length} trips
+          </p>
+        </div>
+        <button type="button" className="primary atlas-narrow-only" onClick={() => navigate("/atlas/new")}>
+          + Add trip
+        </button>
       </div>
 
+      <div className="atlas-controls__modes">
       <Segmented
         label="Map mode"
         value={lens.mode}
@@ -51,9 +60,10 @@ export const LensControls = ({
         ]}
         onChange={(value) => update({ show: value })}
       />
+      </div>
 
       <div className="atlas-controls__group">
-        <p className="atlas-eyebrow">Circles</p>
+        <p className="atlas-eyebrow atlas-wide-only">Circles</p>
         <div className="atlas-chips">
           <CircleChip active={lens.circle === "all"} count={trips.length} onClick={() => update({ circle: "all" })} />
           {circles.map((c) => (
@@ -66,10 +76,20 @@ export const LensControls = ({
             />
           ))}
         </div>
-        <Link to="/atlas/circles" className="atlas-link">
+        <Link to="/atlas/circles" className="atlas-link atlas-wide-only">
           Manage circles
         </Link>
       </div>
+
+      <button
+        type="button"
+        className="atlas-more atlas-narrow-only"
+        aria-expanded={moreOpen}
+        onClick={() => setMoreOpen((v) => !v)}
+      >
+        {moreOpen ? "Fewer options" : yearsFiltered ? `Years ${lens.fromYear ?? years?.min}–${lens.toYear ?? years?.max} · more` : "Years, stats and more"}
+      </button>
+      <div className={moreOpen ? "atlas-controls__more atlas-controls__more--open" : "atlas-controls__more"}>
 
       {years && years.max > years.min && (
         <div className="atlas-controls__group">
@@ -99,13 +119,15 @@ export const LensControls = ({
       )}
 
       <div className="atlas-controls__actions">
-        <button type="button" className="primary" onClick={() => navigate("/atlas/new")}>
+        <button type="button" className="primary atlas-wide-only" onClick={() => navigate("/atlas/new")}>
           + Add trip
         </button>
         <div className="atlas-controls__links">
           <Link to={`/atlas/stats${window.location.search}`} className="atlas-link">Stats</Link>
           <Link to="/atlas/quick-add" className="atlas-link">Quick add</Link>
+          <Link to="/atlas/circles" className="atlas-link atlas-narrow-only">Manage circles</Link>
         </div>
+      </div>
       </div>
     </aside>
   );

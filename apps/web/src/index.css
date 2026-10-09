@@ -8129,6 +8129,35 @@ button.btn-danger:hover:not(:disabled) {
   flex-direction: column;
 }
 
+.atlas-controls__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+/* On wide screens these wrappers don't exist for layout purposes. */
+.atlas-controls__modes,
+.atlas-controls__more {
+  display: contents;
+}
+
+.atlas-narrow-only {
+  display: none;
+}
+
+.atlas-more {
+  align-self: flex-start;
+  border: none;
+  background: none;
+  padding: 0.2rem 0;
+  color: var(--accent-bright);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 .atlas-controls__actions {
   margin-top: auto;
   display: flex;
@@ -9946,6 +9975,50 @@ button.atlas-stars__dot:hover {
     margin-top: 0;
   }
 
+  /* Phone: title + Add trip on one line, both toggles side by side, the
+     circle row, and everything else behind one "more" button, so the map
+     starts near the top of the screen. */
+  .atlas-narrow-only {
+    display: inline-flex;
+  }
+
+  .atlas-wide-only {
+    display: none;
+  }
+
+  .atlas-controls__head .primary {
+    flex: none;
+  }
+
+  .atlas-controls__modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+
+  .atlas-controls__modes .atlas-seg__btn {
+    padding-inline: 0.3rem;
+    font-size: 0.8rem;
+  }
+
+  .atlas-controls__more {
+    display: none;
+  }
+
+  .atlas-controls__more--open {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .atlas-controls__links {
+    flex-wrap: wrap;
+  }
+
+  .atlas-editor__preview .atlas-map {
+    max-height: 150px;
+  }
+
   .atlas-stage {
     padding: 0.75rem;
   }
@@ -9984,7 +10057,6 @@ button.atlas-stars__dot:hover {
 
   .atlas-editor__preview {
     position: static;
-    order: -1;
   }
 
   .atlas-leg-form__ends {
@@ -10001,13 +10073,29 @@ button.atlas-stars__dot:hover {
     font-size: 2rem;
   }
 
+  .atlas-steps {
+    gap: 0.25rem;
+    flex-wrap: nowrap;
+  }
+
+  .atlas-steps__item {
+    gap: 0.25rem;
+  }
+
   .atlas-steps__item:not(:last-child)::after {
-    width: 8px;
+    width: 6px;
   }
 
   .atlas-steps__pill {
-    padding-right: 0.6rem;
-    font-size: 0.8rem;
+    gap: 0.3rem;
+    min-height: 34px;
+    padding: 0.25rem 0.55rem 0.25rem 0.25rem;
+    font-size: 0.78rem;
+  }
+
+  .atlas-steps__badge {
+    width: 22px;
+    height: 22px;
   }
 
   .atlas-bars__row {

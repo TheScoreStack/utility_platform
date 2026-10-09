@@ -145,9 +145,21 @@ class _RoutePainter extends CustomPainter {
       }
     }
 
+    final anchors = [
+      for (final s in trip.stops)
+        toScreen(EqualEarth.toWorld(s.place.lng, s.place.lat)),
+    ];
+    final placed = spreadMarkers(anchors, 10);
+    final leader = Paint()
+      ..color = color.withValues(alpha: 0.8)
+      ..strokeWidth = 1.2;
     for (var i = 0; i < trip.stops.length; i++) {
-      final place = trip.stops[i].place;
-      final c = toScreen(EqualEarth.toWorld(place.lng, place.lat));
+      final c = placed[i];
+      // A moved marker keeps a dot and a short line to its real spot.
+      if ((c - anchors[i]).distance > 0.5) {
+        canvas.drawLine(anchors[i], c, leader);
+        canvas.drawCircle(anchors[i], 2.5, Paint()..color = color);
+      }
       canvas.drawCircle(c, 10, Paint()..color = AtlasPalette.ocean);
       canvas.drawCircle(c, 9, Paint()..color = color);
       final tp = TextPainter(
@@ -168,4 +180,35 @@ class _RoutePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RoutePainter old) =>
       old.trip != trip || old.color != color || old.geo != geo;
+}
+
+/// Positions for round markers of [radius] at [anchors], moving later ones
+/// just clear of earlier ones (nearby stops such as Lisbon and Porto would
+/// otherwise draw on top of each other). Each moved marker is pushed
+/// directly away from the marker it collides with, or upward when the two
+/// sit on the same spot.
+@visibleForTesting
+List<Offset> spreadMarkers(List<Offset> anchors, double radius) {
+  final gap = radius * 2 + 2;
+  final placed = <Offset>[];
+  for (final anchor in anchors) {
+    var c = anchor;
+    for (var attempt = 0; attempt < 12; attempt++) {
+      Offset? hit;
+      for (final p in placed) {
+        if ((c - p).distance < gap) {
+          hit = p;
+          break;
+        }
+      }
+      if (hit == null) break;
+      final away = c - hit;
+      final dir = away.distance < 0.01
+          ? const Offset(0, -1)
+          : away / away.distance;
+      c = hit + dir * gap;
+    }
+    placed.add(c);
+  }
+  return placed;
 }
