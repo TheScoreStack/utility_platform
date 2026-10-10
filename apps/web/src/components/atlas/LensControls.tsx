@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import type { AtlasSnapshot } from "../../types";
 import { useLens, type AtlasShow } from "../../modules/atlas/lens";
 import { CircleChip, Segmented } from "./Controls";
+import { plural } from "../../modules/atlas/format";
 
 const range = (a: number, b: number) => Array.from({ length: b - a + 1 }, (_, i) => a + i);
 
@@ -33,7 +34,7 @@ export const LensControls = ({
         <div>
           <h1 className="atlas-title">Atlas</h1>
           <p className="atlas-sub">
-            {countryCount} countries · {trips.length} trips
+            {plural(countryCount, "country", "countries")} · {plural(trips.length, "trip", "trips")}
           </p>
         </div>
         <button type="button" className="primary atlas-narrow-only" onClick={() => navigate("/atlas/new")}>

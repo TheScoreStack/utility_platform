@@ -344,92 +344,94 @@ Future<({String name, String color})?> showCircleEditor(
   AtlasCircle? circle,
   String? suggestedColor,
 }) {
-  final controller = TextEditingController(text: circle?.name ?? '');
   var color = circle?.color ?? suggestedColor ?? atlasCircleColors.first;
   return showModalBottomSheet<({String name, String color})>(
     context: context,
     isScrollControlled: true,
     showDragHandle: true,
-    builder: (sheetContext) => StatefulBuilder(
-      builder: (context, setSheet) {
-        void submit() {
-          final name = controller.text.trim();
-          if (name.isEmpty) return;
-          Navigator.of(context).pop((name: name, color: color));
-        }
+    builder: (sheetContext) => TextControllerScope(
+      initialText: circle?.name ?? '',
+      builder: (_, controller) => StatefulBuilder(
+        builder: (context, setSheet) {
+          void submit() {
+            final name = controller.text.trim();
+            if (name.isEmpty) return;
+            Navigator.of(context).pop((name: name, color: color));
+          }
 
-        return KeyboardSafeSheet(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                circle == null ? 'New circle' : 'Edit circle',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: controller,
-                autofocus: circle == null,
-                maxLength: 40,
-                textCapitalization: TextCapitalization.words,
-                textInputAction: TextInputAction.done,
-                onChanged: (_) => setSheet(() {}),
-                onSubmitted: (_) => submit(),
-                decoration: const InputDecoration(
-                  labelText: 'Name',
-                  hintText: 'Wife, Barbershop, College friends…',
+          return KeyboardSafeSheet(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  circle == null ? 'New circle' : 'Edit circle',
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text('COLOR', style: kEyebrow),
-              const SizedBox(height: 10),
-              Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  for (final key in atlasCircleColors)
-                    GestureDetector(
-                      onTap: () => setSheet(() => color = key),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 160),
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: circleHue(key),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: color == key
-                                ? Colors.white
-                                : Colors.transparent,
-                            width: 3,
+                const SizedBox(height: 14),
+                TextField(
+                  controller: controller,
+                  autofocus: circle == null,
+                  maxLength: 40,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.done,
+                  onChanged: (_) => setSheet(() {}),
+                  onSubmitted: (_) => submit(),
+                  decoration: const InputDecoration(
+                    labelText: 'Name',
+                    hintText: 'Wife, Barbershop, College friends…',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text('COLOR', style: kEyebrow),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 12,
+                  children: [
+                    for (final key in atlasCircleColors)
+                      GestureDetector(
+                        onTap: () => setSheet(() => color = key),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 160),
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: circleHue(key),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: color == key
+                                  ? Colors.white
+                                  : Colors.transparent,
+                              width: 3,
+                            ),
                           ),
+                          child: color == key
+                              ? const Icon(
+                                  Icons.check_rounded,
+                                  size: 18,
+                                  color: Color(0xFF0B1224),
+                                )
+                              : null,
                         ),
-                        child: color == key
-                            ? const Icon(
-                                Icons.check_rounded,
-                                size: 18,
-                                color: Color(0xFF0B1224),
-                              )
-                            : null,
                       ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: controller.text.trim().isEmpty ? null : submit,
-                  child: Text(circle == null ? 'Create circle' : 'Save'),
+                  ],
                 ),
-              ),
-            ],
-          ),
-        );
-      },
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: controller.text.trim().isEmpty ? null : submit,
+                    child: Text(circle == null ? 'Create circle' : 'Save'),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     ),
-  ).whenComplete(controller.dispose);
+  );
 }
 
 /// A color not yet used by another circle, for new-circle defaults.
@@ -480,3 +482,40 @@ class KeyboardSafeSheet extends StatelessWidget {
     );
   }
 }
+
+/// Owns a [TextEditingController] for a sheet or dialog and disposes it when
+/// the sheet's widgets are gone. Disposing from the caller when the sheet's
+/// future completes is too early: the route is still animating closed and
+/// its text field still uses the controller.
+class TextControllerScope extends StatefulWidget {
+  final String initialText;
+  final Widget Function(BuildContext context, TextEditingController controller)
+  builder;
+
+  const TextControllerScope({
+    super.key,
+    this.initialText = '',
+    required this.builder,
+  });
+
+  @override
+  State<TextControllerScope> createState() => _TextControllerScopeState();
+}
+
+class _TextControllerScopeState extends State<TextControllerScope> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.initialText,
+  );
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _controller);
+}
+
+/// "1 country", "3 countries".
+String plural(int n, String one, String many) => '$n ${n == 1 ? one : many}';

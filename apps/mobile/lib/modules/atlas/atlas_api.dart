@@ -112,8 +112,12 @@ class AtlasApi {
   // ---------------------------------------------------------------- profile
 
   Future<AtlasProfile> updateProfile(Map<String, dynamic> body) async {
-    final data = await _api.patch('/atlas/profile', body);
-    return AtlasProfile.fromJson(data as Map<String, dynamic>);
+    // PATCH /atlas/profile answers {"profile": {...}}; reading the wrapper
+    // as the profile dropped the new home right after saving it.
+    final data =
+        await _api.patch('/atlas/profile', body) as Map<String, dynamic>;
+    final profile = data['profile'] as Map<String, dynamic>? ?? data;
+    return AtlasProfile.fromJson(profile);
   }
 
   // ---------------------------------------------------------------- places

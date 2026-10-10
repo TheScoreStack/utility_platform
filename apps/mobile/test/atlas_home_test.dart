@@ -457,4 +457,36 @@ void main() {
     expect(wheelFraction(15.5, 1), 0);
     expect(wheelFraction(999.25, 2), closeTo(0.25, 1e-9));
   });
+
+  // Regression: sheets disposed their text controller while still animating
+  // closed, which turned the add-trip flow into an error screen on device.
+  testWidgets('new circle from the Who step closes cleanly', (tester) async {
+    await pumpScreen(
+      tester,
+      (store) => AddTripFlow(store: store, existing: store.tripById('t_napa')),
+    );
+    await tester.tap(find.text('Who'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New circle'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Family');
+    await tester.pump();
+    await tester.tap(find.text('Create circle'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.text('Create circle'), findsNothing);
+  });
+
+  testWidgets('add-person dialog closes cleanly', (tester) async {
+    await pumpScreen(tester, (store) => CirclesScreen(store: store));
+    await tester.tap(find.text('Barbershop'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add person').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Marcus');
+    await tester.pump();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
 }

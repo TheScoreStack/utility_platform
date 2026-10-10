@@ -11,6 +11,7 @@ import '../../../core/app_theme.dart';
 import '../../../core/auth_service.dart';
 import '../atlas_api.dart';
 import '../atlas_colors.dart';
+import '../widgets/atlas_widgets.dart';
 import '../atlas_store.dart';
 import '../lens.dart';
 import '../map/atlas_map.dart';
@@ -318,7 +319,8 @@ void handleTripSaved(
       final label = firsts.countries.length == 1
           ? 'New country'
           : 'New countries';
-      text = '$label: $names · ${allStats.countries} countries';
+      text =
+          '$label: $names · ${plural(allStats.countries, 'country', 'countries')}';
     } else {
       final usStates = firsts.regions.where((r) => r.startsWith('US-'));
       final names = (usStates.isEmpty ? firsts.regions : usStates)
@@ -326,7 +328,7 @@ void handleTripSaved(
           .join(', ');
       text = usStates.isEmpty
           ? 'New region: $names'
-          : '${usStates.length == 1 ? 'New state' : 'New states'}: $names · ${allStats.usStates} states';
+          : '${usStates.length == 1 ? 'New state' : 'New states'}: $names · ${plural(allStats.usStates, 'state', 'states')}';
     }
     HapticFeedback.heavyImpact();
     if (onBanner != null) {

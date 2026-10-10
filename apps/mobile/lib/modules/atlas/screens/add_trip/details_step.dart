@@ -42,11 +42,16 @@ class DetailsStep extends StatelessWidget {
 
   void _addLeg() {
     final prev = draft.legs.isNotEmpty ? draft.legs.last : null;
+    // A first flight starts at the airport you fly from most. Home is a
+    // city, and a flight from a city wouldn't count toward airports or
+    // routes, so with no flight history the start is left to pick.
+    final usualAirport = frequentPlaces(
+      store.trips,
+      airports: true,
+      limit: 1,
+    ).firstOrNull;
     draft.legs.add(
-      LegDraft(
-        mode: prev?.mode ?? 'flight',
-        from: prev?.to ?? store.profile.homePlace,
-      ),
+      LegDraft(mode: prev?.mode ?? 'flight', from: prev?.to ?? usualAirport),
     );
     onChanged();
   }
@@ -415,6 +420,16 @@ class _LegCard extends StatelessWidget {
                 endpoint('To', leg.to, false),
               ],
             ),
+            // A half-filled leg isn't saved; say so instead of dropping it
+            // silently when the trip saves.
+            if (!leg.complete)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(
+                  'Pick both ends, or remove this leg. It won\u2019t be saved half-filled.',
+                  style: TextStyle(color: AppColors.warning, fontSize: 12),
+                ),
+              ),
             if (miles != null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),

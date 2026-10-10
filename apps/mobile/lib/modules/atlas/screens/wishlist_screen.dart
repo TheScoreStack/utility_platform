@@ -45,75 +45,77 @@ class WishlistScreen extends StatelessWidget {
     final selected = <String>{
       if (store.lens.circle != 'all') store.lens.circle,
     };
-    final note = TextEditingController();
-    final ok = await showModalBottomSheet<bool>(
+    // The sheet returns the note text (empty = none); null means dismissed.
+    final noteText = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => KeyboardSafeSheet(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(place.name, style: Theme.of(ctx).textTheme.headlineSmall),
-              Text(
-                countryName(place.countryCode),
-                style: const TextStyle(color: Colors.white54),
-              ),
-              const SizedBox(height: 16),
-              Text('WITH', style: kEyebrow),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final c in store.circles)
-                    FilterChip(
-                      avatar: CircleDot(color: circleHue(c.color)),
-                      label: Text(c.name),
-                      showCheckmark: false,
-                      selected: selected.contains(c.circleId),
-                      onSelected: (v) => setSheet(() {
-                        if (!v) {
-                          selected.remove(c.circleId);
-                        } else if (c.circleId == atlasSoloCircleId) {
-                          selected
-                            ..clear()
-                            ..add(c.circleId);
-                        } else {
-                          selected
-                            ..remove(atlasSoloCircleId)
-                            ..add(c.circleId);
-                        }
-                      }),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: note,
-                maxLength: 500,
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: TextInputAction.done,
-                decoration: const InputDecoration(labelText: 'Note (optional)'),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(ctx, true),
-                  child: const Text('Add to wishlist'),
+      builder: (_) => TextControllerScope(
+        builder: (_, note) => StatefulBuilder(
+          builder: (ctx, setSheet) => KeyboardSafeSheet(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(place.name, style: Theme.of(ctx).textTheme.headlineSmall),
+                Text(
+                  countryName(place.countryCode),
+                  style: const TextStyle(color: Colors.white54),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Text('WITH', style: kEyebrow),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final c in store.circles)
+                      FilterChip(
+                        avatar: CircleDot(color: circleHue(c.color)),
+                        label: Text(c.name),
+                        showCheckmark: false,
+                        selected: selected.contains(c.circleId),
+                        onSelected: (v) => setSheet(() {
+                          if (!v) {
+                            selected.remove(c.circleId);
+                          } else if (c.circleId == atlasSoloCircleId) {
+                            selected
+                              ..clear()
+                              ..add(c.circleId);
+                          } else {
+                            selected
+                              ..remove(atlasSoloCircleId)
+                              ..add(c.circleId);
+                          }
+                        }),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: note,
+                  maxLength: 500,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.done,
+                  decoration: const InputDecoration(
+                    labelText: 'Note (optional)',
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx, note.text.trim()),
+                    child: const Text('Add to wishlist'),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
-    final noteText = note.text.trim();
-    note.dispose();
-    if (ok != true || !context.mounted) return;
+    if (noteText == null || !context.mounted) return;
     HapticFeedback.selectionClick();
     await _run(
       context,

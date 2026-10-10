@@ -13,6 +13,7 @@ import {
   type AtlasSnapshot
 } from "../types";
 import { useAtlasSnapshot } from "../modules/atlas/useAtlas";
+import { plural } from "../modules/atlas/format";
 import { useAtlasGeo } from "../modules/atlas/geo";
 import { ALL_HEX, circleHex, tripHex, useLens } from "../modules/atlas/lens";
 import { WorldMap, type MapArc, type MapPin, type WorldMapHandle } from "../components/atlas/WorldMap";
@@ -247,7 +248,7 @@ const AtlasMap = ({ snapshot, geo }: { snapshot: Snapshot; geo: NonNullable<Retu
                   : `${celebrated.trip.title} is on the map`}
             </strong>
             <span>
-              {allStats.countries} countries · {allStats.usStates} states · {allStats.cities} cities
+              {plural(allStats.countries, "country", "countries")} · {plural(allStats.usStates, "state", "states")} · {plural(allStats.cities, "city", "cities")}
             </span>
           </div>
         )}

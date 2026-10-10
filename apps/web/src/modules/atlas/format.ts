@@ -14,3 +14,6 @@ export const summarizeTrip = (t: AtlasTrip) => {
   if (flights) parts.push(`${flights} flight${flights > 1 ? "s" : ""}`);
   return parts.join(", ");
 };
+
+/** "1 country", "3 countries". */
+export const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;

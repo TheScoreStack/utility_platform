@@ -59,6 +59,11 @@
 	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Scan receipts to split expenses.</string>
+	<!-- Never requested: file_picker's photo picker bundles DKCamera, which
+	     can geotag photos, and Apple flags any build that references location
+	     APIs without this key (ITMS-90683). -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>The Stack Core never asks for your location. This line is required because the photo picker includes optional photo geotagging, which the app doesn’t use.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose receipt photos to split expenses.</string>
 	<key>UIApplicationSceneManifest</key>

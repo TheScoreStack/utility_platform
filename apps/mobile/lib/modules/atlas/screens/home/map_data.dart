@@ -39,9 +39,16 @@ AtlasMapData buildAtlasMapData(AtlasStore store) {
   final countryFills = {
     for (final e in stats.countryVisits.entries) e.key: visitFill(hue, e.value),
   };
-  final home = store.profile.homePlace?.countryCode;
-  if (home != null && lens.circle == 'all') {
-    countryFills.putIfAbsent(home, () => visitFill(hue, 1));
+  // Home is where trips start, not a place you've visited: a light tint
+  // (well short of a single visit) plus a white pin, so an empty map shows
+  // home without looking like it already counts as a country.
+  final homePlace = store.profile.homePlace;
+  final showHome = homePlace != null && lens.circle == 'all';
+  if (showHome) {
+    countryFills.putIfAbsent(
+      homePlace.countryCode,
+      () => Color.lerp(AtlasPalette.land, hue, 0.25)!,
+    );
   }
   final regionFills = {
     for (final e in stats.regionVisits.entries)
@@ -58,6 +65,12 @@ AtlasMapData buildAtlasMapData(AtlasStore store) {
         hue,
       );
     }
+  }
+  if (showHome) {
+    pins.putIfAbsent(
+      '${homePlace.countryCode}|${(homePlace.locality ?? homePlace.name).toLowerCase()}',
+      () => MapPin(homePlace.lat, homePlace.lng, Colors.white),
+    );
   }
   return AtlasMapData(
     countryFills: countryFills,
