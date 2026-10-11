@@ -181,7 +181,7 @@ export class GroupExpensesStack extends Stack {
     };
 
     const sharedFunctionProps = {
-      runtime: Runtime.NODEJS_20_X,
+      runtime: Runtime.NODEJS_22_X,
       handler: "handler",
       timeout: Duration.seconds(15),
       memorySize: 256,
@@ -193,7 +193,7 @@ export class GroupExpensesStack extends Stack {
       ),
       bundling: {
         format: OutputFormat.ESM,
-        target: "node20",
+        target: "node22",
         sourcemap: true,
         externalModules: ["aws-sdk"],
         banner: "import { createRequire } from 'module';const require = createRequire(import.meta.url);"
